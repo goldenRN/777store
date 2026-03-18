@@ -1,0 +1,269 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  CUSTOMER
+}
+
+enum ProductType {
+  READY
+  PREORDER
+  LIVE
+}
+
+enum ProductStatus {
+  ACTIVE
+  DRAFT
+  OUT_OF_STOCK
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  SHIPPED
+  COMPLETED
+  CANCELED
+}
+
+enum LiveStatus {
+  SCHEDULED
+  LIVE
+  ENDED
+}
+
+model User {
+  id        String    @id @default(cuid())
+  name      String?
+  email     String?   @unique
+  phone     String?   @unique
+  passwordHash String
+  role      UserRole  @default(CUSTOMER)
+  orders    Order[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Category {
+  id        String     @id @default(cuid())
+  name      String
+  slug      String     @unique
+  parentId  String?
+  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryTree")
+  products  Product[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model Product {
+  id           String        @id @default(cuid())
+  name         String
+  slug         String        @unique
+  description  String?
+  price        Int
+  salePrice    Int?
+  currency     String        @default("MNT")
+  type         ProductType
+  status       ProductStatus @default(ACTIVE)
+  sku          String?
+  stockQty     Int?
+  thumbnailUrl String?
+  images       String[]      @default([])
+  categoryId   String?
+  category     Category?     @relation(fields: [categoryId], references: [id])
+  liveItems    LiveItem[]
+  orderItems   OrderItem[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model LiveSession {
+  id        String     @id @default(cuid())
+  title     String
+  startsAt  DateTime
+  endsAt    DateTime?
+  status    LiveStatus @default(SCHEDULED)
+  liveItems LiveItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model LiveItem {
+  id            String       @id @default(cuid())
+  liveSessionId String
+  productId     String
+  livePrice     Int?
+  availableQty  Int?
+  liveSession   LiveSession  @relation(fields: [liveSessionId], references: [id])
+  product       Product      @relation(fields: [productId], references: [id])
+}
+
+model Order {
+  id        String      @id @default(cuid())
+  userId    String?
+  status    OrderStatus @default(PENDING)
+  orderType ProductType
+  total     Int
+  currency  String      @default("MNT")
+  note      String?
+  items     OrderItem[]
+  user      User?       @relation(fields: [userId], references: [id])
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  productId String
+  qty       Int     @default(1)
+  unitPrice Int
+  order     Order   @relation(fields: [orderId], references: [id])
+  product   Product @relation(fields: [productId], references: [id])
+}
+
+model AdminCategory {
+  id             Int               @id @default(autoincrement())
+  category_name  String
+  description    String?
+  category_image String?
+  subcategories  AdminSubCategory[]
+  products       AdminProduct[]
+  created_at     DateTime          @default(now())
+  updated_at     DateTime          @updatedAt
+}
+
+model AdminSubCategory {
+  id           Int           @id @default(autoincrement())
+  name         String
+  description  String?
+  category_id  Int
+  category     AdminCategory @relation(fields: [category_id], references: [id], onDelete: Cascade)
+  products     AdminProduct[]
+  created_at   DateTime      @default(now())
+  updated_at   DateTime      @updatedAt
+}
+
+model AdminBrand {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  image_url   String?
+  products    AdminProduct[]
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+}
+
+model AdminUnit {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  products    AdminProduct[]
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+}
+
+model AdminStatus {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  products    AdminProduct[]
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+}
+
+model AdminType {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  products    AdminProduct[]
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+}
+
+model AdminBanner {
+  id          Int      @id @default(autoincrement())
+  description String?
+  image_url   String?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+}
+
+model AdminProduct {
+  id             Int                  @id @default(autoincrement())
+  name           String
+  description    String?
+  price          Int
+  discount_price Int?
+  stock          Int
+  material       String?
+  category_id    Int?
+  subcategory_id Int?
+  brand_id       Int?
+  unit_id        Int?
+  status_id      Int?
+  type_id        Int?
+  category       AdminCategory?       @relation(fields: [category_id], references: [id])
+  subcategory    AdminSubCategory?    @relation(fields: [subcategory_id], references: [id])
+  brand          AdminBrand?          @relation(fields: [brand_id], references: [id])
+  unit           AdminUnit?           @relation(fields: [unit_id], references: [id])
+  status         AdminStatus?         @relation(fields: [status_id], references: [id])
+  type           AdminType?           @relation(fields: [type_id], references: [id])
+  images         AdminProductImage[]
+  variants       AdminProductVariant[]
+  created_at     DateTime             @default(now())
+  updated_at     DateTime             @updatedAt
+}
+
+model AdminProductImage {
+  id                 Int                 @id @default(autoincrement())
+  image_url          String
+  public_id          String?
+  product_id         Int?
+  product_variant_id Int?
+  product            AdminProduct?       @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  variant            AdminProductVariant? @relation(fields: [product_variant_id], references: [id], onDelete: Cascade)
+  created_at         DateTime            @default(now())
+}
+
+model AdminProductVariant {
+  id         Int                 @id @default(autoincrement())
+  product_id Int
+  sku        String?
+  attribute  Json?
+  price      Int?
+  stock      Int?
+  product    AdminProduct        @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  images     AdminProductImage[]
+  created_at DateTime            @default(now())
+  updated_at DateTime            @updatedAt
+}
+
+model AdminOrder {
+  id         Int              @id @default(autoincrement())
+  name       String
+  email      String?
+  phone1     String
+  phone2     String?
+  status     String           @default("pending")
+  total      Int              @default(0)
+  items      AdminOrderItem[]
+  created_at DateTime         @default(now())
+  updated_at DateTime         @updatedAt
+}
+
+model AdminOrderItem {
+  id           Int        @id @default(autoincrement())
+  order_id     Int
+  product_name String
+  quantity     Int
+  price        Int
+  order        AdminOrder @relation(fields: [order_id], references: [id], onDelete: Cascade)
+}

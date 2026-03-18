@@ -1,0 +1,83 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+export async function GET() {
+  const list = await prisma.adminProduct.findMany({
+    orderBy: { id: "desc" },
+    include: {
+      category: true,
+      subcategory: true,
+      brand: true,
+      unit: true,
+      status: true,
+      type: true,
+    },
+  });
+
+  const mapped = list.map((p) => ({
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    price: p.price,
+    discount_price: p.discount_price,
+    stock: p.stock,
+    material: p.material,
+    category_id: p.category_id,
+    subcategory_id: p.subcategory_id,
+    brand_id: p.brand_id,
+    unit_id: p.unit_id,
+    status_id: p.status_id,
+    type_id: p.type_id,
+    category_name: p.category?.category_name ?? "",
+    subcategory_name: p.subcategory?.name ?? "",
+    brand_name: p.brand?.name ?? "",
+    unit_name: p.unit?.name ?? "",
+    status_name: p.status?.name ?? "",
+    type_name: p.type?.name ?? "",
+    created_at: p.created_at,
+  }));
+
+  return NextResponse.json(mapped);
+}
+
+export async function POST(request: Request) {
+  const body = await request.json();
+  const name = String(body?.name ?? "").trim();
+  const description = String(body?.description ?? "").trim();
+  const price = Math.round(Number(body?.price ?? 0));
+  const discount_price =
+    body?.discount_price != null ? Math.round(Number(body.discount_price)) : null;
+  const stock = Math.round(Number(body?.stock ?? 0));
+  const material = String(body?.material ?? "").trim();
+
+  if (!name) {
+    return NextResponse.json({ message: "Нэр шаардлагатай" }, { status: 400 });
+  }
+
+  const created = await prisma.adminProduct.create({
+    data: {
+      name,
+      description: description || null,
+      price,
+      discount_price: discount_price ?? null,
+      stock,
+      material: material || null,
+      category_id: body?.category_id ? Number(body.category_id) : null,
+      subcategory_id: body?.subcategory_id ? Number(body.subcategory_id) : null,
+      brand_id: body?.brand_id ? Number(body.brand_id) : null,
+      unit_id: body?.unit_id ? Number(body.unit_id) : null,
+      status_id: body?.status_id ? Number(body.status_id) : null,
+      type_id: body?.type_id ? Number(body.type_id) : null,
+      images: body?.images?.length
+        ? {
+            create: body.images.map((img: { image_url: string; public_id?: string | null }) => ({
+              image_url: img.image_url,
+              public_id: img.public_id ?? null,
+            })),
+          }
+        : undefined,
+    },
+  });
+
+  return NextResponse.json({ id: created.id });
+}

@@ -1,0 +1,23 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+export async function GET(
+  _request: Request,
+  { params }: { params: { id: string } }
+) {
+  const id = Number(params.id);
+  if (!id) {
+    return NextResponse.json({ message: "Invalid id" }, { status: 400 });
+  }
+
+  const order = await prisma.adminOrder.findUnique({
+    where: { id },
+    include: { items: true },
+  });
+
+  if (!order) {
+    return NextResponse.json({ message: "Not found" }, { status: 404 });
+  }
+
+  return NextResponse.json({ order, items: order.items });
+}

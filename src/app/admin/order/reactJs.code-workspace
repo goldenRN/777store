@@ -1,0 +1,31 @@
+{
+	"folders": [
+		{
+			"name": "reactJs",
+			"path": "../../../../../../reactJs"
+		},
+		{
+			"name": "teever",
+			"path": "../../../../../flutter/teever"
+		},
+		{
+			"path": "../../../../../../shdmonitoring"
+		},
+		{
+			"path": "../../../../../agro_city"
+		},
+		{
+			"path": "../../../../../../../Downloads/my-zone-admin-app"
+		},
+		{
+			"path": "../../../.."
+		},
+		{
+			"path": "../../../../../../../Downloads/kriscommerce-template-main"
+		},
+		{
+			"path": "../../../../../../../Downloads/cozycommerce-lite-main"
+		}
+	],
+	"settings": {}
+}
