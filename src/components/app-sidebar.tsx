@@ -1,135 +1,176 @@
-
-'use client';
+"use client"
 
 import * as React from "react"
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 
-import { useAuth } from '@/app/context/AuthContext';
-import { VersionSwitcher } from "@/components/version-switcher"
+import { NavMain } from "@/components/nav-main"
+import { NavProjects } from "@/components/nav-projects"
+import { NavSecondary } from "@/components/nav-secondary"
+import { NavUser } from "@/components/nav-user"
+import Image from 'next/image';
 import {
   Sidebar,
   SidebarContent,
-  SidebarHeader,
-  SidebarRail,
   SidebarFooter,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-} from '@/components/ui/command';
-import {
-  LayoutDashboard,
-  Newspaper,
-  List,
-  ImageIcon,
-  ListPlus,
-  Wallet,
-  Hotel,
-  User,
-  ClipboardPen,
-  Settings,
-  LogOut,
-} from 'lucide-react';
+import { TerminalSquareIcon, BotIcon, BookOpenIcon, Settings2Icon, LifeBuoyIcon, SendIcon, FrameIcon, PieChartIcon, MapIcon, TerminalIcon, LogOutIcon, LockIcon, BoxIcon, ListCheckIcon, VideoIcon, ListPlusIcon } from "lucide-react"
+
+const data = {
+  navMain: [
+    {
+      title: "Хяналтын самбар",
+      url: "/admin/dashboard",
+      icon: <TerminalSquareIcon />,
+      isActive: true,
+    },
+
+    {
+      title: "Бараа бүртгэл",
+      url: "/admin/product",
+      icon: <ListCheckIcon />,
+      items: [
+        { title: "Бэлэн бараа", url: "/admin/product?type=ready" },
+        { title: "Захиалгын бараа", url: "/admin/product?type=preorder" },
+        { title: "Лайвын бараа", url: "/admin/product?type=live" },
+        { title: "Хямдралтай", url: "/admin/product?discount=true" },
+        { title: "Онцлох", url: "/admin/product?featured=true" },
+      ],
+    },
+
+    {
+      title: "Захиалга ",
+      url: "/admin/order",
+      icon: <BoxIcon />,
+      items: [
+        { title: "Хүлээгдэж буй", url: "/admin/order?status=pending" },
+        { title: "Баталгаажсан", url: "/admin/order?status=confirmed" },
+        { title: "Хүргэлтэнд", url: "/admin/order?status=shipping" },
+        { title: "Хүргэгдсэн", url: "/admin/order?status=delivered" },
+        { title: "Цуцлагдсан", url: "/admin/order?status=cancelled" },
+      ],
+    },
+
+    {
+      title: "Лайв худалдаа",
+      url: "/admin/live",
+      icon: <VideoIcon />,
+      items: [
+        { title: "Live session", url: "/admin/live" },
+        { title: "Live бараа", url: "/admin/products?type=live" },
+      ],
+    },
+  ],
+
+  navSecondary: [
+    {
+      title: "Нууц үг солих",
+      url: "/admin/settings",
+      icon: (
+        <LockIcon
+        />
+      ),
+    },
+    {
+      title: "Гарах",
+      url: "#",
+      icon: (
+        <LogOutIcon
+        />
+      ),
+    },
+  ],
+  projects: [
+    {
+      name: "Ангилал",
+      url: "/admin/category",
+      icon: (
+        <ListPlusIcon
+        />
+      ),
+    },
+    {
+      name: "Дэд ангилал",
+      url: "/admin/subCategory",
+      icon: (
+        <ListPlusIcon
+        />
+      ),
+    },
+    {
+      name: "Төлөв",
+      url: "/admin/state",
+      icon: (
+        <ListPlusIcon
+        />
+      ),
+    },
+    {
+      name: "Төрөл",
+      url: "/admin/type",
+      icon: (
+        <ListPlusIcon
+        />
+      ),
+    },
+    {
+      name: "Брэнд",
+      url: "/admin/brand",
+      icon: (
+        <ListPlusIcon
+        />
+      ),
+    },
+    {
+      name: "Хэмжих нэгж",
+      url: "/admin/units",
+      icon: (
+        <ListPlusIcon
+        />
+      ),
+    },
+    {
+      name: "Баннер",
+      url: "/admin/banner",
+      icon: (
+        <ListPlusIcon
+        />
+      ),
+    },
+  ],
+}
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const { logout, user } = useAuth();
-  const pathname = usePathname();
-
-  const isActive = (href: string) => pathname === href;
-
   return (
-    <Sidebar {...props}>
+    <Sidebar
+      className=" h-[calc(100svh-var(--header-height))]!"
+      {...props}
+    >
       <SidebarHeader>
-        <VersionSwitcher />
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild>
+              <a href="#">
+                <img src="/logo.png" alt="777 Family Store" className="h-10 w-10" />
+                <div className="grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-medium">777 Family store</span>
+                  <span className="truncate text-xs">Онлайн дэлгүүр</span>
+                </div>
+              </a>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarHeader>
-
       <SidebarContent>
-        <Command>
-          <CommandInput placeholder='Хайлт...' />
-          <CommandList>
-            <CommandEmpty>Хайлт олдсонгүй.</CommandEmpty>
-
-            <CommandGroup heading='Нүүр хуудас'>
-              <CommandItem className={isActive('/admin/dashboard') ? 'bg-muted text-blue-600' : ''}>
-                <LayoutDashboard className='mr-2 h-8 w-4' />
-                <Link href='/admin/dashboard'>Удирдлагын хэсэг</Link>
-              </CommandItem>
-              <CommandItem className={isActive('/admin/product') ? 'bg-muted text-blue-600' : ''}>
-                <Newspaper className='mr-2 h-8 w-4' />
-                <Link href='/admin/product'>Барааны мэдээлэл</Link>
-              </CommandItem>
-              <CommandItem className={isActive('/admin/order') ? 'bg-muted text-blue-600' : ''}>
-                <Newspaper className='mr-2 h-8 w-4' />
-                <Link href='/admin/order'>Захиалгын мэдээлэл</Link>
-              </CommandItem>
-              <CommandItem className={isActive('/admin/banner') ? 'bg-muted text-blue-600' : ''}>
-                <ImageIcon className='mr-2 h-8 w-4' />
-                <Link href='/admin/banner'>Баннер</Link>
-              </CommandItem>
-            </CommandGroup>
-
-            <CommandSeparator />
-
-            <CommandGroup heading='Бүртгэл'>
-              <CommandItem className={isActive('/admin/category') ? 'bg-muted text-blue-600' : ''}>
-                <ListPlus className='mr-2 h-8 w-4' />
-                <Link href='/admin/category'>Категори </Link>
-              </CommandItem>
-              <CommandItem className={isActive('/admin/subCategory') ? 'bg-muted text-blue-600' : ''}>
-                <List className='mr-2 h-8 w-4' />
-                <Link href='/admin/subCategory'>Дэд категори </Link>
-              </CommandItem>
-              <CommandItem className={isActive('/admin/state') ? 'bg-muted text-blue-600' : ''}>
-                <ClipboardPen className='mr-2 h-8 w-4' />
-                <Link href='/admin/state'>Төлөв </Link>
-              </CommandItem>
-              <CommandItem className={isActive('/admin/type') ? 'bg-muted text-blue-600' : ''}>
-                <ClipboardPen className='mr-2 h-8 w-4' />
-                <Link href='/admin/type'>Төрөл </Link>
-              </CommandItem>
-              <CommandItem className={isActive('/admin/brand') ? 'bg-muted text-blue-600' : ''}>
-                <ClipboardPen className='mr-2 h-8 w-4' />
-                <Link href='/admin/brand'>Брэнд </Link>
-              </CommandItem>
-              <CommandItem className={isActive('/admin/units') ? 'bg-muted text-blue-600' : ''}>
-                <ClipboardPen className='mr-2 h-8 w-4' />
-                <Link href='/admin/units'>Хэмжих нэгж</Link>
-              </CommandItem>
-            </CommandGroup>
-
-            <CommandSeparator />
-
-            <CommandGroup heading='Тохиргоо'>
-              <CommandItem className={isActive('/admin/settings') ? 'bg-muted text-blue-600' : ''}>
-                <Settings className='mr-2 h-8 w-4' />
-                <Link href='/admin/settings'>Нууц үг солих</Link>
-              </CommandItem>
-
-              <CommandItem onSelect={logout}>
-                <LogOut className='mr-2 h-8 w-4' />
-                <span>Гарах</span>
-              </CommandItem>
-            </CommandGroup>
-          </CommandList>
-        </Command>
+        <NavMain items={data.navMain} />
+        <NavProjects projects={data.projects} />
+        <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
-
-      <SidebarRail />
-
       <SidebarFooter>
-        <div className="flex items-center justify-between px-4 py-2 text-sm text-muted-foreground border-t">
-          <div className="flex items-center space-x-2">
-            <User className="h-4 w-4" />
-            <span>{user?.username || 'Хэрэглэгч'}</span>
-          </div>
-        </div>
+        <span className="truncate text-xs text-right">Version 0.0.1</span>
       </SidebarFooter>
     </Sidebar>
-  );
+  )
 }

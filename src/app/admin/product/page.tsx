@@ -1,5 +1,6 @@
 'use client'
 import React, { useEffect, useState, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,7 +18,6 @@ interface Product {
   subcategory_name: string;
   brand_name: string;
   unit_name: string;
-  status_name: string;
   type_name: string;
   price: number;
   discount_price?: number | null;
@@ -27,6 +27,7 @@ interface Product {
 }
 
 const ProductPage = () => {
+  const searchParams = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
   const [open, setOpen] = useState(false);
   const [editData, setEditData] = useState<Product | null>(null);
@@ -64,8 +65,28 @@ const ProductPage = () => {
     fetchProducts();
   }, []);
 
+  const matchesType = (typeName: string, query: string) => {
+    const t = typeName.toLowerCase();
+    const q = query.toLowerCase();
+    if (q === "ready") return t.includes("бэлэн") || t.includes("ready");
+    if (q === "preorder") return t.includes("захиал") || t.includes("preorder") || t.includes("урьдчил");
+    if (q === "live") return t.includes("лайв") || t.includes("live");
+    return t.includes(q);
+  };
+
   const filteredProducts = useMemo(() => {
     let data = [...products];
+    const typeFilter = searchParams.get("type");
+    const discountFilter = searchParams.get("discount") === "true";
+
+    if (typeFilter) {
+      data = data.filter((p) => matchesType(p.type_name || "", typeFilter));
+    }
+    if (discountFilter) {
+      data = data.filter((p) => (p.discount_price ?? 0) > 0);
+    }
+    // featured filter removed (no status field)
+
     if (search) {
       data = data.filter((p) =>
         p.name.toLowerCase().includes(search.toLowerCase())
@@ -84,7 +105,7 @@ const ProductPage = () => {
     });
 
     return data;
-  }, [products, search, sortField, sortOrder]);
+  }, [products, search, sortField, sortOrder, searchParams]);
 
   const handleViewImages = async (productId: number) => {
     try {
@@ -157,7 +178,6 @@ const ProductPage = () => {
                   { key: "subcategory_name", label: "Дэд ангилал" },
                   { key: "brand_name", label: "Брэнд" },
                   { key: "unit_name", label: "Нэгж" },
-                  { key: "status_name", label: "Төлөв" },
                   { key: "type_name", label: "Төрөл" },
                   { key: "price", label: "Үнэ (₮)" },
                   { key: "discount_price", label: "Хямдрал (₮)" },
@@ -186,7 +206,6 @@ const ProductPage = () => {
                     <td className="py-2 px-4 text-xs">{p.subcategory_name}</td>
                     <td className="py-2 px-4 text-xs">{p.brand_name}</td>
                     <td className="py-2 px-4 text-xs">{p.unit_name}</td>
-                    <td className="py-2 px-4 text-xs">{p.status_name}</td>
                     <td className="py-2 px-4 text-xs">{p.type_name}</td>
                     <td className="py-2 px-4 text-xs">
                       {p.price.toLocaleString()}₮

@@ -10,13 +10,14 @@ interface Type {
   id: number;
   name: string;
   description?: string;
+  has_duration?: boolean;
 
 }
 interface EditTypeModalProps {
   open: boolean;
   onClose: () => void;
   type?: Type | null;
-  onSubmit: ( id: number, name: string, description?: string ) => Promise<void>;
+  onSubmit: ( id: number, name: string, description?: string, has_duration?: boolean ) => Promise<void>;
 }
 
 const EditTypeModal: React.FC<EditTypeModalProps> = ({
@@ -28,6 +29,7 @@ const EditTypeModal: React.FC<EditTypeModalProps> = ({
 //   const [states, setStates] = useState<State[]>([]);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [hasDuration, setHasDuration] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -35,6 +37,7 @@ const EditTypeModal: React.FC<EditTypeModalProps> = ({
     if (type) {
       setName(type.name);
       setDescription(type.description || '');
+      setHasDuration(Boolean(type.has_duration));
     }
   }, [type]);
 
@@ -51,7 +54,7 @@ const EditTypeModal: React.FC<EditTypeModalProps> = ({
 
     try {
       setLoading(true);
-      await onSubmit( type!.id, name, description );
+      await onSubmit( type!.id, name, description, hasDuration );
       setError('');
       onClose();
     } catch (err) {
@@ -107,6 +110,14 @@ const EditTypeModal: React.FC<EditTypeModalProps> = ({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            <input
+              type="checkbox"
+              checked={hasDuration}
+              onChange={(e) => setHasDuration(e.target.checked)}
+            />
+            Хугацаатай төрөл
+          </label>
 
           <Button
             type="submit"

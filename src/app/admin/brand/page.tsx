@@ -20,15 +20,15 @@ const BrandPage = () => {
   const [openEdit, setOpenEdit] = useState(false);
   const [editBrand, setEditBrand] = useState<Brand | null>(null);
 
-  useEffect(() => {
-    fetchBrands();
-  }, []);
-
   const fetchBrands = async () => {
     const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/brand`);
     const data = await res.json();
     setBrands(data);
   };
+
+  useEffect(() => {
+    fetchBrands();
+  }, []);
 
   const handleAddBrand = async (formData: FormData) => {
     const user = JSON.parse(localStorage.getItem('user') || '{}');

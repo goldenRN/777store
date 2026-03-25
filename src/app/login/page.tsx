@@ -45,8 +45,15 @@ export default function LoginPage() {
       })
     );
 
-    const nextUrl = searchParams.get("next") || "/admin/dashboard";
-    router.push(nextUrl);
+    const nextUrl = searchParams.get("next");
+    const role = data.role ?? "user";
+    if (nextUrl) {
+      router.push(nextUrl);
+    } else if (role === "ADMIN") {
+      router.push("/admin/dashboard");
+    } else {
+      router.push("/");
+    }
   };
 
   return (

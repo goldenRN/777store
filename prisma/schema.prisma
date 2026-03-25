@@ -183,6 +183,7 @@ model AdminType {
   id          Int      @id @default(autoincrement())
   name        String
   description String?
+  has_duration Boolean  @default(false)
   products    AdminProduct[]
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
@@ -204,6 +205,7 @@ model AdminProduct {
   discount_price Int?
   stock          Int
   material       String?
+  duration_hours Int?
   category_id    Int?
   subcategory_id Int?
   brand_id       Int?
@@ -248,6 +250,7 @@ model AdminProductVariant {
 
 model AdminOrder {
   id         Int              @id @default(autoincrement())
+  user_id    String?
   name       String
   email      String?
   phone1     String
@@ -265,5 +268,6 @@ model AdminOrderItem {
   product_name String
   quantity     Int
   price        Int
+  image_url    String?
   order        AdminOrder @relation(fields: [order_id], references: [id], onDelete: Cascade)
 }

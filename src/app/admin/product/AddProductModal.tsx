@@ -32,6 +32,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
         discount_price: "",
         stock: "",
         material: "",
+        duration_hours: "",
         category_id: "",
         category_name: "",
         subcategory_id: "",
@@ -40,10 +41,9 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
         brand_name: "",
         unit_id: "",
         unit_name: "",
-        status_id: "",
-        status_name: "",
         type_id: "",
         type_name: "",
+        type_has_duration: false,
         images: [] as UploadFile[],
     });
 
@@ -52,7 +52,6 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
     const [subCategories, setSubCategories] = useState<any[]>([]);
     const [brands, setBrands] = useState<any[]>([]);
     const [units, setUnits] = useState<any[]>([]);
-    const [statuses, setStatuses] = useState<any[]>([]);
     const [types, setTypes] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [discountMode, setDiscountMode] = useState<"percent" | "amount">("percent");
@@ -81,6 +80,18 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
         return next > 0 ? next : 0;
     }, [priceNumber, computedDiscountAmount]);
 
+    const isReadyType = useMemo(() => {
+        const name = (form.type_name || "").toLowerCase();
+        return name.includes("бэлэн") || name.includes("ready");
+    }, [form.type_name]);
+
+    useEffect(() => {
+        if (!isReadyType) {
+            setDiscountInput("");
+            setDiscountMode("percent");
+        }
+    }, [isReadyType]);
+
     // 🟢 Хэрэв засвар хийж байвал хуучин утгуудыг populate хийнэ
     useEffect(() => {
         if (editData) {
@@ -97,11 +108,12 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
                 discount_price: editData.discount_price?.toString() || "",
                 stock: editData.stock?.toString() || "",
                 material: editData.material?.toString() || "",
+                duration_hours: editData.duration_hours?.toString() || "",
                 category_id: editData.category_id?.toString() || "",
                 brand_id: editData.brand_id?.toString() || "",
                 unit_id: editData.unit_id?.toString() || "",
-                status_id: editData.status_id?.toString() || "",
                 type_id: editData.type_id?.toString() || "",
+                type_has_duration: Boolean(editData.type_has_duration),
                 images: [],
             }));
             setDiscountMode("amount");
@@ -132,15 +144,13 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
             fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/subcategory`).then((r) => r.json()),
             fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/brand`).then((r) => r.json()),
             fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/unit`).then((r) => r.json()),
-            fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/status`).then((r) => r.json()),
             fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/type`).then((r) => r.json()),
 
-        ]).then(([cat, sub, br, un, st, tp]) => {
+        ]).then(([cat, sub, br, un, tp]) => {
             setCategories(cat);
             setAllSubCategories(sub);
             setBrands(br);
             setUnits(un);
-            setStatuses(st);
             setTypes(tp)
         });
     }, [open]);
@@ -153,6 +163,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
             discount_price: "",
             stock: "",
             material: "",
+            duration_hours: "",
             category_id: "",
             category_name: "",
             subcategory_id: "",
@@ -161,10 +172,9 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
             brand_name: "",
             unit_id: "",
             unit_name: "",
-            status_id: "",
-            status_name: "",
             type_id: "",
             type_name: "",
+            type_has_duration: false,
             images: [],
         });
         setDiscountMode("percent");
@@ -197,6 +207,16 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
     const handleSelectWithName = (fieldId: string, fieldName: string, list: any[], value: string) => {
         const selected = list.find((item) => item.id.toString() === value);
         setForm({ ...form, [fieldId]: value, [fieldName]: selected?.name || "" });
+    };
+
+    const handleTypeSelect = (value: string) => {
+        const selected = types.find((tp) => tp.id.toString() === value);
+        setForm({
+            ...form,
+            type_id: value,
+            type_name: selected?.name || "",
+            type_has_duration: Boolean(selected?.has_duration),
+        });
     };
 
     // 🟢 Зураг upload
@@ -235,6 +255,11 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
     };
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (!form.type_id) {
+            alert("Эхлээд барааны төрлөө сонгоно уу.");
+            return;
+        }
 
         if (discountInputNumber > 0 && (computedDiscountPrice === null || computedDiscountPrice <= 0)) {
             alert("Хямдралын утга буруу байна. Хямдралын үнэ 0-ээс их байх ёстой.");
@@ -289,17 +314,17 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
                 brand_name: form.brand_name,
                 unit_id: form.unit_id,
                 unit_name: form.unit_name,
-                status_id: form.status_id,
-                status_name: form.status_name,
                 type_id: form.type_id,
                 type_name: form.type_name,
+                type_has_duration: form.type_has_duration,
                 price: Number(form.price) || 0,
                 discount_price:
-                    computedDiscountPrice !== null && computedDiscountPrice > 0
+                    isReadyType && computedDiscountPrice !== null && computedDiscountPrice > 0
                         ? Number(computedDiscountPrice.toFixed(2))
                         : null,
                 stock: Number(form.stock) || 0,
                 material: form.material,
+                duration_hours: form.type_has_duration ? Number(form.duration_hours) || 0 : null,
                 images: allImages, // [{ image_url, public_id }]
             };
 
@@ -329,6 +354,30 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
                     <h2 className="text-2xl font-bold mb-2">{editData ? "✏️ Бараа засах" : "🛍️ Шинэ бүтээгдэхүүн нэмэх"}</h2>
 
                     <div>
+                        <Label>Барааны төрөл</Label>
+                        <Select value={form.type_id} onValueChange={handleTypeSelect}>
+                            <SelectTrigger className="h-12">
+                                <SelectValue placeholder="Эхлээд төрлөө сонгоно уу..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {types.map((tp) => (
+                                    <SelectItem key={tp.id} value={tp.id.toString()}>
+                                        {tp.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {!form.type_id && (
+                        <div className="rounded-lg bg-yellow-50 px-3 py-2 text-xs text-yellow-700">
+                            Төрлөө сонгосны дараа бусад талбарууд гарна.
+                        </div>
+                    )}
+
+                    {form.type_id && (
+                        <>
+                    <div>
                         <Label>Бүтээгдэхүүний нэр</Label>
                         <Input name="name" value={form.name} onChange={handleChange} className="h-12 text-lg" />
                     </div>
@@ -342,68 +391,88 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
                             <Label>Үнэ (₮)</Label>
                             <Input name="price" type="number" value={form.price} onChange={handleChange} className="h-12 text-lg" />
                         </div>
-                        <div>
-                            <Label>Хямдралын төрөл</Label>
-                            <Select value={discountMode} onValueChange={(v) => setDiscountMode(v as "percent" | "amount")}>
-                                <SelectTrigger className="h-12">
-                                    <SelectValue placeholder="Сонгох..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="percent">Хувь (%)</SelectItem>
-                                    <SelectItem value="amount">Дүн (₮)</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div>
-                            <Label>{discountMode === "percent" ? "Хямдрал (%)" : "Хямдралын дүн (₮)"}</Label>
-                            <Input
-                                type="number"
-                                value={discountInput}
-                                onChange={(e) => setDiscountInput(e.target.value)}
-                                className="h-12 text-lg"
-                                placeholder={discountMode === "percent" ? "Ж: 10" : "Ж: 50000"}
-                            />
-                        </div>
+                        {isReadyType && (
+                            <>
+                                <div>
+                                    <Label>Хямдралын төрөл</Label>
+                                    <Select value={discountMode} onValueChange={(v) => setDiscountMode(v as "percent" | "amount")}>
+                                        <SelectTrigger className="h-12">
+                                            <SelectValue placeholder="Сонгох..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="percent">Хувь (%)</SelectItem>
+                                            <SelectItem value="amount">Дүн (₮)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div>
+                                    <Label>{discountMode === "percent" ? "Хямдрал (%)" : "Хямдралын дүн (₮)"}</Label>
+                                    <Input
+                                        type="number"
+                                        value={discountInput}
+                                        onChange={(e) => setDiscountInput(e.target.value)}
+                                        className="h-12 text-lg"
+                                        placeholder={discountMode === "percent" ? "Ж: 10" : "Ж: 50000"}
+                                    />
+                                </div>
+                            </>
+                        )}
                         <div>
                             <Label>Үлдэгдэл</Label>
                             <Input name="stock" type="number" value={form.stock} onChange={handleChange} className="h-12 text-lg" />
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-4">
-                        <div>
-                            <Label>Бодогдсон хямдрал (₮)</Label>
-                            <Input
-                                value={computedDiscountAmount > 0 ? Math.round(computedDiscountAmount).toLocaleString() : ""}
-                                readOnly
-                                className="h-12 text-lg bg-slate-50"
-                                placeholder="-"
-                            />
+                    {isReadyType && (
+                        <div className="grid grid-cols-3 gap-4">
+                            <div>
+                                <Label>Бодогдсон хямдрал (₮)</Label>
+                                <Input
+                                    value={computedDiscountAmount > 0 ? Math.round(computedDiscountAmount).toLocaleString() : ""}
+                                    readOnly
+                                    className="h-12 text-lg bg-slate-50"
+                                    placeholder="-"
+                                />
+                            </div>
+                            <div>
+                                <Label>Бодогдсон хувь (%)</Label>
+                                <Input
+                                    value={computedDiscountPercent > 0 ? computedDiscountPercent.toFixed(2) : ""}
+                                    readOnly
+                                    className="h-12 text-lg bg-slate-50"
+                                    placeholder="-"
+                                />
+                            </div>
+                            <div>
+                                <Label>Хямдралын үнэ (автомат)</Label>
+                                <Input
+                                    value={computedDiscountPrice !== null ? Math.round(computedDiscountPrice).toLocaleString() : ""}
+                                    readOnly
+                                    className="h-12 text-lg bg-slate-50"
+                                    placeholder="хямдралгүй"
+                                />
+                            </div>
                         </div>
-                        <div>
-                            <Label>Бодогдсон хувь (%)</Label>
-                            <Input
-                                value={computedDiscountPercent > 0 ? computedDiscountPercent.toFixed(2) : ""}
-                                readOnly
-                                className="h-12 text-lg bg-slate-50"
-                                placeholder="-"
-                            />
-                        </div>
-                        <div>
-                            <Label>Хямдралын үнэ (автомат)</Label>
-                            <Input
-                                value={computedDiscountPrice !== null ? Math.round(computedDiscountPrice).toLocaleString() : ""}
-                                readOnly
-                                className="h-12 text-lg bg-slate-50"
-                                placeholder="хямдралгүй"
-                            />
-                        </div>
-                    </div>
+                    )}
 
                     <div>
                         <Label>Материал дугаар</Label>
                         <Input name="material" value={form.material} onChange={handleChange} className="h-12 text-lg" />
                     </div>
+
+                    {form.type_has_duration && (
+                        <div>
+                            <Label>Хугацаа (цаг)</Label>
+                            <Input
+                                name="duration_hours"
+                                type="number"
+                                value={form.duration_hours}
+                                onChange={handleChange}
+                                className="h-12 text-lg"
+                                placeholder="Ж: 72"
+                            />
+                        </div>
+                    )}
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -454,21 +523,6 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div>
-                            <Label>Төрөл</Label>
-                            <Select value={form.type_id} onValueChange={(v) => handleSelectWithName("type_id", "type_name", types, v)}>
-                                <SelectTrigger className="h-12">
-                                    <SelectValue placeholder="Сонгох..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {types.map((tp) => (
-                                        <SelectItem key={tp.id} value={tp.id.toString()}>
-                                            {tp.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -486,23 +540,9 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
                                 </SelectContent>
                             </Select>
                         </div>
-
-                        <div>
-                            <Label>Төлөв</Label>
-                            <Select value={form.status_id} onValueChange={(v) => handleSelectWithName("status_id", "status_name", statuses, v)}>
-                                <SelectTrigger className="h-12">
-                                    <SelectValue placeholder="Сонгох..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {statuses.map((s) => (
-                                        <SelectItem key={s.id} value={s.id.toString()}>
-                                            {s.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
                     </div>
+                    </>
+                    )}
                 </div>
 
                 {/* -------- RIGHT IMAGE UPLOAD -------- */}

@@ -3,9 +3,10 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(
   _request: Request,
-  { params }: { params: { productId: string } }
+  { params }: { params: Promise<{ productId: string }> }
 ) {
-  const productId = Number(params.productId);
+  const resolved = await params;
+  const productId = Number(resolved.productId);
   if (!productId) {
     return NextResponse.json({ message: "Invalid id" }, { status: 400 });
   }

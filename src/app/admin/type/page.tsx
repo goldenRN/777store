@@ -11,11 +11,13 @@ interface Type {
   id: number;
   name: string;
   description: string;
+  has_duration?: boolean;
 }
 
 interface TypeFormData {
   name: string;
   description: string;
+  has_duration: boolean;
 }
 
 const TypePage: React.FC = () => {
@@ -63,7 +65,7 @@ const TypePage: React.FC = () => {
     setEditModalOpen(true);
   };
   // Edit-ийг backend руу хадгалах
-  const handleUpdateType = async (id: number, name: string, description?: string) => {
+  const handleUpdateType = async (id: number, name: string, description?: string, has_duration?: boolean) => {
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -77,6 +79,7 @@ const TypePage: React.FC = () => {
           id,
           name,
           description: description || '', // undefined бол хоосон string
+          has_duration: Boolean(has_duration),
         }),
       });
 

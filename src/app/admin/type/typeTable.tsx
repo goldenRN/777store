@@ -15,6 +15,7 @@ export interface State {
   id: number;
   name: string;
   description:string;
+  has_duration?: boolean;
 }
 
 interface StateTableProps {
@@ -32,6 +33,7 @@ const StateTable = ({ states, onDelete, onEdit }: StateTableProps) => {
           <TableRow>
             <TableHead>Төрөл</TableHead>
              <TableHead>Тайлбар</TableHead>
+             <TableHead>Хугацаатай</TableHead>
             <TableHead>Үйлдэл</TableHead>
           </TableRow>
         </TableHeader>
@@ -40,6 +42,7 @@ const StateTable = ({ states, onDelete, onEdit }: StateTableProps) => {
             <TableRow key={st.id}>
               <TableCell>{st.name}</TableCell>
                <TableCell>{st.description}</TableCell>
+               <TableCell>{st.has_duration ? "Тийм" : "Үгүй"}</TableCell>
               <TableCell>
                  <div className="flex gap-2">
                   <button

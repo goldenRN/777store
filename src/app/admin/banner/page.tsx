@@ -125,7 +125,7 @@ const BannerPage: React.FC = () => {
       <div className="flex justify-between items-center bg-white sticky top-0 z-10 p-2 mb-4 border-b">
         <BackButton text="Буцах" link="/admin/dashboard" />
         <button
-          className="bg-yellow-600 hover:opacity-90 text-white font-bold py-2 px-4 rounded text-xs flex items-center gap-2"
+          className="bg-green-700 hover:opacity-90 text-white font-bold py-2 px-4 rounded text-xs flex items-center gap-2"
           onClick={() => setOpenModal(true)}
         >
           <Plus size={15} /> Нэмэх

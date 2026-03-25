@@ -18,6 +18,8 @@ export async function PUT(
     body?.discount_price != null ? Math.round(Number(body.discount_price)) : null;
   const stock = Math.round(Number(body?.stock ?? 0));
   const material = String(body?.material ?? "").trim();
+  const duration_hours =
+    body?.duration_hours != null ? Math.round(Number(body.duration_hours)) : null;
 
   if (!name) {
     return NextResponse.json({ message: "Нэр шаардлагатай" }, { status: 400 });
@@ -32,11 +34,11 @@ export async function PUT(
       discount_price: discount_price ?? null,
       stock,
       material: material || null,
+      duration_hours: duration_hours ?? null,
       category_id: body?.category_id ? Number(body.category_id) : null,
       subcategory_id: body?.subcategory_id ? Number(body.subcategory_id) : null,
       brand_id: body?.brand_id ? Number(body.brand_id) : null,
       unit_id: body?.unit_id ? Number(body.unit_id) : null,
-      status_id: body?.status_id ? Number(body.status_id) : null,
       type_id: body?.type_id ? Number(body.type_id) : null,
     },
   });

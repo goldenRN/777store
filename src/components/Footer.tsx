@@ -1,30 +1,41 @@
 export default function Footer() {
   return (
-    <footer className="mt-10 bg-[var(--navy-900)] text-white">
-      <div className="container mx-auto grid gap-8 px-6 py-10 lg:grid-cols-4 sm:grid-cols-2">
+    <footer className="mt-10 border-t-[3px] border-[var(--accent-2)] bg-white text-black shadow-[0_-6px_20px_rgba(0,0,0,0.08)]">
+      <div className="container mx-auto grid gap-10 px-6 py-12 lg:grid-cols-4 sm:grid-cols-2">
         <div>
           <div className="flex items-center gap-3">
-            <img src="/logo-777.svg" alt="777 Family Store" className="h-10 w-10" />
-            <div className="text-lg font-extrabold">777 Family Store</div>
+            <img src="/logo-777.svg" alt="777 Family Store" className="h-18 w-18" />
+            <div className="flex-row items-center gap-3">
+              <div className="text-md font-extrabold">777 Family Store</div>
+              <div className="text-xs font-regular">Онлайн дэлгүүр</div>
+            </div>
           </div>
-          <p className="mt-3 text-xs opacity-70">2026 © Бүх эрх хуулиар хамгаалагдсан</p>
         </div>
         <div>
-          <h4 className="mb-2 text-sm font-semibold">Тусламж</h4>
-          <div className="text-xs opacity-80">Хэрэглэгч заавар</div>
-          <div className="text-xs opacity-80">Түгээмэл асуулт</div>
+          <h4 className="mb-3 text-sm font-bold">Тусламж</h4>
+          <ul className="list-disc space-y-2 pl-4 text-xs text-black/80">
+            <li>Хэрэглэгч заавар</li>
+            <li>Түгээмэл асуулт</li>
+          </ul>
         </div>
         <div>
-          <h4 className="mb-2 text-sm font-semibold">Чухал холбоос</h4>
-          <a className="block text-xs opacity-80" href="#">Бидний тухай</a>
-          <a className="block text-xs opacity-80" href="/terms">Үйлчилгээний нөхцөл</a>
-          <a className="block text-xs opacity-80" href="#">Нууцлалын бодлого</a>
+          <h4 className="mb-3 text-sm font-bold">Холбоос</h4>
+          <ul className="list-disc space-y-2 pl-4 text-xs text-black/80">
+            <li><a className="hover:text-[var(--accent-2)]" href="#">Бидний тухай</a></li>
+            <li><a className="hover:text-[var(--accent-2)]" href="/terms">Үйлчилгээний нөхцөл</a></li>
+            <li><a className="hover:text-[var(--accent-2)]" href="#">Нууцлалын бодлого</a></li>
+          </ul>
         </div>
         <div>
-          <h4 className="mb-2 text-sm font-semibold">Хаяг, Байршил</h4>
-          <div className="text-xs opacity-80">Улаанбаатар хот, БГД 3-р хороо</div>
-          <div className="text-xs opacity-80">09:00 - 21:00</div>
+          <h4 className="mb-3 text-sm font-bold">Хаяг, Байршил</h4>
+          <ul className="list-disc space-y-2 pl-4 text-xs text-black/80">
+            <li>Улаанбаатар хот, БГД 3-р хороо</li>
+            <li>09:00 - 21:00</li>
+          </ul>
         </div>
+      </div>
+      <div className="bg-[var(--accent-2)] py-3 text-center text-xs font-semibold text-white">
+        2026 © Бүх эрх хуулиар хамгаалагдсан
       </div>
     </footer>
   );

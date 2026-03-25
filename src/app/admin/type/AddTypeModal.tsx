@@ -7,12 +7,13 @@ import { Input } from '@/components/ui/input';
 interface AddTypeModalProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: { name: string; description: string }) => Promise<void>;
+  onSubmit: (data: { name: string; description: string; has_duration: boolean }) => Promise<void>;
 }
 
 const AddTypeModal = ({ open, onClose, onSubmit }: AddTypeModalProps) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [hasDuration, setHasDuration] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -36,12 +37,13 @@ const AddTypeModal = ({ open, onClose, onSubmit }: AddTypeModalProps) => {
     try {
       setLoading(true);
       await onSubmit({
-        name, description
+        name, description, has_duration: hasDuration
       });
 
       // Reset form
       setName('');
       setDescription('');
+      setHasDuration(false);
       setError('');
       onClose();
     } catch (err) {
@@ -97,6 +99,14 @@ const AddTypeModal = ({ open, onClose, onSubmit }: AddTypeModalProps) => {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            <input
+              type="checkbox"
+              checked={hasDuration}
+              onChange={(e) => setHasDuration(e.target.checked)}
+            />
+            Хугацаатай төрөл
+          </label>
 
           <Button
             type="submit"

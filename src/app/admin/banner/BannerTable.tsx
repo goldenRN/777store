@@ -60,7 +60,7 @@ const BannerTable = ({ banner, onDelete, onEdit }: BannerTableProps) => {
 
                     {/* ✏️ Edit Button */}
                     <button
-                      className="bg-orange-200 hover:bg-orange-500 text-black py-1 px-3 rounded text-xs"
+                      className="bg-orange-200 hover:bg-red-500 text-black py-1 px-3 rounded text-xs"
                       onClick={() => onEdit(b)}
                     >
                       <Pencil size={16} />

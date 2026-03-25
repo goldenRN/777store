@@ -13,6 +13,7 @@ export async function PUT(
   const body = await request.json();
   const name = String(body?.name ?? "").trim();
   const description = String(body?.description ?? "").trim();
+  const has_duration = Boolean(body?.has_duration ?? false);
 
   if (!name) {
     return NextResponse.json({ message: "Нэр шаардлагатай" }, { status: 400 });
@@ -23,6 +24,7 @@ export async function PUT(
     data: {
       name,
       description: description || null,
+      has_duration,
     },
   });
 
