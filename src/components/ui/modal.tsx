@@ -7,9 +7,10 @@ interface ModalProps {
   open: boolean;
   onClose: () => void;
   children: React.ReactNode;
+  title?: string;
 }
 
-export function Modal({ open, onClose, children }: ModalProps) {
+export function Modal({ open, onClose, children, title = "Dialog" }: ModalProps) {
   return (
     <Dialog.Root open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
       {/* Overlay нь бүх дэлгэцийг cover хийнэ */}
@@ -17,6 +18,7 @@ export function Modal({ open, onClose, children }: ModalProps) {
 
       {/* Content нь center-д байрлана, full screen */}
       <Dialog.Content className="fixed inset-0 z-50 overflow-auto flex items-center justify-center p-4">
+        <Dialog.Title className="sr-only">{title}</Dialog.Title>
         <div className="bg-white w-full max-w-6xl h-[90vh] md:h-auto rounded-2xl shadow-xl p-6">
           {children}
         </div>

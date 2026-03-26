@@ -197,6 +197,15 @@ model AdminBanner {
   updated_at  DateTime @updatedAt
 }
 
+model AdminPromo {
+  id         Int      @id @default(autoincrement())
+  badge      String?
+  title      String?
+  subtitle   String?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
 model AdminProduct {
   id             Int                  @id @default(autoincrement())
   name           String
@@ -269,5 +278,6 @@ model AdminOrderItem {
   quantity     Int
   price        Int
   image_url    String?
+  status       String     @default("pending")
   order        AdminOrder @relation(fields: [order_id], references: [id], onDelete: Cascade)
 }

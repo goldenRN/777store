@@ -14,6 +14,7 @@ interface AddProductModalProps {
     onClose: () => void;
     onRefresh: () => void;
     editData?: any | null;
+    initialType?: "ready" | "preorder" | "live" | null;
 }
 
 interface UploadFile {
@@ -24,7 +25,7 @@ interface UploadFile {
     progress?: number;
 }
 
-export default function AddProductModal({ open, onClose, onRefresh, editData }: AddProductModalProps) {
+export default function AddProductModal({ open, onClose, onRefresh, editData, initialType }: AddProductModalProps) {
     const [form, setForm] = useState({
         name: "",
         description: "",
@@ -57,6 +58,8 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
     const [discountMode, setDiscountMode] = useState<"percent" | "amount">("percent");
     const [discountInput, setDiscountInput] = useState("");
     const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const [productMode, setProductMode] = useState<"ready" | "preorder" | null>(null);
+    const [forceReadyEdit, setForceReadyEdit] = useState(false);
 
     const priceNumber = Number(form.price) || 0;
     const discountInputNumber = Number(discountInput) || 0;
@@ -80,17 +83,12 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
         return next > 0 ? next : 0;
     }, [priceNumber, computedDiscountAmount]);
 
-    const isReadyType = useMemo(() => {
-        const name = (form.type_name || "").toLowerCase();
-        return name.includes("бэлэн") || name.includes("ready");
-    }, [form.type_name]);
-
     useEffect(() => {
-        if (!isReadyType) {
+        if (productMode !== "ready") {
             setDiscountInput("");
             setDiscountMode("percent");
         }
-    }, [isReadyType]);
+    }, [productMode]);
 
     // 🟢 Хэрэв засвар хийж байвал хуучин утгуудыг populate хийнэ
     useEffect(() => {
@@ -116,6 +114,12 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
                 type_has_duration: Boolean(editData.type_has_duration),
                 images: [],
             }));
+            const typeName = String(editData.type_name || "").toLowerCase();
+            if (typeName.includes("бэлэн") || typeName.includes("ready")) {
+                setProductMode("ready");
+            } else if (typeName.includes("захиал") || typeName.includes("preorder") || typeName.includes("урьдчил")) {
+                setProductMode("preorder");
+            }
             setDiscountMode("amount");
             setDiscountInput(discountAmount > 0 ? discountAmount.toString() : "");
 
@@ -133,6 +137,8 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
                 .catch((err) => console.error("Image fetch error:", err));
         } else {
             resetForm();
+            setProductMode(null);
+            setForceReadyEdit(false);
         }
     }, [editData, open]);
 
@@ -154,6 +160,64 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
             setTypes(tp)
         });
     }, [open]);
+
+    const findTypeByKind = (kind: "ready" | "preorder" | "live") => {
+        if (kind === "ready") {
+            return types.find(
+                (tp) => String(tp.name).toLowerCase().includes("бэлэн") || String(tp.name).toLowerCase().includes("ready")
+            );
+        }
+        if (kind === "preorder") {
+            return types.find(
+                (tp) =>
+                    String(tp.name).toLowerCase().includes("захиал") ||
+                    String(tp.name).toLowerCase().includes("захил") ||
+                    String(tp.name).toLowerCase().includes("preorder") ||
+                    String(tp.name).toLowerCase().includes("урьдчил")
+            );
+        }
+        return types.find(
+            (tp) => String(tp.name).toLowerCase().includes("лайв") || String(tp.name).toLowerCase().includes("live")
+        );
+    };
+
+    // 🟢 Types ачаалсаны дараа сонгосон mode-д таарах type-г автоматаар сонгоно
+    useEffect(() => {
+        if (!productMode || form.type_id || types.length === 0) return;
+        const selected = findTypeByKind(productMode);
+        if (selected) {
+            setForm((prev) => ({
+                ...prev,
+                type_id: selected.id.toString(),
+                type_name: selected.name,
+                type_has_duration: Boolean(selected.has_duration),
+            }));
+        }
+    }, [productMode, types, form.type_id]);
+
+    // 🟢 URL-аас ирсэн type дээр үндэслэн шинэ бараа нэмэхэд автоматаар сонгоно
+    useEffect(() => {
+        if (!open || editData) return;
+        if (!initialType) return;
+        if (initialType === "ready") setProductMode("ready");
+        if (initialType === "preorder") setProductMode("preorder");
+        if (initialType === "live") setProductMode("ready");
+    }, [open, editData, initialType]);
+
+    useEffect(() => {
+        if (!open || editData) return;
+        if (!initialType) return;
+        if (form.type_id || types.length === 0) return;
+        const selected = findTypeByKind(initialType);
+        if (selected) {
+            setForm((prev) => ({
+                ...prev,
+                type_id: selected.id.toString(),
+                type_name: selected.name,
+                type_has_duration: Boolean(selected.has_duration),
+            }));
+        }
+    }, [open, editData, initialType, form.type_id, types]);
 
     const resetForm = () => {
         setForm({
@@ -219,6 +283,20 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
         });
     };
 
+    const handleModeSelect = (mode: "ready" | "preorder") => {
+        setProductMode(mode);
+        setForceReadyEdit(false);
+        const selected = findTypeByKind(mode);
+        if (selected) {
+            setForm((prev) => ({
+                ...prev,
+                type_id: selected.id.toString(),
+                type_name: selected.name,
+                type_has_duration: Boolean(selected.has_duration),
+            }));
+        }
+    };
+
     // 🟢 Зураг upload
     const handleFiles = (files: FileList | null) => {
         if (!files) return;
@@ -256,8 +334,16 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!form.type_id) {
+        if (!productMode) {
             alert("Эхлээд барааны төрлөө сонгоно уу.");
+            return;
+        }
+        if (!form.type_id) {
+            alert("Төрлийн тохиргоо олдсонгүй. Админ хэсэгт Бэлэн/Захиалгын төрлүүдийг үүсгэсэн эсэхээ шалгана уу.");
+            return;
+        }
+        if (!form.name.trim()) {
+            alert("Барааны нэр оруулна уу.");
             return;
         }
 
@@ -306,10 +392,10 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
             const payload = {
                 name: form.name,
                 description: form.description,
-                category_id: form.category_id,
-                category_name: form.category_name,
-                subcategory_id: form.subcategory_id,
-                subcategory_name: form.subcategory_name,
+                category_id: (productMode === "ready" || forceReadyEdit) ? form.category_id : null,
+                category_name: (productMode === "ready" || forceReadyEdit) ? form.category_name : "",
+                subcategory_id: (productMode === "ready" || forceReadyEdit) ? form.subcategory_id : null,
+                subcategory_name: (productMode === "ready" || forceReadyEdit) ? form.subcategory_name : "",
                 brand_id: form.brand_id,
                 brand_name: form.brand_name,
                 unit_id: form.unit_id,
@@ -319,7 +405,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
                 type_has_duration: form.type_has_duration,
                 price: Number(form.price) || 0,
                 discount_price:
-                    isReadyType && computedDiscountPrice !== null && computedDiscountPrice > 0
+                    (productMode === "ready" || forceReadyEdit) && computedDiscountPrice !== null && computedDiscountPrice > 0
                         ? Number(computedDiscountPrice.toFixed(2))
                         : null,
                 stock: Number(form.stock) || 0,
@@ -338,8 +424,12 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
             onRefresh();
             handleClose();
         } catch (err) {
+            const message =
+                (err as any)?.response?.data?.message ||
+                (err as any)?.response?.data?.error ||
+                "⚠️ Алдаа гарлаа!";
             console.error("❌ Upload error:", err);
-            alert("⚠️ Алдаа гарлаа!");
+            alert(message);
         } finally {
             setLoading(false);
         }
@@ -353,29 +443,39 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
                 <div className="space-y-4 overflow-auto p-2">
                     <h2 className="text-2xl font-bold mb-2">{editData ? "✏️ Бараа засах" : "🛍️ Шинэ бүтээгдэхүүн нэмэх"}</h2>
 
-                    <div>
-                        <Label>Барааны төрөл</Label>
-                        <Select value={form.type_id} onValueChange={handleTypeSelect}>
-                            <SelectTrigger className="h-12">
-                                <SelectValue placeholder="Эхлээд төрлөө сонгоно уу..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {types.map((tp) => (
-                                    <SelectItem key={tp.id} value={tp.id.toString()}>
-                                        {tp.name}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
+                    {!editData && (
+                        <div>
+                            <Label>Ямар төрлийн бараа бүртгэх вэ?</Label>
+                            <div className="mt-2 grid grid-cols-2 gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => handleModeSelect("ready")}
+                                    className={`rounded-xl border px-4 py-3 text-sm font-semibold ${
+                                        productMode === "ready" ? "border-[var(--accent-2)] text-[var(--accent-2)]" : "hover:bg-[var(--sky-100)]"
+                                    }`}
+                                >
+                                    Бэлэн бараа бүртгэх
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleModeSelect("preorder")}
+                                    className={`rounded-xl border px-4 py-3 text-sm font-semibold ${
+                                        productMode === "preorder" ? "border-[var(--accent-2)] text-[var(--accent-2)]" : "hover:bg-[var(--sky-100)]"
+                                    }`}
+                                >
+                                    Захиалгын бараа бүртгэх
+                                </button>
+                            </div>
+                        </div>
+                    )}
 
-                    {!form.type_id && (
+                    {!productMode && !editData && (
                         <div className="rounded-lg bg-yellow-50 px-3 py-2 text-xs text-yellow-700">
                             Төрлөө сонгосны дараа бусад талбарууд гарна.
                         </div>
                     )}
 
-                    {form.type_id && (
+                    {productMode && (
                         <>
                     <div>
                         <Label>Бүтээгдэхүүний нэр</Label>
@@ -391,7 +491,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
                             <Label>Үнэ (₮)</Label>
                             <Input name="price" type="number" value={form.price} onChange={handleChange} className="h-12 text-lg" />
                         </div>
-                        {isReadyType && (
+                        {(productMode === "ready" || forceReadyEdit) && (
                             <>
                                 <div>
                                     <Label>Хямдралын төрөл</Label>
@@ -418,12 +518,12 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
                             </>
                         )}
                         <div>
-                            <Label>Үлдэгдэл</Label>
+                            <Label>{productMode === "preorder" ? "Захиалах тоо" : "Үлдэгдэл"}</Label>
                             <Input name="stock" type="number" value={form.stock} onChange={handleChange} className="h-12 text-lg" />
                         </div>
                     </div>
 
-                    {isReadyType && (
+                    {(productMode === "ready" || forceReadyEdit) && (
                         <div className="grid grid-cols-3 gap-4">
                             <div>
                                 <Label>Бодогдсон хямдрал (₮)</Label>
@@ -474,39 +574,41 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
                         </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <Label>Ангилал</Label>
-                            <Select value={form.category_id} onValueChange={handleCategorySelect}>
-                                <SelectTrigger className="h-12">
-                                    <SelectValue placeholder="Сонгох..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {categories?.map((c) => (
-                                        <SelectItem key={c.category_id} value={c.category_id.toString()}>
-                                            {c.category_name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
+                    {(productMode === "ready" || forceReadyEdit) && (
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <Label>Ангилал</Label>
+                                <Select value={form.category_id} onValueChange={handleCategorySelect}>
+                                    <SelectTrigger className="h-12">
+                                        <SelectValue placeholder="Сонгох..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {categories?.map((c) => (
+                                            <SelectItem key={c.category_id} value={c.category_id.toString()}>
+                                                {c.category_name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
 
-                        <div>
-                            <Label>Дэд ангилал</Label>
-                            <Select value={form.subcategory_id} onValueChange={handleSubCategorySelect}>
-                                <SelectTrigger className="h-12">
-                                    <SelectValue placeholder="Сонгох..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {subCategories.map((s) => (
-                                        <SelectItem key={s.id} value={s.id.toString()}>
-                                            {s.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <div>
+                                <Label>Дэд ангилал</Label>
+                                <Select value={form.subcategory_id} onValueChange={handleSubCategorySelect}>
+                                    <SelectTrigger className="h-12">
+                                        <SelectValue placeholder="Сонгох..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {subCategories.map((s) => (
+                                            <SelectItem key={s.id} value={s.id.toString()}>
+                                                {s.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
-                    </div>
+                    )}
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <Label>Хэмжих нэгж</Label>
@@ -542,6 +644,20 @@ export default function AddProductModal({ open, onClose, onRefresh, editData }: 
                         </div>
                     </div>
                     </>
+                    )}
+                    {editData && productMode === "preorder" && !forceReadyEdit && (
+                        <div className="mt-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setForceReadyEdit(true);
+                                    handleModeSelect("ready");
+                                }}
+                                className="rounded-xl border px-4 py-2 text-xs font-semibold hover:bg-[var(--sky-100)]"
+                            >
+                                Бэлэн барааруу бүртгэх
+                            </button>
+                        </div>
                     )}
                 </div>
 

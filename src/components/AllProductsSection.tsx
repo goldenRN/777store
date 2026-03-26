@@ -12,6 +12,7 @@ type Product = {
   image_url: string | null;
   type_has_duration?: boolean;
   duration_hours?: number | null;
+  created_at?: string | null;
   category_id?: number | null;
   subcategory_id?: number | null;
 };
@@ -176,6 +177,7 @@ export default function AllProductsSection({
                 image_url={item.image_url}
                 type_has_duration={item.type_has_duration}
                 duration_hours={item.duration_hours}
+                created_at={item.created_at}
               />
             ))}
           </div>

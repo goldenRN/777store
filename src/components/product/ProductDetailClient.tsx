@@ -19,11 +19,17 @@ type ProductDetail = {
   type_name: string | null;
   type_has_duration?: boolean;
   duration_hours?: number | null;
+  created_at?: string | null;
 };
 
 export default function ProductDetailClient({ product }: { product: ProductDetail }) {
   const [qty, setQty] = useState(1);
   const [activeImage, setActiveImage] = useState<string | null>(product.image_url || product.images[0] || null);
+  const endDate = useMemo(() => {
+    if (!product.created_at || !product.duration_hours) return null;
+    const endMs = new Date(product.created_at).getTime() + product.duration_hours * 60 * 60 * 1000;
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ulaanbaatar" }).format(new Date(endMs));
+  }, [product.created_at, product.duration_hours]);
 
   const finalPrice = useMemo(
     () => (product.discount_price && product.discount_price > 0 ? product.discount_price : product.price),
@@ -95,9 +101,9 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
           )}
           {product.type_has_duration && (
             <div>
-              Хугацаа:{" "}
+              Дуусах огноо:{" "}
               <span className="font-semibold text-[var(--navy-900)]">
-                {product.duration_hours ? `${product.duration_hours} цаг` : "тохируулгагүй"}
+                {endDate || "тохируулгагүй"}
               </span>
             </div>
           )}

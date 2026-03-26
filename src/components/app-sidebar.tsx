@@ -36,7 +36,7 @@ const data = {
         { title: "Захиалгын бараа", url: "/admin/product?type=preorder" },
         { title: "Лайвын бараа", url: "/admin/product?type=live" },
         { title: "Хямдралтай", url: "/admin/product?discount=true" },
-        { title: "Онцлох", url: "/admin/product?featured=true" },
+        // { title: "Онцлох", url: "/admin/product?featured=true" },
       ],
     },
 
@@ -46,8 +46,8 @@ const data = {
       icon: <BoxIcon />,
       items: [
         { title: "Хүлээгдэж буй", url: "/admin/order?status=pending" },
-        { title: "Баталгаажсан", url: "/admin/order?status=confirmed" },
-        { title: "Хүргэлтэнд", url: "/admin/order?status=shipping" },
+        { title: "Бараа ирсэн", url: "/admin/order?status=confirmed" },
+        { title: "Хүргэлтэнд бүртгэгдсэн", url: "/admin/order?status=shipping" },
         { title: "Хүргэгдсэн", url: "/admin/order?status=delivered" },
         { title: "Цуцлагдсан", url: "/admin/order?status=cancelled" },
       ],
@@ -58,7 +58,7 @@ const data = {
       url: "/admin/live",
       icon: <VideoIcon />,
       items: [
-        { title: "Live session", url: "/admin/live" },
+        { title: "Live бүртгэл", url: "/admin/live" },
         { title: "Live бараа", url: "/admin/products?type=live" },
       ],
     },
@@ -134,6 +134,14 @@ const data = {
     {
       name: "Баннер",
       url: "/admin/banner",
+      icon: (
+        <ListPlusIcon
+        />
+      ),
+    },
+    {
+      name: "Онцгой хямдрал",
+      url: "/admin/promo",
       icon: (
         <ListPlusIcon
         />

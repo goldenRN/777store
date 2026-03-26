@@ -13,6 +13,7 @@ type OrderItem = {
   productId: string;
   productName: string;
   productImage: string | null;
+  status?: string | null;
 };
 
 type Order = {
@@ -23,18 +24,9 @@ type Order = {
   items: OrderItem[];
 };
 
-const STATUS_TABS = [
-  { key: "ALL", label: "Бүгд" },
-  { key: "PENDING", label: "Хүлээгдэж буй" },
-  { key: "CONFIRMED", label: "Баталгаажсан" },
-  { key: "SHIPPED", label: "Хүргэлт" },
-  { key: "COMPLETED", label: "Хүргэлт дууссан" },
-  { key: "CANCELED", label: "Буцаалт" },
-];
-
-const getStatusLabel = (status: string) => {
-  const tab = STATUS_TABS.find((t) => t.key === status);
-  return tab?.label ?? status;
+const getStatusLabel = (status: string, statuses: { name: string }[]) => {
+  const hit = statuses.find((s) => s.name === status);
+  return hit?.name ?? status;
 };
 
 export default function OrdersPage() {
@@ -45,6 +37,14 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Order | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [statusOptions, setStatusOptions] = useState<{ id: number; name: string }[]>([]);
+
+  useEffect(() => {
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/status`)
+      .then((r) => r.json())
+      .then((data) => setStatusOptions(Array.isArray(data) ? data : []))
+      .catch(() => setStatusOptions([]));
+  }, []);
 
   const userId = useMemo(() => {
     try {
@@ -92,7 +92,8 @@ export default function OrdersPage() {
         <div className="rounded-2xl bg-white p-6 shadow">
           <div className="text-lg font-bold">Захиалгууд</div>
           <div className="mt-4 flex flex-wrap gap-2">
-            {STATUS_TABS.map((tab) => (
+            {[{ key: "ALL", label: "Бүгд" }, ...statusOptions.map((s) => ({ key: s.name, label: s.name }))].map(
+              (tab) => (
               <button
                 key={tab.key}
                 onClick={() => router.push(`/orders?status=${tab.key}`)}
@@ -121,10 +122,10 @@ export default function OrdersPage() {
                       {new Date(o.createdAt).toLocaleString()}
                     </div>
                   </div>
-                  <div className="mt-2 text-xs">
-                    Төлөв:{" "}
+                    <div className="mt-2 text-xs">
+                      Төлөв:{" "}
                     <span className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-700">
-                      {getStatusLabel(o.status)}
+                      {getStatusLabel(o.status, statusOptions)}
                     </span>
                   </div>
 
@@ -194,6 +195,11 @@ export default function OrdersPage() {
                         <div className="text-xs text-[var(--gray-500)]">
                           {it.qty}ш × {Number(it.unitPrice).toLocaleString()}₮
                         </div>
+                        {it.status && (
+                          <div className="mt-1 text-[10px] text-[var(--gray-500)]">
+                            Төлөв: {getStatusLabel(it.status, statusOptions)}
+                          </div>
+                        )}
                       </div>
                       <div className="text-sm font-semibold">
                         {(it.qty * it.unitPrice).toLocaleString()}₮

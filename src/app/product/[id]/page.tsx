@@ -20,6 +20,7 @@ type ProductDetail = {
   type_name: string | null;
   type_has_duration?: boolean;
   duration_hours?: number | null;
+  created_at?: string | null;
 };
 
 type RelatedProduct = {
@@ -31,6 +32,7 @@ type RelatedProduct = {
   image_url: string | null;
   type_has_duration?: boolean;
   duration_hours?: number | null;
+  created_at?: string | null;
 };
 
 const fetchProduct = async (id: string): Promise<ProductDetail | null> => {
@@ -68,6 +70,7 @@ const fetchProduct = async (id: string): Promise<ProductDetail | null> => {
     type_name: product.type?.name ?? null,
     type_has_duration: product.type?.has_duration ?? false,
     duration_hours: product.duration_hours ?? null,
+    created_at: product.created_at?.toISOString() ?? null,
   };
 };
 
@@ -111,6 +114,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     image_url: p.images?.[0]?.image_url ?? null,
     type_has_duration: p.type?.has_duration ?? false,
     duration_hours: p.duration_hours ?? null,
+    created_at: p.created_at?.toISOString() ?? null,
   }));
 
   return (
@@ -133,6 +137,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                   image_url={item.image_url}
                   type_has_duration={item.type_has_duration}
                   duration_hours={item.duration_hours}
+                  created_at={item.created_at}
                 />
               ))}
             </div>

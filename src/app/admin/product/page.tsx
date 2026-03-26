@@ -42,6 +42,18 @@ const ProductPage = () => {
   const [variantOpen, setVariantOpen] = useState(false);
   const [variantProductId, setVariantProductId] = useState<number | null>(null);
   const [variantProductName, setVariantProductName] = useState<string | null>(null);
+  const typeFilter = searchParams.get("type");
+  const initialType =
+    typeFilter === "ready" || typeFilter === "preorder" || typeFilter === "live" ? typeFilter : null;
+  const discountFilter = searchParams.get("discount") === "true";
+
+  const titleLabel = (() => {
+    if (discountFilter) return "Хямдралтай бараа";
+    if (typeFilter === "ready") return "Бэлэн бараа";
+    if (typeFilter === "preorder") return "Захиалгын бараа";
+    if (typeFilter === "live") return "Лайвын бараа";
+    return "Бараа бүртгэл";
+  })();
 
   const openVariantModal = (productId: number, productName: string) => {
     setVariantProductId(productId);
@@ -143,7 +155,7 @@ const ProductPage = () => {
     <div className="space-y-4">
       <Card>
         <CardHeader className="flex flex-col md:flex-row justify-between items-center gap-4">
-          <h2 className="text-xl font-semibold text-gray-800">📦 Бараа бүртгэл</h2>
+          <h2 className="text-xl font-semibold text-gray-800">📦 {titleLabel}</h2>
           <div className="flex gap-2 w-full md:w-auto">
             <Input
               placeholder="Хайлт хийх..."
@@ -156,15 +168,17 @@ const ProductPage = () => {
               <RefreshCcw size={16} className={loading ? "animate-spin text-white" : "text-white"} />
             </Button>
 
-            <Button
-              onClick={() => {
-                setEditData(null);
-                setOpen(true);
-              }}
-              className="flex gap-2 items-center bg-yellow-600"
-            >
-              <Plus size={18} /> Шинэ бараа
-            </Button>
+            {!typeFilter && !discountFilter && (
+              <Button
+                onClick={() => {
+                  setEditData(null);
+                  setOpen(true);
+                }}
+                className="flex gap-2 items-center bg-yellow-600"
+              >
+                <Plus size={18} /> Шинэ бараа
+              </Button>
+            )}
           </div>
         </CardHeader>
 
@@ -279,6 +293,7 @@ const ProductPage = () => {
         onClose={() => setOpen(false)}
         onRefresh={fetchProducts}
         editData={editData}
+        initialType={initialType}
       />
 
       {/* ✔ VARIANT MODAL ЗӨВ АЖИЛЛАДАГ БОЛСОН */}

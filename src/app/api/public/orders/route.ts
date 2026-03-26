@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
 
   const where: Record<string, unknown> = { user_id: userId };
   if (status && status !== "ALL") {
-    where.status = status.toLowerCase();
+    where.status = status;
   }
 
   const orders = await prisma.adminOrder.findMany({
@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
       unitPrice: it.price,
       productName: it.product_name,
       productImage: it.image_url ?? null,
+      status: it.status ?? null,
     })),
   }));
 
@@ -61,12 +62,15 @@ export async function POST(request: NextRequest) {
     return sum + qty * price;
   }, 0);
 
+  const firstStatus = await prisma.adminStatus.findFirst({ orderBy: { id: "asc" } });
+  const defaultStatus = firstStatus?.name || "pending";
+
   const created = await prisma.adminOrder.create({
     data: {
       user_id: userId,
       name,
       phone1: phone,
-      status: "pending",
+      status: defaultStatus,
       total,
       items: {
         create: items.map((it: any) => ({
@@ -74,6 +78,7 @@ export async function POST(request: NextRequest) {
           quantity: Math.max(1, Number(it.qty ?? 1)),
           price: Math.max(0, Number(it.price ?? 0)),
           image_url: it.image_url ? String(it.image_url) : null,
+          status: defaultStatus,
         })),
       },
     },

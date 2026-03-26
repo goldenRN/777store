@@ -12,6 +12,7 @@ type PublicProduct = {
   image_url: string | null;
   type_has_duration?: boolean;
   duration_hours?: number | null;
+  created_at?: string | null;
   category_id?: number | null;
   subcategory_id?: number | null;
 };

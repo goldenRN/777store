@@ -2,6 +2,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import BannerSlider from "@/components/BannerSlider";
 import ProductCard from "@/components/ProductCard";
+import OrderProductsSlider from "@/components/OrderProductsSlider";
 
 type PublicProduct = {
   id: number;
@@ -12,13 +13,21 @@ type PublicProduct = {
   image_url: string | null;
   type_has_duration?: boolean;
   duration_hours?: number | null;
+  type_name?: string | null;
   category_id?: number | null;
+  created_at?: string | null;
 };
 
 type Banner = {
   id: number;
   description: string | null;
   image_url: string | null;
+};
+
+type Promo = {
+  badge: string | null;
+  title: string | null;
+  subtitle: string | null;
 };
 
 type Category = {
@@ -47,6 +56,13 @@ const fetchCategories = async () => {
   return (await res.json()) as Category[];
 };
 
+const fetchPromo = async () => {
+  const base = getBaseUrl();
+  const res = await fetch(`${base}/api/promo`, { cache: "no-store" });
+  if (!res.ok) return null;
+  return (await res.json()) as Promo;
+};
+
 const fetchProducts = async (params: Record<string, string | number | boolean | undefined>) => {
   const base = getBaseUrl();
   const searchParams = new URLSearchParams();
@@ -59,47 +75,79 @@ const fetchProducts = async (params: Record<string, string | number | boolean | 
   const res = await fetch(`${base}/api/public/products${qs ? `?${qs}` : ""}`, {
     cache: "no-store",
   });
-  if (!res.ok) return [];
+  if (!res.ok) return { items: [] as PublicProduct[], total: 0 };
   const json = await res.json();
-  return (json.items || []) as PublicProduct[];
+  return { items: (json.items || []) as PublicProduct[], total: Number(json.total ?? 0) };
 };
 
 export default async function Home() {
   const banners = await fetchBanners();
-  const [categories, readyProducts, preorderProducts, liveProducts, discountProducts, allProducts] = await Promise.all([
+  const [categories, promo, readyRes, preorderRes, liveRes, discountRes, allRes] = await Promise.all([
     fetchCategories(),
+    fetchPromo(),
     fetchProducts({ type: "ready", limit: 8 }),
-    fetchProducts({ type: "preorder", limit: 8 }),
-    fetchProducts({ type: "live", limit: 8 }),
+    fetchProducts({ type: "preorder", limit: 200 }),
+    fetchProducts({ type: "live", limit: 200 }),
     fetchProducts({ discount: true, limit: 8 }),
     fetchProducts({ limit: 8 }),
   ]);
+
+  const readyProducts = readyRes.items;
+  const preorderProducts = preorderRes.items.slice(0, 8);
+  const liveProducts = liveRes.items.slice(0, 8);
+  const discountProducts = discountRes.items;
+  const allProducts = allRes.items;
+  const orderItems = Array.from(
+    new Map([...preorderRes.items, ...liveRes.items].map((p) => [p.id, p])).values()
+  );
 
   return (
     <div className="min-h-screen bg-[var(--sky-50)]">
       <Header />
 
       <main className="container mx-auto px-6">
-        <section className="grid gap-6 py-5 lg:grid-cols-[1.1fr_0.9fr]">
+        <section className="grid gap-6 py-5 lg:grid-cols-[1.4fr_0.6fr]">
           <BannerSlider banners={banners} />
           <div className="grid gap-4">
             <div className="rounded-[28px] bg-[linear-gradient(160deg,#111111,#2a2a2a)] p-6 text-white shadow-xl">
-              <span className="text-xs opacity-70">Онцгой хямдрал</span>
-              <h3 className="mt-2 text-xl font-semibold">LIVE бараа шинэчлэгдлээ</h3>
-              <p className="mt-2 text-sm opacity-80">24 цагийн дотор дуусах hot deal.</p>
+              <span className="text-xs opacity-70">{promo?.badge || "Онцгой хямдрал"}</span>
+              <h3 className="mt-2 text-xl font-semibold">{promo?.title || "LIVE бараа шинэчлэгдлээ"}</h3>
+              <p className="mt-2 text-sm opacity-80">{promo?.subtitle || "24 цагийн дотор дуусах hot deal."}</p>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-2xl bg-white p-4 shadow">
-                <div className="text-xs text-[var(--gray-500)]">Шинэ захиалга</div>
-                <div className="text-lg font-bold">128</div>
-              </div>
-              <div className="rounded-2xl bg-white p-4 shadow">
-                <div className="text-xs text-[var(--gray-500)]">Дундаж хүргэлт</div>
-                <div className="text-lg font-bold">3.2 өдөр</div>
-              </div>
-            </div>
+            <OrderProductsSlider items={orderItems} />
           </div>
         </section>
+        {discountProducts.length > 0 && (
+          <section className="py-6">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <h2 className="text-2xl font-bold">Онцгой хямдрал</h2>
+                <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-[var(--accent)]">
+                  🔥 {discountProducts.length}
+                </span>
+              </div>
+              <a href="/products?discount=true" className="text-xs font-semibold text-[var(--accent-2)]">
+                Бүгдийг харах
+              </a>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-4 sm:grid-cols-2">
+              {discountProducts.map((item) => (
+                <ProductCard
+                  key={item.id}
+                  id={item.id}
+                  name={item.name}
+                  description={item.description}
+                  price={item.price}
+                  discount_price={item.discount_price}
+                  image_url={item.image_url}
+                  type_has_duration={item.type_has_duration}
+                  duration_hours={item.duration_hours}
+                  created_at={item.created_at}
+                />
+              ))}
+            </div>
+          </section>
+        )}
 
         {[
           { title: "Бэлэн бараа", items: readyProducts, href: "/products?type=ready" },
@@ -132,42 +180,14 @@ export default async function Home() {
                     image_url={item.image_url}
                     type_has_duration={item.type_has_duration}
                     duration_hours={item.duration_hours}
+                    created_at={item.created_at}
                   />
                 ))}
               </div>
             </section>
           ))}
 
-        {discountProducts.length > 0 && (
-          <section className="py-6">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <h2 className="text-2xl font-bold">Онцгой хямдрал</h2>
-                <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-[var(--accent)]">
-                  🔥 {discountProducts.length}
-                </span>
-              </div>
-              <a href="/products?discount=true" className="text-xs font-semibold text-[var(--accent-2)]">
-                Бүгдийг харах
-              </a>
-            </div>
-            <div className="grid gap-4 lg:grid-cols-4 sm:grid-cols-2">
-              {discountProducts.map((item) => (
-              <ProductCard
-                key={item.id}
-                id={item.id}
-                name={item.name}
-                description={item.description}
-                price={item.price}
-                discount_price={item.discount_price}
-                image_url={item.image_url}
-                type_has_duration={item.type_has_duration}
-                duration_hours={item.duration_hours}
-                />
-              ))}
-            </div>
-          </section>
-        )}
+
 
         <section className="py-6">
           <h2 className="mb-4 text-2xl font-bold"> Ангилалууд</h2>
@@ -213,6 +233,7 @@ export default async function Home() {
                   image_url={item.image_url}
                   type_has_duration={item.type_has_duration}
                   duration_hours={item.duration_hours}
+                  created_at={item.created_at}
                 />
               ))}
             </div>

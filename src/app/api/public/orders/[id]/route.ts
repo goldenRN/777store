@@ -34,6 +34,7 @@ export async function GET(
       unitPrice: it.price,
       productName: it.product_name,
       productImage: it.image_url ?? null,
+      status: it.status ?? null,
     })),
   });
 }

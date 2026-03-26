@@ -14,6 +14,7 @@ type ProductCardProps = {
   image_url: string | null;
   type_has_duration?: boolean;
   duration_hours?: number | null;
+  created_at?: string | null;
 };
 
 export default function ProductCard({
@@ -25,10 +26,16 @@ export default function ProductCard({
   image_url,
   type_has_duration,
   duration_hours,
+  created_at,
 }: ProductCardProps) {
   const finalPrice = discount_price && discount_price > 0 ? discount_price : price;
   const discountPercent =
     discount_price && discount_price < price ? Math.round(((price - discount_price) / price) * 100) : null;
+  const endDate = (() => {
+    if (!created_at || !duration_hours) return null;
+    const endMs = new Date(created_at).getTime() + duration_hours * 60 * 60 * 1000;
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ulaanbaatar" }).format(new Date(endMs));
+  })();
 
   return (
     <div className="flex flex-col rounded-3xl border border-[#e5e7eb] bg-white shadow-sm">
@@ -116,7 +123,7 @@ export default function ProductCard({
         {type_has_duration && (
           <>
             <div className="mt-3 text-center text-xs text-[var(--gray-500)]">
-              Хугацаа: {duration_hours ? `${duration_hours} цаг` : "тохируулгагүй"}
+              Дуусах огноо: {endDate || "тохируулгагүй"}
             </div>
             <div className="mt-3">
               <div className="h-1 w-full rounded-full bg-[#e5e7eb]">

@@ -5,6 +5,7 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
   const [order, setOrder] = useState<any>(null);
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [statusOptions, setStatusOptions] = useState<{ id: number; name: string }[]>([]);
 
   const fetchDetail = async () => {
     setLoading(true);
@@ -19,6 +20,12 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
   };
 
   useEffect(() => { fetchDetail(); }, [id]);
+  useEffect(() => {
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/status`)
+      .then((r) => r.json())
+      .then((data) => setStatusOptions(Array.isArray(data) ? data : []))
+      .catch(() => setStatusOptions([]));
+  }, []);
 
   const markStatus = async (status: string) => {
     await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/${id}/status`, {
@@ -28,6 +35,23 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
     });
     await fetchDetail();
   };
+
+  const updateItemStatus = async (itemId: number, status: string) => {
+    await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/items/${itemId}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    await fetchDetail();
+  };
+
+  const fallbackOptions = [
+    { value: "pending", label: "Хүлээгдэж байгаа" },
+    { value: "arrived", label: "Бараа ирсэн" },
+    { value: "handed", label: "Хүлээлгэж өгсөн" },
+    { value: "shipping", label: "Хүргэлтэнд бүртгүүлсэн" },
+    { value: "delivered", label: "Хүргэгдсэн" },
+  ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -69,6 +93,7 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
                       <th className="py-2">Тоо ширхэг</th>
                       <th className="py-2">Үнэ</th>
                       <th className="py-2">Нийт</th>
+                      <th className="py-2">Статус</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -79,6 +104,25 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
                         <td className="py-2">{it.quantity}</td>
                         <td className="py-2">{Number(it.price).toLocaleString()}₮</td>
                         <td className="py-2">{(it.quantity * Number(it.price)).toLocaleString()}₮</td>
+                        <td className="py-2">
+                          <select
+                            value={it.status || (statusOptions[0]?.name ?? "pending")}
+                            onChange={(e) => updateItemStatus(it.id, e.target.value)}
+                            className="border rounded px-2 py-1 text-xs"
+                          >
+                            {statusOptions.length > 0
+                              ? statusOptions.map((s) => (
+                                  <option key={s.id} value={s.name}>
+                                    {s.name}
+                                  </option>
+                                ))
+                              : fallbackOptions.map((s) => (
+                                  <option key={s.value} value={s.value}>
+                                    {s.label}
+                                  </option>
+                                ))}
+                          </select>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import OrderDetailsModal from "./OrderDetailsModal";
 
 type Order = {
@@ -21,6 +22,21 @@ export default function AdminOrdersTable() {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Order | null>(null);
+  const [statusOptions, setStatusOptions] = useState<{ id: number; name: string }[]>([]);
+  const searchParams = useSearchParams();
+  const statusFilter = searchParams.get("status") ?? "";
+  const titleLabel = (() => {
+    if (!statusFilter) return "Захиалгын жагсаалт";
+    const hit = statusOptions.find((s) => s.name === statusFilter);
+    if (hit) return hit.name;
+    const key = statusFilter.toLowerCase();
+    if (key === "pending") return "Хүлээгдэж буй";
+    if (key === "confirmed") return "Баталгаажсан";
+    if (key === "shipping" || key === "shipped") return "Хүргэлтэнд";
+    if (key === "delivered" || key === "completed") return "Хүргэгдсэн";
+    if (key === "cancelled" || key === "canceled") return "Цуцлагдсан";
+    return statusFilter;
+  })();
 
   const fetchOrders = async (p = page) => {
     setLoading(true);
@@ -30,6 +46,7 @@ export default function AdminOrdersTable() {
       url.searchParams.set("page", String(p));
       url.searchParams.set("limit", String(limit));
       if (q) url.searchParams.set("q", q);
+      if (statusFilter) url.searchParams.set("status", statusFilter);
 
       const res = await fetch(url.toString());
       const json = await res.json();
@@ -46,6 +63,13 @@ export default function AdminOrdersTable() {
   useEffect(() => {
     fetchOrders(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter]);
+
+  useEffect(() => {
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/status`)
+      .then((r) => r.json())
+      .then((data) => setStatusOptions(Array.isArray(data) ? data : []))
+      .catch(() => setStatusOptions([]));
   }, []);
 
   const onSearch = () => fetchOrders(1);
@@ -53,7 +77,7 @@ export default function AdminOrdersTable() {
   return (
     <div className="w-full mx-auto p-6">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-semibold">Захиалгын жагсаалт</h1>
+        <h1 className="text-2xl font-semibold">{titleLabel}</h1>
 
         <div className="flex items-center gap-2">
           <input
@@ -64,13 +88,6 @@ export default function AdminOrdersTable() {
           />
           <button onClick={onSearch} className="bg-blue-600 text-white px-3 py-1 rounded">Хайх</button>
           {/* <button onClick={exportCSV} className="bg-gray-700 text-white px-3 py-1 rounded">Export CSV</button> */}
-          <button
-            onClick={() => window.open(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/export`, "_blank")}
-            className="bg-blue-700 text-white px-3 py-1 rounded"
-          >
-            CSV татах
-          </button>
-
           <button
             onClick={() => window.open(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/export/excel`, "_blank")}
             className="bg-green-700 text-white px-3 py-1 rounded"
@@ -109,7 +126,7 @@ export default function AdminOrdersTable() {
                   <td className="p-3">{o.phone1}</td>
                   <td className="p-3">{Number(o.total || 0).toLocaleString()}₮</td>
                   <td className="p-3">
-                    <span className={`px-2 py-0.5 rounded text-xs ${o.status === "pending" ? "bg-yellow-100 text-yellow-800" : o.status === "completed" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-700"}`}>
+                    <span className="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700">
                       {o.status}
                     </span>
                   </td>
@@ -117,16 +134,27 @@ export default function AdminOrdersTable() {
                   <td className="p-3">
                     <div className="flex items-center gap-2">
                       <button onClick={() => setSelected(o)} className="text-sm px-2 py-1 bg-blue-600 text-white rounded">Харах</button>
-                      <button onClick={() => {
-                        // quick mark complete
-                        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/${o.id}/status`, {
-                          method: "PATCH",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ status: o.status === "completed" ? "Хүлээгдэж байгаа" : "Баталгаажсан" })
-                        }).then(() => fetchOrders(page));
-                      }} className="text-sm px-2 py-1 bg-green-600 text-white rounded">
-                        Статус солих
-                      </button>
+                      <select
+                        value={o.status}
+                        onChange={(e) => {
+                          fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/${o.id}/status`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ status: e.target.value })
+                          }).then(() => fetchOrders(page));
+                        }}
+                        className="text-sm px-2 py-1 border rounded"
+                      >
+                        {statusOptions.length > 0 ? (
+                          statusOptions.map((s) => (
+                            <option key={s.id} value={s.name}>
+                              {s.name}
+                            </option>
+                          ))
+                        ) : (
+                          <option value={o.status}>{o.status}</option>
+                        )}
+                      </select>
                     </div>
                   </td>
                 </tr>

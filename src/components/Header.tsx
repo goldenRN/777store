@@ -99,7 +99,7 @@ export default function Header() {
         </div>
       </div>
 
-      <header className="sticky top-0 z-20 bg-white text-black shadow-md">
+      <header className="sticky top-0 border-b-[3px] border-[var(--accent-2)] z-20 bg-white text-black shadow-md">
         <div className="container mx-auto flex items-center justify-between gap-6 px-6 py-4">
           <Link href="/" className="flex items-center gap-3">
             <img src="/logo.png" alt="777 Family Store" className="h-12 w-12" />

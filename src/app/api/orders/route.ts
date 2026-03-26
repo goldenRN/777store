@@ -6,8 +6,9 @@ export async function GET(request: NextRequest) {
   const page = Math.max(Number(searchParams.get("page") ?? 1), 1);
   const limit = Math.max(Number(searchParams.get("limit") ?? 20), 1);
   const q = (searchParams.get("q") ?? "").trim();
+  const status = (searchParams.get("status") ?? "").trim();
 
-  const where =
+  const where: Record<string, unknown> =
     q.length > 0
       ? {
           OR: [
@@ -18,6 +19,10 @@ export async function GET(request: NextRequest) {
           ],
         }
       : {};
+
+  if (status) {
+    where.status = status;
+  }
 
   const total = await prisma.adminOrder.count({ where });
   const pages = Math.max(Math.ceil(total / limit), 1);
