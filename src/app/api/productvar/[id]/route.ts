@@ -3,9 +3,10 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const productId = Number(params.id);
+  const { id: rawId } = await params;
+  const productId = Number(rawId);
   if (!productId) {
     return NextResponse.json({ message: "Invalid id" }, { status: 400 });
   }
@@ -21,9 +22,10 @@ export async function GET(
 
 export async function DELETE(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const id = Number(params.id);
+  const { id: rawId } = await params;
+  const id = Number(rawId);
   if (!id) {
     return NextResponse.json({ message: "Invalid id" }, { status: 400 });
   }
