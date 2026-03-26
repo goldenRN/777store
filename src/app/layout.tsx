@@ -3,8 +3,12 @@ import { Sora, Geist } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { CartProvider } from "@/components/cart/CartProvider";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+const geist = Geist({
+  subsets: ["latin"],
+  variable: "--font-sans",
+});
 
 const sora = Sora({
   subsets: ["latin"],
@@ -25,7 +29,9 @@ export default function RootLayout({
   return (
     <html lang="mn" className={cn("font-sans", geist.variable)}>
       <body className={`${sora.variable} antialiased`}>
-        <CartProvider>{children}</CartProvider>
+        <TooltipProvider>
+          <CartProvider>{children}</CartProvider>
+        </TooltipProvider>
       </body>
     </html>
   );

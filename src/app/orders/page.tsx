@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import Image from "next/image";
@@ -29,7 +29,7 @@ const getStatusLabel = (status: string, statuses: { name: string }[]) => {
   return hit?.name ?? status;
 };
 
-export default function OrdersPage() {
+function OrdersPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const active = searchParams.get("status") || "ALL";
@@ -218,5 +218,13 @@ export default function OrdersPage() {
       )}
       <Footer />
     </div>
+  );
+}
+
+export default function OrdersPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[var(--sky-50)]" />}>
+      <OrdersPageContent />
+    </Suspense>
   );
 }
