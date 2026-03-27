@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { UserRole } from "@prisma/client";
 
 export async function PATCH(
   request: Request,
@@ -11,7 +12,8 @@ export async function PATCH(
   }
 
   const body = await request.json();
-  const role = String(body?.role ?? "").trim().toUpperCase();
+  const roleRaw = String(body?.role ?? "").trim().toUpperCase();
+  const role = roleRaw === "ADMIN" ? UserRole.ADMIN : roleRaw === "CUSTOMER" ? UserRole.CUSTOMER : null;
   if (!role) {
     return NextResponse.json({ message: "role шаардлагатай" }, { status: 400 });
   }
