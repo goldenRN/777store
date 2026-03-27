@@ -1,8 +1,8 @@
 
-import AdminPage from './page';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AuthProvider } from '@/app/context/AuthContext';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import AdminShell from './shell';
 
 const MainLayout = ({ children }: { children: React.ReactNode }) => {
   return (
@@ -11,7 +11,7 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
         <TooltipProvider>
           <ProtectedRoute>
             <div className='flex'>
-            <AdminPage>{children}</AdminPage>
+            <AdminShell>{children}</AdminShell>
             </div>
           </ProtectedRoute>
         </TooltipProvider>
