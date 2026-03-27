@@ -66,7 +66,7 @@ export default function AdminOrdersTable() {
   }, [statusFilter]);
 
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/status`)
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/status`)
       .then((r) => r.json())
       .then((data) => setStatusOptions(Array.isArray(data) ? data : []))
       .catch(() => setStatusOptions([]));
@@ -89,7 +89,7 @@ export default function AdminOrdersTable() {
           <button onClick={onSearch} className="bg-blue-600 text-white px-3 py-1 rounded">Хайх</button>
           {/* <button onClick={exportCSV} className="bg-gray-700 text-white px-3 py-1 rounded">Export CSV</button> */}
           <button
-            onClick={() => window.open(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/export/excel`, "_blank")}
+            onClick={() => window.open(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/orders/export/excel`, "_blank")}
             className="bg-green-700 text-white px-3 py-1 rounded"
           >
             Excel татах
@@ -137,7 +137,7 @@ export default function AdminOrdersTable() {
                       <select
                         value={o.status}
                         onChange={(e) => {
-                          fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/${o.id}/status`, {
+                          fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/orders/${o.id}/status`, {
                             method: "PATCH",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ status: e.target.value })

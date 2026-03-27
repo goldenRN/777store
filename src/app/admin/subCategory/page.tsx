@@ -22,7 +22,7 @@ const SubCategoryPage: React.FC = () => {
   }, []);
   const fetchCategories = async () => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/category`);
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/category`);
       const data = await res.json();
       setCategories(data);
     } catch (err) {
@@ -32,7 +32,7 @@ const SubCategoryPage: React.FC = () => {
 
   const fetchSubCategories = async () => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/subcategory`);
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/subcategory`);
       const data = await res.json();
       setSubCategories(data);
     } catch (err) {
@@ -44,7 +44,7 @@ const SubCategoryPage: React.FC = () => {
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/subcategory`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/subcategory`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -76,7 +76,7 @@ const SubCategoryPage: React.FC = () => {
   //   try {
   //     const user = JSON.parse(localStorage.getItem('user') || '{}');
 
-  //     const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/subcategory`, {
+  //     const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/subcategory`, {
   //       method: 'POST',
   //       headers: {
   //         'Content-Type': 'application/json',
@@ -116,7 +116,7 @@ const SubCategoryPage: React.FC = () => {
   const handleUpdateCategory = async (id: number, data: { name: string; description?: string; category_id: number }) => {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
 
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/subcategory/${id}`, {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/subcategory/${id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -153,7 +153,7 @@ const SubCategoryPage: React.FC = () => {
           if (!confirmed) return;
           try {
             const user = JSON.parse(localStorage.getItem('user') || '{}');
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/subcategory/${id}`, {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/subcategory/${id}`, {
               method: 'DELETE',
               headers: { Authorization: `Bearer ${user.token}` },
             });

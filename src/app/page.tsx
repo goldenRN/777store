@@ -195,7 +195,7 @@ export default async function Home() {
             {categories.map((cat) => (
               <div
                 key={cat.category_id}
-                className="flex items-center gap-2 rounded-full bg-white px-4 py-3 text-center text-xs font-semibold shadow"
+                className="flex flex-col items-center gap-2 rounded-full bg-white px-4 py-3 text-center text-xs font-semibold shadow"
               >
                 {cat.category_image ? (
                   <span className="relative h-6 w-6 overflow-hidden rounded-full bg-[var(--sky-100)]">

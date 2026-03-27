@@ -39,7 +39,7 @@ const EditSubCategoryModal: React.FC<EditSubCategoryModalProps> = ({
 
   const fetchCategories = async () => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/category`);
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/category`);
       const data = await res.json();
       setCategories(data);
     } catch (err) {

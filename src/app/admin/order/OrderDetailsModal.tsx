@@ -10,7 +10,7 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
   const fetchDetail = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/${id}`);
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/orders/${id}`);
       const json = await res.json();
       setOrder(json.order);
       setItems(json.items);
@@ -21,14 +21,14 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
 
   useEffect(() => { fetchDetail(); }, [id]);
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/status`)
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/status`)
       .then((r) => r.json())
       .then((data) => setStatusOptions(Array.isArray(data) ? data : []))
       .catch(() => setStatusOptions([]));
   }, []);
 
   const markStatus = async (status: string) => {
-    await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/${id}/status`, {
+    await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/orders/${id}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
@@ -37,7 +37,7 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
   };
 
   const updateItemStatus = async (itemId: number, status: string) => {
-    await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/items/${itemId}/status`, {
+    await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/orders/items/${itemId}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),

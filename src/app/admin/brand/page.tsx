@@ -21,7 +21,7 @@ const BrandPage = () => {
   const [editBrand, setEditBrand] = useState<Brand | null>(null);
 
   const fetchBrands = async () => {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/brand`);
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/brand`);
     const data = await res.json();
     setBrands(data);
   };
@@ -32,7 +32,7 @@ const BrandPage = () => {
 
   const handleAddBrand = async (formData: FormData) => {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
-    await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/brand`, {
+    await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/brand`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${user.token}` },
       body: formData,
@@ -49,7 +49,7 @@ const BrandPage = () => {
 
   const handleUpdateBrand = async (id: number, formData: FormData) => {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
-    await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/brand/${id}`, {
+    await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/brand/${id}`, {
       method: 'PUT',
       headers: { Authorization: `Bearer ${user.token}` },
       body: formData,
@@ -62,7 +62,7 @@ const BrandPage = () => {
     if (!confirm('Устгах уу?')) return;
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/brand/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/brand/${id}`, { method: 'DELETE' });
       if (!res.ok) {
         const error = await res.json();
         return alert(error.message || 'Устгах үед алдаа гарлаа');

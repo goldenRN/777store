@@ -9,7 +9,7 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
     <>
       <AuthProvider>
         <TooltipProvider>
-          <ProtectedRoute>
+          <ProtectedRoute requireAdmin>
             <div className='flex'>
             <AdminShell>{children}</AdminShell>
             </div>

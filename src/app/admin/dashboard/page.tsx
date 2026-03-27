@@ -32,7 +32,7 @@ export default function AdminDashboardPage() {
     const fetchMetrics = async () => {
       try {
         setLoading(true);
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/dashboard/metrics`);
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/dashboard/metrics`);
         if (!res.ok) throw new Error('Metrics fetch failed');
         const data = await res.json();
         setMetrics(data);

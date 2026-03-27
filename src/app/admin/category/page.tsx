@@ -25,7 +25,7 @@ const CategoryPage: React.FC = () => {
       setLoading(true);
       setError(null);
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/category`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/category`, {
         method: 'GET',
         headers: { Authorization: `Bearer ${user.token}` },
       });
@@ -54,7 +54,7 @@ const CategoryPage: React.FC = () => {
   const handleAddCategory = async (formData: FormData) => {
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/category`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/category`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${user.token}` },
         body: formData,
@@ -78,7 +78,7 @@ const CategoryPage: React.FC = () => {
   const handleUpdateCategory = async (id: number, formData: FormData) => {
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/category/${id}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/category/${id}`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${user.token}` },
         body: formData,
@@ -103,7 +103,7 @@ const CategoryPage: React.FC = () => {
 
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/category/${id}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/category/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${user.token}` },
       });
@@ -253,14 +253,14 @@ export default CategoryPage;
 //                   <TableCell>
 //                     {cat.category_image ? (
 //                       <img
-//                         src={`${process.env.NEXT_PUBLIC_API_URL}${cat.category_image}`}
+//                         src={`${process.env.NEXT_PUBLIC_API_URL || ""}${cat.category_image}`}
 //                         alt={cat.category_name}
 //                         width={50}
 //                         height={50}
 //                         className="cursor-pointer rounded-md hover:scale-105 transition-transform"
 //                         onClick={() =>
 //                           setSelectedImage(
-//                             `${process.env.NEXT_PUBLIC_API_URL}${cat.category_image}`
+//                             `${process.env.NEXT_PUBLIC_API_URL || ""}${cat.category_image}`
 //                           )
 //                         }
 //                       />

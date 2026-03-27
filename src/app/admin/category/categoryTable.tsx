@@ -38,6 +38,12 @@ const CategoryTable = ({ categories, onDelete, onEdit }: CategoryTableProps) => 
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<number | null>(null); // аль category нээгдсэн бэ
 
+  const resolveImage = (src?: string) => {
+    if (!src) return "";
+    if (src.startsWith("http://") || src.startsWith("https://")) return src;
+    return `${process.env.NEXT_PUBLIC_API_URL || ""}${src}`;
+  };
+
   const toggleExpand = (id: number) => {
     setExpanded((prev) => (prev === id ? null : id));
   };
@@ -66,13 +72,13 @@ const CategoryTable = ({ categories, onDelete, onEdit }: CategoryTableProps) => 
                 <TableCell>
                   {cat.category_image && (
                     <img
-                      src={cat.category_image}
+                      src={resolveImage(cat.category_image)}
                       alt={cat.category_name}
                       width={50}
                       height={50}
                       className="cursor-pointer rounded-md"
                       onClick={() =>
-                        setSelectedImage(`${cat.category_image}`)
+                        setSelectedImage(resolveImage(cat.category_image))
                       }
                     />
                   )}

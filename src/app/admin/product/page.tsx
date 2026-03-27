@@ -64,7 +64,7 @@ const ProductPage = () => {
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/product`);
+      const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/product`);
       setProducts(res.data);
     } catch (err) {
       console.error("Бараа татахад алдаа:", err);
@@ -121,7 +121,7 @@ const ProductPage = () => {
 
   const handleViewImages = async (productId: number) => {
     try {
-      const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/productimg/${productId}`);
+      const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/productimg/${productId}`);
       setImages(res.data.map((img: any) => img.image_url));
       setImageModalOpen(true);
     } catch (err) {
@@ -143,7 +143,7 @@ const ProductPage = () => {
     if (!confirm("⚠️ Энэ барааг устгах уу?")) return;
 
     try {
-      await axios.delete(`${process.env.NEXT_PUBLIC_API_URL}/api/product/${id}`);
+      await axios.delete(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/product/${id}`);
       await fetchProducts();
     } catch (err) {
       console.error("Устгах үед алдаа:", err);

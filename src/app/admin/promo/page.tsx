@@ -23,7 +23,7 @@ export default function PromoPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/promo`)
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/promo`)
       .then((r) => r.json())
       .then((data) => {
         setForm({
@@ -42,7 +42,7 @@ export default function PromoPage() {
   const handleSave = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/promo`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/promo`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),

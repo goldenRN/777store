@@ -31,7 +31,7 @@ const TypePage: React.FC = () => {
 
   const fetchTypes = async () => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/type`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/type`, {
       });
       const data = await res.json();
       setType(data);
@@ -44,7 +44,7 @@ const TypePage: React.FC = () => {
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/type`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/type`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -69,7 +69,7 @@ const TypePage: React.FC = () => {
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/type/${id}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/type/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -115,7 +115,7 @@ const TypePage: React.FC = () => {
           if (!confirmed) return;
           try {
             const user = JSON.parse(localStorage.getItem('user') || '{}');
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/type/${id}`, {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/type/${id}`, {
               method: 'DELETE',
               headers: { Authorization: `Bearer ${user.token}` },
             });

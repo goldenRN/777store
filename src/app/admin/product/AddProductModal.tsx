@@ -125,7 +125,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
 
             // 🟢 Барааны зургуудыг татах
             axios
-                .get(`${process.env.NEXT_PUBLIC_API_URL}/api/productimg/${editData.id}`)
+                .get(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/productimg/${editData.id}`)
                 .then((res) => {
                     const imgs = res.data.map((i: any) => ({
                         preview: i.image_url,
@@ -146,11 +146,11 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
     useEffect(() => {
         if (!open) return;
         Promise.all([
-            fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/category`).then((r) => r.json()),
-            fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/subcategory`).then((r) => r.json()),
-            fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/brand`).then((r) => r.json()),
-            fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/unit`).then((r) => r.json()),
-            fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/type`).then((r) => r.json()),
+            fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/category`).then((r) => r.json()),
+            fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/subcategory`).then((r) => r.json()),
+            fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/brand`).then((r) => r.json()),
+            fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/unit`).then((r) => r.json()),
+            fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/type`).then((r) => r.json()),
 
         ]).then(([cat, sub, br, un, tp]) => {
             setCategories(cat);
@@ -366,7 +366,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                 });
 
                 const res = await axios.post(
-                    `${process.env.NEXT_PUBLIC_API_URL}/api/productimg/upload-multiple`,
+                    `${process.env.NEXT_PUBLIC_API_URL || ""}/api/productimg/upload-multiple`,
                     formData,
                     { headers: { "Content-Type": "multipart/form-data" } }
                 );
@@ -416,9 +416,9 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
 
             // 🟢 API дуудах
             if (editData) {
-                await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/api/product/${editData.id}`, payload);
+                await axios.put(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/product/${editData.id}`, payload);
             } else {
-                await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/product`, payload);
+                await axios.post(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/product`, payload);
             }
 
             onRefresh();

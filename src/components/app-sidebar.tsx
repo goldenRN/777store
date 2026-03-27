@@ -140,6 +140,14 @@ const data = {
       ),
     },
     {
+      name: "Хэрэглэгчид",
+      url: "/admin/users",
+      icon: (
+        <ListPlusIcon
+        />
+      ),
+    },
+    {
       name: "Онцгой хямдрал",
       url: "/admin/promo",
       icon: (

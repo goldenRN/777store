@@ -96,7 +96,7 @@ export default function ProductVariantModal({ open, onClose, productId, productN
         if (!productId) return;
         setLoading(true);
         try {
-            const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/productvar/${productId}`);
+            const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/productvar/${productId}`);
             setVariants(res.data || []);
         } catch {
             setError("Төрөл уншихад алдаа гарлаа");
@@ -168,7 +168,7 @@ export default function ProductVariantModal({ open, onClose, productId, productN
             for (const img of form.images) {
                 const formData = new FormData();
                 formData.append("images", img.file);
-                const uploadRes = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/productimg/upload-multiple`, formData, {
+                const uploadRes = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/productimg/upload-multiple`, formData, {
                     headers: { "Content-Type": "multipart/form-data" },
                     onUploadProgress: (e) => {
                         const progress = Math.round((e.loaded * 100) / (e.total || 1));
@@ -188,7 +188,7 @@ export default function ProductVariantModal({ open, onClose, productId, productN
 
             }
             // 1️⃣ Variant create
-            const variantRes = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/productvar`, {
+            const variantRes = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/productvar`, {
                 product_id: productId,
                 sku: form.sku || null,
                 attribute: finalAttr,
@@ -221,7 +221,7 @@ export default function ProductVariantModal({ open, onClose, productId, productN
         if (!id) return;
         if (!confirm("Энэ төрлийг устгах уу?")) return;
         try {
-            await axios.delete(`${process.env.NEXT_PUBLIC_API_URL}/api/productvar/${id}`);
+            await axios.delete(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/productvar/${id}`);
             setVariants(prev => prev.filter((v) => v.id !== id));
             onRefresh && onRefresh();
         } catch {

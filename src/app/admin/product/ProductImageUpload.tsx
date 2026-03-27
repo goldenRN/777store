@@ -19,7 +19,7 @@
 //       form.append('images', files[i]);
 //     }
 
-//     const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/products/${productId}/images`, {
+//     const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/products/${productId}/images`, {
 //       method: 'POST',
 //       body: form,
 //     });
@@ -73,7 +73,7 @@ export default function ProductImageUpload({ productId }: ProductImageUploadProp
     Array.from(files).forEach((file) => form.append('images', file));
 
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${process.env.NEXT_PUBLIC_API_URL}/api/products/${productId}/images`);
+    xhr.open('POST', `${process.env.NEXT_PUBLIC_API_URL || ""}/api/products/${productId}/images`);
 
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) {

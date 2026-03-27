@@ -26,7 +26,7 @@ const BannerPage: React.FC = () => {
       setLoading(true);
       setError(null);
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/banner`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/banner`, {
         method: 'GET',
         headers: { Authorization: `Bearer ${user.token}` },
       });
@@ -53,7 +53,7 @@ const BannerPage: React.FC = () => {
   const handleAddCategory = async (formData: FormData) => {
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/banner`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/banner`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${user.token}` },
         body: formData,
@@ -77,7 +77,7 @@ const BannerPage: React.FC = () => {
   const handleUpdateBanner = async (id: number, formData: FormData) => {
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/banner/${id}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/banner/${id}`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${user.token}` },
         body: formData,
@@ -102,7 +102,7 @@ const BannerPage: React.FC = () => {
 
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/banner/${id}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/banner/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${user.token}` },
       });

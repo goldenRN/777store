@@ -3,7 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 
-export function ProtectedRoute({ children }: { children: React.ReactNode }) {
+export function ProtectedRoute({
+  children,
+  requireAdmin = false,
+}: {
+  children: React.ReactNode;
+  requireAdmin?: boolean;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const [allowed, setAllowed] = useState(false);
@@ -14,6 +20,19 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       const redirect = `/login?next=${encodeURIComponent(pathname || "/")}`;
       router.replace(redirect);
       return;
+    }
+    if (requireAdmin) {
+      try {
+        const user = JSON.parse(userRaw) as { role?: string };
+        const role = String(user?.role ?? "").toLowerCase();
+        if (role !== "admin") {
+          router.replace("/");
+          return;
+        }
+      } catch {
+        router.replace("/");
+        return;
+      }
     }
     setAllowed(true);
   }, [router, pathname]);

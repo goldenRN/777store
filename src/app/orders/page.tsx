@@ -40,7 +40,7 @@ function OrdersPageContent() {
   const [statusOptions, setStatusOptions] = useState<{ id: number; name: string }[]>([]);
 
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/status`)
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/status`)
       .then((r) => r.json())
       .then((data) => setStatusOptions(Array.isArray(data) ? data : []))
       .catch(() => setStatusOptions([]));

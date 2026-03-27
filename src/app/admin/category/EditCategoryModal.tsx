@@ -125,7 +125,7 @@ const EditCategoryModal = ({ open, onClose, onSubmit, category }: EditCategoryMo
 
                     {(image || category.category_image) && (
                         <img
-                            src={image ? URL.createObjectURL(image) : `${process.env.NEXT_PUBLIC_API_URL}${category.category_image}`}
+                            src={image ? URL.createObjectURL(image) : `${process.env.NEXT_PUBLIC_API_URL || ""}${category.category_image}`}
                             alt="preview"
                             className="mt-2 w-32 h-32 object-cover rounded"
                         />

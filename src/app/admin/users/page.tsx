@@ -1,0 +1,242 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+
+type UserRow = {
+  id: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  role: string;
+  isActive: boolean;
+  createdAt: string;
+  orderCount: number;
+  totalSpent: number;
+};
+
+type OrderItem = {
+  id: number;
+  product_name: string;
+  quantity: number;
+  price: number;
+  image_url: string | null;
+  status?: string | null;
+};
+
+type UserDetail = {
+  user: {
+    id: string;
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+    role: string;
+    isActive: boolean;
+    createdAt: string;
+  };
+  orders: {
+    id: number;
+    status: string;
+    total: number;
+    created_at: string;
+    items: OrderItem[];
+  }[];
+};
+
+export default function AdminUsersPage() {
+  const [users, setUsers] = useState<UserRow[]>([]);
+  const [q, setQ] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState<UserDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const fetchUsers = async () => {
+    setLoading(true);
+    try {
+      const url = new URL(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/users`, window.location.origin);
+      if (q) url.searchParams.set("q", q);
+      const res = await fetch(url.toString());
+      const json = await res.json();
+      setUsers(json.data || []);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const openDetail = async (id: string) => {
+    setDetailLoading(true);
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/users/${id}`);
+      const json = await res.json();
+      setSelected(json);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const updateRole = async (id: string, role: string) => {
+    await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/users/${id}/role`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role }),
+    });
+    fetchUsers();
+  };
+
+  const updateStatus = async (id: string, isActive: boolean) => {
+    await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/users/${id}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isActive }),
+    });
+    fetchUsers();
+  };
+
+  return (
+    <div className="w-full mx-auto p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-semibold">Хэрэглэгчдийн бүртгэл</h1>
+        <div className="flex items-center gap-2">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Нэр / Имэйл / Утас хайх..."
+            className="border rounded px-3 py-1 text-sm"
+          />
+          <Button onClick={fetchUsers} className="text-sm px-3 py-1">Хайх</Button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto bg-white rounded shadow">
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="p-3 text-left">Нэр</th>
+              <th className="p-3 text-left">Имэйл</th>
+              <th className="p-3 text-left">Утас</th>
+              <th className="p-3 text-left">Роль</th>
+              <th className="p-3 text-left">Статус</th>
+              <th className="p-3 text-left">Захиалга</th>
+              <th className="p-3 text-left">Нийт</th>
+              <th className="p-3 text-left">Үйлдэл</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={8} className="p-4 text-center">Уншиж байна...</td></tr>
+            ) : users.length === 0 ? (
+              <tr><td colSpan={8} className="p-4 text-center">Мэдээлэл байхгүй</td></tr>
+            ) : (
+              users.map((u) => (
+                <tr key={u.id} className="border-t hover:bg-gray-50">
+                  <td className="p-3">{u.name || "-"}</td>
+                  <td className="p-3">{u.email || "-"}</td>
+                  <td className="p-3">{u.phone || "-"}</td>
+                  <td className="p-3">
+                    <select
+                      value={u.role}
+                      onChange={(e) => updateRole(u.id, e.target.value)}
+                      className="border rounded px-2 py-1 text-xs"
+                    >
+                      <option value="ADMIN">ADMIN</option>
+                      <option value="CUSTOMER">CUSTOMER</option>
+                    </select>
+                  </td>
+                  <td className="p-3">
+                    <select
+                      value={u.isActive ? "active" : "blocked"}
+                      onChange={(e) => updateStatus(u.id, e.target.value === "active")}
+                      className="border rounded px-2 py-1 text-xs"
+                    >
+                      <option value="active">Идэвхтэй</option>
+                      <option value="blocked">Блок</option>
+                    </select>
+                  </td>
+                  <td className="p-3">{u.orderCount}</td>
+                  <td className="p-3">{Number(u.totalSpent).toLocaleString()}₮</td>
+                  <td className="p-3">
+                    <button onClick={() => openDetail(u.id)} className="text-sm px-2 py-1 bg-blue-600 text-white rounded">
+                      Дэлгэрэнгүй
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {selected && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setSelected(null)} />
+          <div className="relative bg-white rounded-lg shadow-xl w-full max-w-3xl p-6 z-10">
+            <div className="flex items-start justify-between">
+              <h3 className="text-lg font-semibold">Хэрэглэгчийн мэдээлэл</h3>
+              <button onClick={() => setSelected(null)} className="text-gray-500">Хаах</button>
+            </div>
+
+            {detailLoading ? (
+              <p className="mt-4">Уншиж байна...</p>
+            ) : (
+              <>
+                <div className="mt-3 grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <div className="text-gray-600">Нэр</div>
+                    <div className="font-medium">{selected.user.name || "-"}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-600">Утас</div>
+                    <div className="font-medium">{selected.user.phone || "-"}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-600">Имэйл</div>
+                    <div className="font-medium">{selected.user.email || "-"}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-600">Бүртгүүлсэн</div>
+                    <div className="font-medium">{new Date(selected.user.createdAt).toLocaleString()}</div>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <h4 className="font-semibold mb-2">Захиалгын түүх</h4>
+                  {selected.orders.length === 0 ? (
+                    <div className="text-sm text-gray-500">Захиалга байхгүй.</div>
+                  ) : (
+                    <div className="space-y-3">
+                      {selected.orders.map((o) => (
+                        <div key={o.id} className="rounded border p-3">
+                          <div className="flex items-center justify-between text-sm">
+                            <div>Захиалга #{o.id}</div>
+                            <div className="text-gray-500">{new Date(o.created_at).toLocaleString()}</div>
+                          </div>
+                          <div className="mt-1 text-xs">Төлөв: {o.status}</div>
+                          <div className="mt-2 space-y-2">
+                            {o.items.map((it) => (
+                              <div key={it.id} className="flex items-center justify-between text-xs">
+                                <div>{it.product_name}</div>
+                                <div>{it.quantity}ш × {Number(it.price).toLocaleString()}₮</div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="mt-2 text-sm font-semibold text-right">
+                            Нийт: {Number(o.total).toLocaleString()}₮
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
