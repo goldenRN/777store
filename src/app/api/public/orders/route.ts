@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
         qpay_qr_text: invoice.qr_text ?? null,
         qpay_qr_image: invoice.qr_image ?? null,
         qpay_short_url: invoice.qPay_shortUrl ?? null,
-        qpay_deeplink: invoice.qPay_deeplink ?? null,
+        qpay_deeplink: invoice.qPay_deeplink ?? [],
         payment_expires_at: expiresAt,
       },
     });
