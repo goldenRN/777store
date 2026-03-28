@@ -12,6 +12,11 @@ type Order = {
   status: string;
   created_at: string;
   total: number;
+  payment_status?: string | null;
+  qpay_qr_image?: string | null;
+  qpay_qr_text?: string | null;
+  qpay_short_url?: string | null;
+  payment_expires_at?: string | null;
 };
 
 export default function AdminOrdersTable() {
@@ -106,15 +111,16 @@ export default function AdminOrdersTable() {
               <th className="p-3 text-left">Утас</th>
               <th className="p-3 text-left">Нийт</th>
               <th className="p-3 text-left">Төлөв</th>
+              <th className="p-3 text-left">Төлбөр</th>
               <th className="p-3 text-left">Огноо</th>
               <th className="p-3 text-left">Үйлдэл</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} className="p-4 text-center">Уншиж байна...</td></tr>
+              <tr><td colSpan={8} className="p-4 text-center">Уншиж байна...</td></tr>
             ) : orders.length === 0 ? (
-              <tr><td colSpan={7} className="p-4 text-center">Захиалга хоосон байна</td></tr>
+              <tr><td colSpan={8} className="p-4 text-center">Захиалга хоосон байна</td></tr>
             ) : (
               orders.map(o => (
                 <tr key={o.id} className="border-t hover:bg-gray-50">
@@ -129,6 +135,28 @@ export default function AdminOrdersTable() {
                     <span className="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700">
                       {o.status}
                     </span>
+                  </td>
+                  <td className="p-3">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`px-2 py-0.5 rounded text-xs ${
+                          o.payment_status === "PAID"
+                            ? "bg-green-100 text-green-700"
+                            : o.payment_status === "CANCELLED"
+                            ? "bg-red-100 text-red-700"
+                            : "bg-yellow-100 text-yellow-700"
+                        }`}
+                      >
+                        {o.payment_status || "UNPAID"}
+                      </span>
+                      {o.qpay_qr_image && (
+                        <img
+                          src={`data:image/png;base64,${o.qpay_qr_image}`}
+                          alt="QPay QR"
+                          className="h-10 w-10 rounded border"
+                        />
+                      )}
+                    </div>
                   </td>
                   <td className="p-3">{new Date(o.created_at).toLocaleString()}</td>
                   <td className="p-3">

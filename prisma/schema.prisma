@@ -266,6 +266,17 @@ model AdminOrder {
   phone1     String
   phone2     String?
   status     String           @default("pending")
+  payment_status String?      @default("UNPAID")
+  payment_provider String?    @default("qpay")
+  qpay_invoice_id String?
+  qpay_payment_id String?
+  qpay_sender_invoice_no String?
+  qpay_qr_text String?
+  qpay_qr_image String?
+  qpay_short_url String?
+  qpay_deeplink Json?
+  payment_expires_at DateTime?
+  paid_at   DateTime?
   total      Int              @default(0)
   items      AdminOrderItem[]
   created_at DateTime         @default(now())

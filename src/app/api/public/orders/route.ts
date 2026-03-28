@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { createInvoice } from "@/lib/qpay";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -71,6 +72,7 @@ export async function POST(request: NextRequest) {
       name,
       phone1: phone,
       status: defaultStatus,
+      payment_status: "UNPAID",
       total,
       items: {
         create: items.map((it: any) => ({
@@ -85,5 +87,118 @@ export async function POST(request: NextRequest) {
     include: { items: true },
   });
 
-  return NextResponse.json({ id: created.id });
+  // QPay invoice create
+  const invoiceCode = process.env.QPAY_INVOICE_CODE;
+  const receiverCode = process.env.QPAY_RECEIVER_CODE || "83";
+  const callbackBase =
+    process.env.QPAY_CALLBACK_URL || `${process.env.NEXT_PUBLIC_API_URL || ""}/api/payments/qpay/webhook`;
+  const callbackToken = process.env.QPAY_WEBHOOK_TOKEN;
+  const senderBranchCode = process.env.QPAY_SENDER_BRANCH_CODE;
+  const senderStaffCode = process.env.QPAY_SENDER_STAFF_CODE || "online";
+  const senderInvoiceNo = String(created.id);
+
+  if (!invoiceCode) {
+    return NextResponse.json({
+      id: created.id,
+      message: "QPAY_INVOICE_CODE тохируулга хийгдээгүй байна",
+    });
+  }
+
+  const callbackUrl = `${callbackBase}?orderId=${created.id}${callbackToken ? `&token=${callbackToken}` : ""}`;
+  const expireMinutesRaw = Number(process.env.QPAY_INVOICE_EXPIRE_MINUTES ?? 60);
+  const expireMinutes = Number.isFinite(expireMinutesRaw) ? Math.max(1, expireMinutesRaw) : 60;
+  const expiresAt = new Date(Date.now() + expireMinutes * 60 * 1000);
+  const expiryOffsetMinutesRaw = Number(process.env.QPAY_EXPIRY_OFFSET_MINUTES ?? 0);
+  const expiryOffsetMinutes = Number.isFinite(expiryOffsetMinutesRaw) ? expiryOffsetMinutesRaw : 0;
+  const expiresAtForPayload =
+    expiryOffsetMinutes !== 0
+      ? new Date(expiresAt.getTime() + expiryOffsetMinutes * 60 * 1000)
+      : expiresAt;
+  const expiryFormat = (process.env.QPAY_EXPIRY_FORMAT || "ISO").toUpperCase();
+  const formatExpiry = (d: Date) => {
+    if (expiryFormat === "LOCAL") {
+      const pad = (n: number) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(
+        d.getHours()
+      )}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+    return d.toISOString();
+  };
+
+  const disableExpiry = process.env.QPAY_DISABLE_EXPIRY_DATE === "true";
+  const invoicePayload: Record<string, unknown> = {
+    invoice_code: invoiceCode,
+    sender_invoice_no: senderInvoiceNo,
+    invoice_receiver_code: receiverCode,
+    sender_branch_code: senderBranchCode,
+    invoice_description: `Order #${created.id} ${total}₮`,
+    enable_expiry: !disableExpiry,
+    ...(disableExpiry ? {} : { expiry_date: formatExpiry(expiresAtForPayload) }),
+    allow_partial: false,
+    allow_exceed: false,
+    amount: total,
+    callback_url: callbackUrl,
+    sender_staff_code: senderStaffCode,
+    invoice_receiver_data: {
+      name,
+      email: null,
+      phone,
+    },
+  };
+
+  try {
+    if (process.env.QPAY_DEBUG === "true") {
+      const maskedPayload = {
+        ...invoicePayload,
+        invoice_receiver_data: {
+          name,
+          email: null,
+          phone: phone ? `${phone.slice(0, 2)}****${phone.slice(-2)}` : null,
+        },
+      };
+      console.log("QPay invoice payload:", maskedPayload);
+      console.log("QPay expiry format:", expiryFormat, "expiresAt:", expiresAt.toISOString());
+      console.log(
+        "QPay expiry offset minutes:",
+        expiryOffsetMinutes,
+        "expiresAtForPayload:",
+        expiresAtForPayload.toISOString()
+      );
+      console.log("QPay disable expiry:", disableExpiry);
+    }
+    const invoice = await createInvoice(invoicePayload);
+    if (process.env.QPAY_DEBUG === "true") {
+      console.log("QPay invoice response:", invoice);
+    }
+    await prisma.adminOrder.update({
+      where: { id: created.id },
+      data: {
+        qpay_invoice_id: invoice.invoice_id,
+        qpay_sender_invoice_no: senderInvoiceNo,
+        qpay_qr_text: invoice.qr_text ?? null,
+        qpay_qr_image: invoice.qr_image ?? null,
+        qpay_short_url: invoice.qPay_shortUrl ?? null,
+        qpay_deeplink: invoice.qPay_deeplink ?? null,
+        payment_expires_at: expiresAt,
+      },
+    });
+
+    return NextResponse.json({
+      id: created.id,
+      qpay: {
+        invoice_id: invoice.invoice_id,
+        qr_text: invoice.qr_text,
+        qr_image: invoice.qr_image,
+        short_url: invoice.qPay_shortUrl,
+        deeplinks: invoice.qPay_deeplink,
+        expires_at: expiresAt.toISOString(),
+      },
+    });
+  } catch (err: any) {
+    console.error("QPay invoice error:", err);
+    return NextResponse.json({
+      id: created.id,
+      message: "QPay нэхэмжлэл үүсгэх үед алдаа гарлаа",
+    });
+  }
 }

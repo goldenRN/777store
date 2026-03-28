@@ -6,6 +6,7 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [statusOptions, setStatusOptions] = useState<{ id: number; name: string }[]>([]);
+  const [invoiceInfo, setInvoiceInfo] = useState<any>(null);
 
   const fetchDetail = async () => {
     setLoading(true);
@@ -20,6 +21,13 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
   };
 
   useEffect(() => { fetchDetail(); }, [id]);
+  useEffect(() => {
+    if (!order?.qpay_invoice_id) return;
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/payments/qpay/invoice?orderId=${order.id}`)
+      .then((r) => r.json())
+      .then((data) => setInvoiceInfo(data?.invoice || null))
+      .catch(() => setInvoiceInfo(null));
+  }, [order?.qpay_invoice_id, order?.id]);
   useEffect(() => {
     fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/status`)
       .then((r) => r.json())
@@ -79,8 +87,64 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
                     {order.status}
                   </span>
                 </div>
+                <div className="mt-2 text-gray-600">Төлбөрийн төлөв</div>
+                <div className="mt-1">
+                  <span className="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">
+                    {order.payment_status || "UNPAID"}
+                  </span>
+                </div>
               </div>
             </div>
+
+            {(order.qpay_qr_image || order.qpay_qr_text || order.qpay_short_url) && (
+              <div className="mt-4 rounded-lg border p-3">
+                <div className="text-sm font-semibold mb-2">QPay төлбөр</div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="flex items-center justify-center">
+                    {order.qpay_qr_image ? (
+                      <img
+                        src={`data:image/png;base64,${order.qpay_qr_image}`}
+                        alt="QPay QR"
+                        className="h-40 w-40 rounded border"
+                      />
+                    ) : order.qpay_qr_text ? (
+                      <div className="text-xs break-all">{order.qpay_qr_text}</div>
+                    ) : null}
+                  </div>
+                  <div className="text-xs">
+                    {order.qpay_short_url && (
+                      <div>
+                        Богино холбоос:{" "}
+                        <a className="text-blue-600 underline" href={order.qpay_short_url} target="_blank">
+                          {order.qpay_short_url}
+                        </a>
+                      </div>
+                    )}
+                    {invoiceInfo?.expiry_date ? (
+                      <div className="mt-2 text-gray-600">
+                        Дуусах огноо: {new Date(invoiceInfo.expiry_date).toLocaleString()}
+                      </div>
+                    ) : order.payment_expires_at ? (
+                      <div className="mt-2 text-gray-600">
+                        Дуусах огноо: {new Date(order.payment_expires_at).toLocaleString()}
+                      </div>
+                    ) : null}
+                    {invoiceInfo?.expiry_date && (
+                      <div className="mt-1 text-[11px] font-semibold text-gray-700">
+                        {new Date(invoiceInfo.expiry_date).getTime() > Date.now()
+                          ? "QR хүчинтэй байна"
+                          : "Хугацаа дууссан"}
+                      </div>
+                    )}
+                    {invoiceInfo?.invoice_status && (
+                      <div className="mt-1 text-[11px] text-gray-500">
+                        QPay төлөв: {invoiceInfo.invoice_status}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="mt-4">
               <h4 className="font-semibold">Захиалга</h4>
