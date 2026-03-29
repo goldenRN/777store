@@ -8,6 +8,7 @@ datasource db {
 }
 
 enum UserRole {
+  SUPER_ADMIN
   ADMIN
   CUSTOMER
 }
@@ -39,16 +40,18 @@ enum LiveStatus {
 }
 
 model User {
-  id        String    @id @default(cuid())
-  name      String?
-  email     String?   @unique
-  phone     String?   @unique
+  id          String    @id @default(cuid())
+  name        String?
+  email       String?   @unique
+  phone       String?   @unique
   passwordHash String
-  role      UserRole  @default(CUSTOMER)
-  isActive  Boolean   @default(true)
-  orders    Order[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  role        UserRole  @default(CUSTOMER)
+  isActive    Boolean   @default(true)
+  address     String?
+  avatarUrl   String?
+  orders      Order[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 model Category {
@@ -216,6 +219,10 @@ model AdminProduct {
   stock          Int
   material       String?
   duration_hours Int?
+  arrival_status String?              @default("Хүлээгдэж буй")
+  cargo_fee      Int?
+  ordered_qty    Int                 @default(0)
+  order_accept_status String?        @default("OPEN")
   category_id    Int?
   subcategory_id Int?
   brand_id       Int?
@@ -230,6 +237,7 @@ model AdminProduct {
   type           AdminType?           @relation(fields: [type_id], references: [id])
   images         AdminProductImage[]
   variants       AdminProductVariant[]
+  order_items    AdminOrderItem[]
   created_at     DateTime             @default(now())
   updated_at     DateTime             @updatedAt
 }
@@ -268,6 +276,11 @@ model AdminOrder {
   status     String           @default("pending")
   payment_status String?      @default("UNPAID")
   payment_provider String?    @default("qpay")
+  order_kind String?          @default("ready")
+  delivery_method String?
+  delivery_name String?
+  delivery_phone String?
+  delivery_address String?
   qpay_invoice_id String?
   qpay_payment_id String?
   qpay_sender_invoice_no String?
@@ -286,10 +299,12 @@ model AdminOrder {
 model AdminOrderItem {
   id           Int        @id @default(autoincrement())
   order_id     Int
+  product_id   Int?
   product_name String
   quantity     Int
   price        Int
   image_url    String?
   status       String     @default("pending")
   order        AdminOrder @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  product      AdminProduct? @relation(fields: [product_id], references: [id], onDelete: SetNull)
 }

@@ -22,6 +22,10 @@ export async function GET() {
     stock: p.stock,
     material: p.material,
     duration_hours: p.duration_hours,
+    arrival_status: p.arrival_status,
+    cargo_fee: p.cargo_fee,
+    ordered_qty: p.ordered_qty,
+    order_accept_status: p.order_accept_status,
     category_id: p.category_id,
     subcategory_id: p.subcategory_id,
     brand_id: p.brand_id,
@@ -50,6 +54,14 @@ export async function POST(request: Request) {
   const material = String(body?.material ?? "").trim();
   const duration_hours =
     body?.duration_hours != null ? Math.round(Number(body.duration_hours)) : null;
+  const arrival_status = body?.arrival_status ? String(body.arrival_status) : null;
+  const cargo_fee =
+    body?.cargo_fee != null && body.cargo_fee !== ""
+      ? Math.round(Number(body.cargo_fee))
+      : null;
+  const order_accept_status = body?.order_accept_status
+    ? String(body.order_accept_status)
+    : null;
 
   if (!name) {
     return NextResponse.json({ message: "Нэр шаардлагатай" }, { status: 400 });
@@ -64,6 +76,9 @@ export async function POST(request: Request) {
       stock,
       material: material || null,
       duration_hours: duration_hours ?? null,
+      arrival_status: arrival_status || undefined,
+      cargo_fee: cargo_fee ?? null,
+      order_accept_status: order_accept_status || undefined,
       category_id: body?.category_id ? Number(body.category_id) : null,
       subcategory_id: body?.subcategory_id ? Number(body.subcategory_id) : null,
       brand_id: body?.brand_id ? Number(body.brand_id) : null,

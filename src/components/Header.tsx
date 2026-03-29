@@ -25,7 +25,13 @@ export default function Header() {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [user, setUser] = useState<{ token: string; role: string; name?: string; phone?: string } | null>(null);
+  const [user, setUser] = useState<{
+    token: string;
+    role: string;
+    name?: string;
+    phone?: string;
+    avatarUrl?: string;
+  } | null>(null);
   const [categories, setCategories] = useState<
     { category_id: number; category_name: string; subcategories: { id: number; name: string }[] }[]
   >([]);
@@ -93,7 +99,16 @@ export default function Header() {
             </span>
             •
             <span className="inline-flex items-center gap-2">
-              <FacebookIcon size={16} /> <InstagramIcon size={16} />
+              <a
+                href="https://www.facebook.com/profile.php?id=61550729457619"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Facebook"
+                className="inline-flex items-center"
+              >
+                <FacebookIcon size={16} />
+              </a>
+              <InstagramIcon size={16} />
             </span>
           </div>
         </div>
@@ -129,7 +144,7 @@ export default function Header() {
                 <X size={16} />
               </button>
             </form>
-            {user && user.role !== "ADMIN" && (
+            {user && (
               <Link href="/orders" className="flex flex-col items-center gap-1 text-black">
                 <div className="relative grid h-7 w-10 place-items-center rounded-xl text-black">
                   <ClipboardList size={16} />
@@ -148,63 +163,85 @@ export default function Header() {
               </div>
               <span className="text-[10px] font-semibold">Сагс</span>
             </Link>
-            <Link
-              href={user ? "#" : "/login"}
-              aria-label="Нэвтрэх"
-              className="relative flex flex-col items-center gap-1 text-black"
-              onClick={(e) => {
-                if (user) {
-                  e.preventDefault();
-                  setUserMenuOpen((v) => !v);
-                }
-              }}
-            >
-              <div className="grid h-7 w-10 place-items-center rounded-xl text-black">
-                <User size={16} />
-              </div>
-              <span className="text-[10px] font-semibold">
-                {user ? user.phone || "Хэрэглэгч" : "Нэвтрэх"}
-              </span>
-              {userMenuOpen && user && (
-                <div className="absolute right-0 top-full z-40 mt-2 w-44 rounded-xl border bg-white p-2 text-xs shadow-lg">
-                  <div className="px-2 py-1 font-semibold text-[var(--navy-900)]">
-                    {user.phone || "Хэрэглэгч"}
-                  </div>
-                  {user.role !== "ADMIN" ? (
-                    <>
-                      <Link
-                        href="/profile"
-                        className="block rounded-lg px-2 py-2 hover:bg-[var(--sky-100)]"
-                        onClick={() => setUserMenuOpen(false)}
-                      >
-                        Хэрэглэгчийн мэдээлэл
-                      </Link>
-                      <Link
-                        href="/orders"
-                        className="block rounded-lg px-2 py-2 hover:bg-[var(--sky-100)]"
-                        onClick={() => setUserMenuOpen(false)}
-                      >
-                        Захиалга
-                      </Link>
-                    </>
+            {user ? (
+              <button
+                type="button"
+                aria-label="Нэвтрэх"
+                className="relative flex flex-col items-center gap-1 text-black"
+                onClick={() => setUserMenuOpen((v) => !v)}
+              >
+                <div className="grid h-7 w-10 place-items-center rounded-xl text-black">
+                  {user.avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={user.avatarUrl}
+                      alt="User"
+                      className="h-7 w-7 rounded-full object-cover ring-2 ring-[var(--accent-2)]"
+                    />
                   ) : (
+                    <User size={16} />
+                  )}
+                </div>
+                <span className="text-[10px] font-semibold">
+                  {user.phone || "Хэрэглэгч"}
+                </span>
+                {userMenuOpen && (
+                  <div className="absolute left-1/2 top-full z-40 mt-3 w-52 -translate-x-1/2 rounded-2xl border bg-white p-3 text-xs shadow-xl">
+                    <div className="rounded-xl bg-[var(--sky-50)] px-3 py-2 text-center text-sm font-bold text-[var(--navy-900)]">
+                      {user.phone || "Хэрэглэгч"}
+                    </div>
                     <Link
-                      href="/admin/dashboard"
-                      className="block rounded-lg px-2 py-2 hover:bg-[var(--sky-100)]"
+                      href="/profile"
+                      className="mt-2 block rounded-xl px-3 py-2 text-center font-semibold hover:bg-[var(--sky-100)]"
                       onClick={() => setUserMenuOpen(false)}
                     >
-                      Админ панель
+                      Хэрэглэгчийн мэдээлэл
                     </Link>
-                  )}
-                  <button
-                    onClick={handleLogout}
-                    className="block w-full rounded-lg px-2 py-2 text-left hover:bg-[var(--sky-100)]"
-                  >
-                    Гарах
-                  </button>
+                    <Link
+                      href="/orders"
+                      className="block rounded-xl px-3 py-2 text-center font-semibold hover:bg-[var(--sky-100)]"
+                      onClick={() => setUserMenuOpen(false)}
+                    >
+                      Захиалга
+                    </Link>
+                    {(user.role === "ADMIN" || user.role === "SUPER_ADMIN") && (
+                      <Link
+                        href="/admin/dashboard"
+                        className="block rounded-xl px-3 py-2 text-center font-bold text-red-600 hover:bg-[var(--sky-100)]"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        Админ панель
+                      </Link>
+                    )}
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={handleLogout}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          handleLogout();
+                        }
+                      }}
+                      className="block w-full cursor-pointer rounded-xl px-3 py-2 text-center font-semibold hover:bg-[var(--sky-100)]"
+                    >
+                      Гарах
+                    </div>
+                  </div>
+                )}
+              </button>
+            ) : (
+              <Link
+                href="/login"
+                aria-label="Нэвтрэх"
+                className="relative flex flex-col items-center gap-1 text-black"
+              >
+                <div className="grid h-7 w-10 place-items-center rounded-xl text-black">
+                  <User size={16} />
                 </div>
-              )}
-            </Link>
+                <span className="text-[10px] font-semibold">Нэвтрэх</span>
+              </Link>
+            )}
           </div>
         </div>
       </header>

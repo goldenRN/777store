@@ -10,6 +10,7 @@ type PublicProduct = {
   price: number;
   discount_price: number | null;
   image_url: string | null;
+  type_name?: string | null;
   type_has_duration?: boolean;
   duration_hours?: number | null;
   created_at?: string | null;

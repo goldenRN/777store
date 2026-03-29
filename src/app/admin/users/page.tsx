@@ -49,6 +49,9 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<UserDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [currentRole, setCurrentRole] = useState<string>("");
+  const [sortField, setSortField] = useState<keyof UserRow>("createdAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -65,6 +68,15 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     fetchUsers();
+    try {
+      const raw = localStorage.getItem("user");
+      if (raw) {
+        const parsed = JSON.parse(raw) as { role?: string };
+        setCurrentRole(String(parsed?.role ?? "").toUpperCase());
+      }
+    } catch {
+      setCurrentRole("");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -78,6 +90,26 @@ export default function AdminUsersPage() {
       setDetailLoading(false);
     }
   };
+
+  const handleSort = (field: keyof UserRow) => {
+    if (sortField === field) {
+      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortOrder("asc");
+    }
+  };
+
+  const sortedUsers = [...users].sort((a, b) => {
+    const aVal = a[sortField];
+    const bVal = b[sortField];
+    if (typeof aVal === "number" && typeof bVal === "number") {
+      return sortOrder === "asc" ? aVal - bVal : bVal - aVal;
+    }
+    return sortOrder === "asc"
+      ? String(aVal ?? "").localeCompare(String(bVal ?? ""))
+      : String(bVal ?? "").localeCompare(String(aVal ?? ""));
+  });
 
   const updateRole = async (id: string, role: string) => {
     await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/users/${id}/role`, {
@@ -116,13 +148,25 @@ export default function AdminUsersPage() {
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
-              <th className="p-3 text-left">Нэр</th>
-              <th className="p-3 text-left">Имэйл</th>
-              <th className="p-3 text-left">Утас</th>
-              <th className="p-3 text-left">Роль</th>
-              <th className="p-3 text-left">Статус</th>
-              <th className="p-3 text-left">Захиалга</th>
-              <th className="p-3 text-left">Нийт</th>
+              {[
+                { key: "name", label: "Нэр" },
+                { key: "email", label: "Имэйл" },
+                { key: "phone", label: "Утас" },
+                { key: "role", label: "Роль" },
+                { key: "isActive", label: "Статус" },
+                { key: "orderCount", label: "Захиалга" },
+                { key: "totalSpent", label: "Нийт" },
+                { key: "createdAt", label: "Бүртгүүлсэн" },
+              ].map((col) => (
+                <th
+                  key={col.key}
+                  onClick={() => handleSort(col.key as keyof UserRow)}
+                  className="p-3 text-left cursor-pointer hover:bg-gray-100"
+                >
+                  {col.label}{" "}
+                  {sortField === col.key && (sortOrder === "asc" ? "▲" : "▼")}
+                </th>
+              ))}
               <th className="p-3 text-left">Үйлдэл</th>
             </tr>
           </thead>
@@ -132,33 +176,45 @@ export default function AdminUsersPage() {
             ) : users.length === 0 ? (
               <tr><td colSpan={8} className="p-4 text-center">Мэдээлэл байхгүй</td></tr>
             ) : (
-              users.map((u) => (
+              sortedUsers.map((u) => (
                 <tr key={u.id} className="border-t hover:bg-gray-50">
                   <td className="p-3">{u.name || "-"}</td>
                   <td className="p-3">{u.email || "-"}</td>
                   <td className="p-3">{u.phone || "-"}</td>
                   <td className="p-3">
-                    <select
-                      value={u.role}
-                      onChange={(e) => updateRole(u.id, e.target.value)}
-                      className="border rounded px-2 py-1 text-xs"
-                    >
-                      <option value="ADMIN">ADMIN</option>
-                      <option value="CUSTOMER">CUSTOMER</option>
-                    </select>
+                    {currentRole === "SUPER_ADMIN" ? (
+                      <select
+                        value={u.role}
+                        onChange={(e) => updateRole(u.id, e.target.value)}
+                        className="border rounded px-2 py-1 text-xs"
+                      >
+                        <option value="SUPER_ADMIN">SUPER_ADMIN</option>
+                        <option value="ADMIN">ADMIN</option>
+                        <option value="CUSTOMER">CUSTOMER</option>
+                      </select>
+                    ) : (
+                      <span className="text-xs font-semibold">{u.role}</span>
+                    )}
                   </td>
                   <td className="p-3">
-                    <select
-                      value={u.isActive ? "active" : "blocked"}
-                      onChange={(e) => updateStatus(u.id, e.target.value === "active")}
-                      className="border rounded px-2 py-1 text-xs"
-                    >
-                      <option value="active">Идэвхтэй</option>
-                      <option value="blocked">Блок</option>
-                    </select>
+                    {currentRole === "SUPER_ADMIN" ? (
+                      <select
+                        value={u.isActive ? "active" : "blocked"}
+                        onChange={(e) => updateStatus(u.id, e.target.value === "active")}
+                        className="border rounded px-2 py-1 text-xs"
+                      >
+                        <option value="active">Идэвхтэй</option>
+                        <option value="blocked">Блок</option>
+                      </select>
+                    ) : (
+                      <span className="text-xs font-semibold">
+                        {u.isActive ? "Идэвхтэй" : "Блок"}
+                      </span>
+                    )}
                   </td>
                   <td className="p-3">{u.orderCount}</td>
                   <td className="p-3">{Number(u.totalSpent).toLocaleString()}₮</td>
+                  <td className="p-3">{new Date(u.createdAt).toLocaleString()}</td>
                   <td className="p-3">
                     <button onClick={() => openDetail(u.id)} className="text-sm px-2 py-1 bg-blue-600 text-white rounded">
                       Дэлгэрэнгүй
@@ -174,7 +230,7 @@ export default function AdminUsersPage() {
       {selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50" onClick={() => setSelected(null)} />
-          <div className="relative bg-white rounded-lg shadow-xl w-full max-w-3xl p-6 z-10">
+          <div className="relative bg-white rounded-lg shadow-xl w-full max-w-3xl p-6 z-10 max-h-[80vh] overflow-y-auto">
             <div className="flex items-start justify-between">
               <h3 className="text-lg font-semibold">Хэрэглэгчийн мэдээлэл</h3>
               <button onClick={() => setSelected(null)} className="text-gray-500">Хаах</button>
@@ -208,7 +264,7 @@ export default function AdminUsersPage() {
                   {selected.orders.length === 0 ? (
                     <div className="text-sm text-gray-500">Захиалга байхгүй.</div>
                   ) : (
-                    <div className="space-y-3">
+                    <div className="space-y-3 max-h-[45vh] overflow-y-auto pr-2">
                       {selected.orders.map((o) => (
                         <div key={o.id} className="rounded border p-3">
                           <div className="flex items-center justify-between text-sm">

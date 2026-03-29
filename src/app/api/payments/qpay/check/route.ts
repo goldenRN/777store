@@ -38,17 +38,39 @@ export async function GET(request: NextRequest) {
       statuses.find((s) => s.name.includes("Хүлээгд"))?.name ||
       statuses[0]?.name ||
       order.status;
+    const shippingName =
+      statuses.find((s) => s.name.includes("Хүргэлт"))?.name || pendingName;
+    const nextStatus =
+      order.order_kind === "ready" && order.delivery_method === "delivery"
+        ? shippingName
+        : pendingName;
+    if (order.payment_status !== "PAID" && order.order_kind === "preorder") {
+      const items = await prisma.adminOrderItem.findMany({
+        where: { order_id: order.id, product_id: { not: null } },
+        select: { product_id: true, quantity: true },
+      });
+      if (items.length > 0) {
+        await prisma.$transaction(
+          items.map((it) =>
+            prisma.adminProduct.update({
+              where: { id: it.product_id as number },
+              data: { ordered_qty: { increment: it.quantity } },
+            })
+          )
+        );
+      }
+    }
     await prisma.adminOrder.update({
       where: { id: order.id },
       data: {
         payment_status: "PAID",
         qpay_payment_id: paidRow.payment_id ?? null,
         paid_at: new Date(),
-        status: pendingName,
+        status: nextStatus,
         items: {
           updateMany: {
             where: { order_id: order.id },
-            data: { status: pendingName },
+            data: { status: nextStatus },
           },
         },
       },

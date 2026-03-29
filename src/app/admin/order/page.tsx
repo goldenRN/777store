@@ -28,6 +28,8 @@ export default function AdminOrdersTable() {
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Order | null>(null);
   const [statusOptions, setStatusOptions] = useState<{ id: number; name: string }[]>([]);
+  const [sortField, setSortField] = useState<keyof Order>("created_at");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const searchParams = useSearchParams();
   const statusFilter = searchParams.get("status") ?? "";
   const titleLabel = (() => {
@@ -79,6 +81,26 @@ export default function AdminOrdersTable() {
 
   const onSearch = () => fetchOrders(1);
 
+  const handleSort = (field: keyof Order) => {
+    if (sortField === field) {
+      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortOrder("asc");
+    }
+  };
+
+  const sortedOrders = [...orders].sort((a, b) => {
+    const aVal = a[sortField];
+    const bVal = b[sortField];
+    if (typeof aVal === "number" && typeof bVal === "number") {
+      return sortOrder === "asc" ? aVal - bVal : bVal - aVal;
+    }
+    return sortOrder === "asc"
+      ? String(aVal ?? "").localeCompare(String(bVal ?? ""))
+      : String(bVal ?? "").localeCompare(String(aVal ?? ""));
+  });
+
   return (
     <div className="w-full mx-auto p-6">
       <div className="flex items-center justify-between mb-4">
@@ -106,13 +128,24 @@ export default function AdminOrdersTable() {
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
-              <th className="p-3 text-left">Дугаар</th>
-              <th className="p-3 text-left">Захиалагч</th>
-              <th className="p-3 text-left">Утас</th>
-              <th className="p-3 text-left">Нийт</th>
-              <th className="p-3 text-left">Төлөв</th>
-              <th className="p-3 text-left">Төлбөр</th>
-              <th className="p-3 text-left">Огноо</th>
+              {[
+                { key: "id", label: "Дугаар" },
+                { key: "name", label: "Захиалагч" },
+                { key: "phone1", label: "Утас" },
+                { key: "total", label: "Нийт" },
+                { key: "status", label: "Төлөв" },
+                { key: "payment_status", label: "Төлбөр" },
+                { key: "created_at", label: "Огноо" },
+              ].map((col) => (
+                <th
+                  key={col.key}
+                  onClick={() => handleSort(col.key as keyof Order)}
+                  className="p-3 text-left cursor-pointer hover:bg-gray-100"
+                >
+                  {col.label}{" "}
+                  {sortField === col.key && (sortOrder === "asc" ? "▲" : "▼")}
+                </th>
+              ))}
               <th className="p-3 text-left">Үйлдэл</th>
             </tr>
           </thead>
@@ -122,7 +155,7 @@ export default function AdminOrdersTable() {
             ) : orders.length === 0 ? (
               <tr><td colSpan={8} className="p-4 text-center">Захиалга хоосон байна</td></tr>
             ) : (
-              orders.map(o => (
+              sortedOrders.map(o => (
                 <tr key={o.id} className="border-t hover:bg-gray-50">
                   <td className="p-3">{o.id}</td>
                   <td className="p-3">

@@ -10,6 +10,7 @@ type Product = {
   price: number;
   discount_price: number | null;
   image_url: string | null;
+  type_name?: string | null;
   type_has_duration?: boolean;
   duration_hours?: number | null;
   created_at?: string | null;
@@ -175,6 +176,7 @@ export default function AllProductsSection({
                 price={item.price}
                 discount_price={item.discount_price}
                 image_url={item.image_url}
+                type_name={item.type_name}
                 type_has_duration={item.type_has_duration}
                 duration_hours={item.duration_hours}
                 created_at={item.created_at}

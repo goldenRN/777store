@@ -33,7 +33,10 @@ export async function GET(request: NextRequest) {
   const take = Number.isNaN(limit) ? DEFAULT_LIMIT : Math.min(limit, 100);
   const skip = Math.max(page - 1, 0) * take;
 
-  const where: Record<string, unknown> = {};
+  const now = new Date();
+  const where: Record<string, unknown> = {
+    order_accept_status: { not: "CLOSED" },
+  };
 
   if (type) {
     const typeWhere = buildTypeWhere(type);
@@ -64,7 +67,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const [items, total] = await Promise.all([
+  const [items] = await Promise.all([
     prisma.adminProduct.findMany({
       where,
       orderBy: { created_at: "desc" },
@@ -80,28 +83,40 @@ export async function GET(request: NextRequest) {
         },
       },
     }),
-    prisma.adminProduct.count({ where }),
   ]);
 
-  const mapped = items.map((p) => ({
-    id: p.id,
-    name: p.name,
-    description: p.description,
-    price: p.price,
-    discount_price: p.discount_price,
-    stock: p.stock,
-    material: p.material,
-    duration_hours: p.duration_hours,
-    type_id: p.type_id,
-    type_name: p.type?.name ?? "",
-    type_has_duration: p.type?.has_duration ?? false,
+  const mapped = items
+    .map((p) => {
+      const endMs =
+        p.created_at && p.duration_hours
+          ? p.created_at.getTime() + p.duration_hours * 60 * 60 * 1000
+          : null;
+      const expired = endMs ? endMs <= now.getTime() : false;
+      const remaining = Math.max(0, Number(p.stock || 0) - Number(p.ordered_qty || 0));
+      const closed = p.order_accept_status === "CLOSED" || expired || remaining <= 0;
+      if (closed) return null;
+      return {
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        price: p.price,
+        discount_price: p.discount_price,
+        stock: p.stock,
+        ordered_qty: p.ordered_qty,
+        material: p.material,
+        duration_hours: p.duration_hours,
+        type_id: p.type_id,
+        type_name: p.type?.name ?? "",
+        type_has_duration: p.type?.has_duration ?? false,
     category_id: p.category_id,
     category_name: p.category?.category_name ?? "",
     subcategory_id: p.subcategory_id,
     subcategory_name: p.subcategory?.name ?? "",
-    image_url: p.images?.[0]?.image_url ?? null,
-    created_at: p.created_at,
-  }));
+        image_url: p.images?.[0]?.image_url ?? null,
+        created_at: p.created_at,
+      };
+    })
+    .filter(Boolean);
 
-  return NextResponse.json({ items: mapped, total, page, limit: take });
+  return NextResponse.json({ items: mapped, total: mapped.length, page, limit: take });
 }

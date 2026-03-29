@@ -25,7 +25,7 @@ export function ProtectedRoute({
       try {
         const user = JSON.parse(userRaw) as { role?: string };
         const role = String(user?.role ?? "").toLowerCase();
-        if (role !== "admin") {
+        if (role !== "admin" && role !== "super_admin") {
           router.replace("/");
           return;
         }

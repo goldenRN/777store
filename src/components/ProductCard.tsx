@@ -12,6 +12,7 @@ type ProductCardProps = {
   price: number;
   discount_price: number | null;
   image_url: string | null;
+  type_name?: string | null;
   type_has_duration?: boolean;
   duration_hours?: number | null;
   created_at?: string | null;
@@ -24,6 +25,7 @@ export default function ProductCard({
   price,
   discount_price,
   image_url,
+  type_name,
   type_has_duration,
   duration_hours,
   created_at,
@@ -114,6 +116,7 @@ export default function ProductCard({
             name={name}
             price={finalPrice}
             image_url={image_url}
+            type_name={type_name}
             className="flex h-10 w-10 mt-2 items-center justify-center rounded-xl bg-[#f6f6f6] text-[var(--navy-900)]"
           >
             <ShoppingBagIcon size={18} />

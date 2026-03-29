@@ -5,8 +5,9 @@ import { prisma } from "@/lib/prisma";
 export async function POST(request: NextRequest) {
   const body = await request.json();
   const { phone, password } = body ?? {};
+  const normalizedPhone = String(phone ?? "").replace(/\s+/g, "").replace(/-/g, "");
 
-  if (!phone || !password) {
+  if (!normalizedPhone || !password) {
     return NextResponse.json(
       { error: "Утасны дугаар болон нууц үг шаардлагатай" },
       { status: 400 }
@@ -15,7 +16,7 @@ export async function POST(request: NextRequest) {
 
   const existing = await prisma.user.findFirst({
     where: {
-      phone,
+      phone: normalizedPhone,
     },
   });
 
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
 
   const user = await prisma.user.create({
     data: {
-      phone,
+      phone: normalizedPhone,
       passwordHash,
     },
     select: {

@@ -58,7 +58,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
     const [discountMode, setDiscountMode] = useState<"percent" | "amount">("percent");
     const [discountInput, setDiscountInput] = useState("");
     const fileInputRef = useRef<HTMLInputElement | null>(null);
-    const [productMode, setProductMode] = useState<"ready" | "preorder" | null>(null);
+    const [productMode, setProductMode] = useState<"ready" | "preorder" | "live" | null>(null);
     const [forceReadyEdit, setForceReadyEdit] = useState(false);
 
     const priceNumber = Number(form.price) || 0;
@@ -119,6 +119,8 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                 setProductMode("ready");
             } else if (typeName.includes("захиал") || typeName.includes("preorder") || typeName.includes("урьдчил")) {
                 setProductMode("preorder");
+            } else if (typeName.includes("лайв") || typeName.includes("live")) {
+                setProductMode("live");
             }
             setDiscountMode("amount");
             setDiscountInput(discountAmount > 0 ? discountAmount.toString() : "");
@@ -201,7 +203,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
         if (!initialType) return;
         if (initialType === "ready") setProductMode("ready");
         if (initialType === "preorder") setProductMode("preorder");
-        if (initialType === "live") setProductMode("ready");
+        if (initialType === "live") setProductMode("live");
     }, [open, editData, initialType]);
 
     useEffect(() => {
@@ -283,7 +285,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
         });
     };
 
-    const handleModeSelect = (mode: "ready" | "preorder") => {
+    const handleModeSelect = (mode: "ready" | "preorder" | "live") => {
         setProductMode(mode);
         setForceReadyEdit(false);
         const selected = findTypeByKind(mode);
@@ -443,7 +445,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                 <div className="space-y-4 overflow-auto p-2">
                     <h2 className="text-2xl font-bold mb-2">{editData ? "✏️ Бараа засах" : "🛍️ Шинэ бүтээгдэхүүн нэмэх"}</h2>
 
-                    {!editData && (
+                    {!editData && initialType !== "live" && (
                         <div>
                             <Label>Ямар төрлийн бараа бүртгэх вэ?</Label>
                             <div className="mt-2 grid grid-cols-2 gap-3">
@@ -469,7 +471,13 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                         </div>
                     )}
 
-                    {!productMode && !editData && (
+                    {!editData && initialType === "live" && (
+                        <div className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                            Live бараа бүртгэх горим
+                        </div>
+                    )}
+
+                    {!productMode && !editData && initialType !== "live" && (
                         <div className="rounded-lg bg-yellow-50 px-3 py-2 text-xs text-yellow-700">
                             Төрлөө сонгосны дараа бусад талбарууд гарна.
                         </div>
@@ -518,7 +526,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                             </>
                         )}
                         <div>
-                            <Label>{productMode === "preorder" ? "Захиалах тоо" : "Үлдэгдэл"}</Label>
+                            <Label>{productMode === "preorder" || productMode === "live" ? "Захиалах тоо" : "Үлдэгдэл"}</Label>
                             <Input name="stock" type="number" value={form.stock} onChange={handleChange} className="h-12 text-lg" />
                         </div>
                     </div>
@@ -556,7 +564,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                     )}
 
                     <div>
-                        <Label>Материал дугаар</Label>
+                        <Label>Материал</Label>
                         <Input name="material" value={form.material} onChange={handleChange} className="h-12 text-lg" />
                     </div>
 

@@ -51,7 +51,7 @@ export default function LoginPageClient() {
 
       if (nextUrl) {
         router.push(nextUrl);
-      } else if (role === "ADMIN") {
+      } else if (role === "ADMIN" || role === "SUPER_ADMIN") {
         router.push("/admin/dashboard");
       } else {
         router.push("/");
@@ -103,7 +103,7 @@ export default function LoginPageClient() {
             </div>
 
             {error && (
-              <div className="rounded-xl bg-red-50 px-4 py-2 text-xs font-semibold text-[var(--accent)]">
+              <div className="rounded-xl bg-red-50 px-4 py-2 text-xs font-semibold text-black">
                 {error}
               </div>
             )}

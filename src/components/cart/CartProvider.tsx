@@ -8,6 +8,7 @@ export type CartItem = {
   price: number;
   image_url: string | null;
   qty: number;
+  type_name?: string | null;
 };
 
 type CartContextValue = {
@@ -38,6 +39,27 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       setItems([]);
     }
   }, []);
+
+  useEffect(() => {
+    if (items.length === 0) return;
+    fetch("/api/public/products/availability", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: items.map((i) => i.id) }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        const closedIds = new Set(
+          Array.isArray(data?.items)
+            ? data.items.filter((it: any) => it.closed).map((it: any) => it.id)
+            : []
+        );
+        if (closedIds.size > 0) {
+          setItems((prev) => prev.filter((p) => !closedIds.has(p.id)));
+        }
+      })
+      .catch(() => null);
+  }, [items.length]);
 
   useEffect(() => {
     try {

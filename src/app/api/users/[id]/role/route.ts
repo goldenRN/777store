@@ -13,7 +13,14 @@ export async function PATCH(
 
   const body = await request.json();
   const roleRaw = String(body?.role ?? "").trim().toUpperCase();
-  const role = roleRaw === "ADMIN" ? UserRole.ADMIN : roleRaw === "CUSTOMER" ? UserRole.CUSTOMER : null;
+  const role =
+    roleRaw === "SUPER_ADMIN"
+      ? UserRole.SUPER_ADMIN
+      : roleRaw === "ADMIN"
+      ? UserRole.ADMIN
+      : roleRaw === "CUSTOMER"
+      ? UserRole.CUSTOMER
+      : null;
   if (!role) {
     return NextResponse.json({ message: "role шаардлагатай" }, { status: 400 });
   }

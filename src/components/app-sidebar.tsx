@@ -36,6 +36,7 @@ const data = {
         { title: "Захиалгын бараа", url: "/admin/product?type=preorder" },
         { title: "Лайвын бараа", url: "/admin/product?type=live" },
         { title: "Хямдралтай", url: "/admin/product?discount=true" },
+        { title: "Хаагдсан бараа", url: "/admin/product?closed=true" },
         // { title: "Онцлох", url: "/admin/product?featured=true" },
       ],
     },

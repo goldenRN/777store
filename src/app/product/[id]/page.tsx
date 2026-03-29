@@ -30,6 +30,7 @@ type RelatedProduct = {
   price: number;
   discount_price: number | null;
   image_url: string | null;
+  type_name?: string | null;
   type_has_duration?: boolean;
   duration_hours?: number | null;
   created_at?: string | null;
@@ -112,6 +113,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     price: p.price,
     discount_price: p.discount_price,
     image_url: p.images?.[0]?.image_url ?? null,
+    type_name: p.type?.name ?? null,
     type_has_duration: p.type?.has_duration ?? false,
     duration_hours: p.duration_hours ?? null,
     created_at: p.created_at?.toISOString() ?? null,
@@ -130,15 +132,16 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 <ProductCard
                   key={item.id}
                   id={item.id}
-                  name={item.name}
-                  description={item.description}
-                  price={item.price}
-                  discount_price={item.discount_price}
-                  image_url={item.image_url}
-                  type_has_duration={item.type_has_duration}
-                  duration_hours={item.duration_hours}
-                  created_at={item.created_at}
-                />
+                name={item.name}
+                description={item.description}
+                price={item.price}
+                discount_price={item.discount_price}
+                image_url={item.image_url}
+                type_name={item.type_name}
+                type_has_duration={item.type_has_duration}
+                duration_hours={item.duration_hours}
+                created_at={item.created_at}
+              />
               ))}
             </div>
           </section>

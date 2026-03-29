@@ -140,6 +140,7 @@ export default async function Home() {
                   price={item.price}
                   discount_price={item.discount_price}
                   image_url={item.image_url}
+                  type_name={item.type_name}
                   type_has_duration={item.type_has_duration}
                   duration_hours={item.duration_hours}
                   created_at={item.created_at}
@@ -178,6 +179,7 @@ export default async function Home() {
                     price={item.price}
                     discount_price={item.discount_price}
                     image_url={item.image_url}
+                    type_name={item.type_name}
                     type_has_duration={item.type_has_duration}
                     duration_hours={item.duration_hours}
                     created_at={item.created_at}

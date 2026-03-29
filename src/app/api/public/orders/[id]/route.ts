@@ -15,7 +15,7 @@ export async function GET(
   }
 
   const order = await prisma.adminOrder.findFirst({
-    where: { id, user_id: userId },
+    where: { id, user_id: userId, payment_status: "PAID" },
     include: { items: true },
   });
 

@@ -21,6 +21,14 @@ export async function PUT(
   const material = String(body?.material ?? "").trim();
   const duration_hours =
     body?.duration_hours != null ? Math.round(Number(body.duration_hours)) : null;
+  const arrival_status = body?.arrival_status ? String(body.arrival_status) : null;
+  const cargo_fee =
+    body?.cargo_fee != null && body.cargo_fee !== ""
+      ? Math.round(Number(body.cargo_fee))
+      : null;
+  const order_accept_status = body?.order_accept_status
+    ? String(body.order_accept_status)
+    : null;
 
   if (!name) {
     return NextResponse.json({ message: "Нэр шаардлагатай" }, { status: 400 });
@@ -36,6 +44,9 @@ export async function PUT(
       stock,
       material: material || null,
       duration_hours: duration_hours ?? null,
+      arrival_status: arrival_status || undefined,
+      cargo_fee: cargo_fee ?? null,
+      order_accept_status: order_accept_status || undefined,
       category_id: body?.category_id ? Number(body.category_id) : null,
       subcategory_id: body?.subcategory_id ? Number(body.subcategory_id) : null,
       brand_id: body?.brand_id ? Number(body.brand_id) : null,
@@ -60,6 +71,46 @@ export async function PUT(
       });
     }
   }
+
+  return NextResponse.json({ success: true });
+}
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id: rawId } = await params;
+  const id = Number(rawId);
+  if (!id) {
+    return NextResponse.json({ message: "Invalid id" }, { status: 400 });
+  }
+
+  const body = await request.json();
+  const status = body?.arrival_status ? String(body.arrival_status) : null;
+  const cargo_fee =
+    body?.cargo_fee != null && body.cargo_fee !== ""
+      ? Math.round(Number(body.cargo_fee))
+      : null;
+  const order_accept_status = body?.order_accept_status
+    ? String(body.order_accept_status)
+    : null;
+
+  const allowed = ["Хүлээгдэж буй", "Бараа ирсэн"];
+  if (status && !allowed.includes(status)) {
+    return NextResponse.json({ message: "Invalid status" }, { status: 400 });
+  }
+  if (order_accept_status && !["OPEN", "CLOSED"].includes(order_accept_status)) {
+    return NextResponse.json({ message: "Invalid order_accept_status" }, { status: 400 });
+  }
+
+  await prisma.adminProduct.update({
+    where: { id },
+    data: {
+      arrival_status: status || undefined,
+      cargo_fee: cargo_fee ?? null,
+      order_accept_status: order_accept_status || undefined,
+    },
+  });
 
   return NextResponse.json({ success: true });
 }

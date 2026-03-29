@@ -139,6 +139,7 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
             name={product.name}
             price={finalPrice}
             image_url={product.image_url}
+            type_name={product.type_name}
             qty={qty}
             className="rounded-full bg-black px-6 py-3 text-sm font-semibold text-white"
           />

@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "userId шаардлагатай" }, { status: 400 });
   }
 
-  const where: Record<string, unknown> = { user_id: userId };
+  const where: Record<string, unknown> = { user_id: userId, payment_status: "PAID" };
   if (status && status !== "ALL") {
     where.status = status;
   }
@@ -48,6 +48,11 @@ export async function POST(request: NextRequest) {
   const name = String(body?.name ?? "").trim();
   const phone = String(body?.phone ?? "").trim();
   const items = Array.isArray(body?.items) ? body.items : [];
+  const orderKindInput = String(body?.orderKind ?? "").trim();
+  const deliveryMethod = body?.deliveryMethod ? String(body.deliveryMethod) : null;
+  const deliveryName = body?.deliveryName ? String(body.deliveryName) : null;
+  const deliveryPhone = body?.deliveryPhone ? String(body.deliveryPhone) : null;
+  const deliveryAddress = body?.deliveryAddress ? String(body.deliveryAddress) : null;
 
   if (!userId || !name || !phone) {
     return NextResponse.json({ message: "userId, нэр, утас шаардлагатай" }, { status: 400 });
@@ -63,6 +68,26 @@ export async function POST(request: NextRequest) {
     return sum + qty * price;
   }, 0);
 
+  const normalizeType = (name?: string | null) => {
+    const t = (name || "").toLowerCase();
+    if (t.includes("захиал") || t.includes("preorder") || t.includes("урьдчил")) return "preorder";
+    if (t.includes("лайв") || t.includes("live")) return "preorder";
+    if (t.includes("бэлэн") || t.includes("ready")) return "ready";
+    return "";
+  };
+  const hasPreorder = items.some((it: any) => normalizeType(it.type_name) === "preorder");
+  const computedOrderKind = hasPreorder ? "preorder" : "ready";
+  const orderKind = orderKindInput || computedOrderKind;
+
+  if (orderKind === "ready" && deliveryMethod === "delivery") {
+    if (!deliveryName || !deliveryPhone || !deliveryAddress) {
+      return NextResponse.json(
+        { message: "Хүргэлтийн нэр, утас, хаяг шаардлагатай" },
+        { status: 400 }
+      );
+    }
+  }
+
   const firstStatus = await prisma.adminStatus.findFirst({ orderBy: { id: "asc" } });
   const defaultStatus = firstStatus?.name || "pending";
 
@@ -73,9 +98,15 @@ export async function POST(request: NextRequest) {
       phone1: phone,
       status: defaultStatus,
       payment_status: "UNPAID",
+      order_kind: orderKind,
+      delivery_method: deliveryMethod,
+      delivery_name: deliveryName,
+      delivery_phone: deliveryPhone,
+      delivery_address: deliveryAddress,
       total,
       items: {
         create: items.map((it: any) => ({
+          product_id: it.product_id ? Number(it.product_id) : null,
           product_name: String(it.name ?? "Бараа"),
           quantity: Math.max(1, Number(it.qty ?? 1)),
           price: Math.max(0, Number(it.price ?? 0)),

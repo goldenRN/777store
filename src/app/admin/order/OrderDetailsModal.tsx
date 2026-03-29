@@ -81,6 +81,20 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
               <div>
                 <div className="text-gray-600">Утас</div>
                 <div className="font-medium">{order.phone1} {order.phone2 ? ` / ${order.phone2}` : ''}</div>
+                {order.delivery_method && (
+                  <div className="mt-2 text-xs text-gray-600">
+                    Хүргэлтийн хэлбэр:{" "}
+                    <span className="font-semibold">
+                      {order.delivery_method === "delivery" ? "Хүргэлт" : "Дэлгүүрээс авах"}
+                    </span>
+                    {order.delivery_method === "delivery" && (
+                      <div className="mt-1 text-[11px] text-gray-500">
+                        Нэр: {order.delivery_name || "-"}, Утас: {order.delivery_phone || "-"}
+                        <div>Хаяг: {order.delivery_address || "-"}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="text-gray-600">Төлөв</div>
                 <div className="mt-1">
                   <span className={`px-2 py-0.5 rounded text-xs ${order.status === "pending" ? "bg-yellow-100 text-yellow-800" : order.status === "completed" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-700"}`}>

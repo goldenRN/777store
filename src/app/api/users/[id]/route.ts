@@ -17,6 +17,8 @@ export async function GET(
       name: true,
       email: true,
       phone: true,
+      address: true,
+      avatarUrl: true,
       role: true,
       isActive: true,
       createdAt: true,
@@ -49,4 +51,46 @@ export async function GET(
   }));
 
   return NextResponse.json({ user, orders: mappedOrders });
+}
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  if (!id) {
+    return NextResponse.json({ message: "Invalid id" }, { status: 400 });
+  }
+
+  const body = await request.json();
+  const name = typeof body?.name === "string" ? body.name.trim() : undefined;
+  const email = typeof body?.email === "string" ? body.email.trim() : undefined;
+  const address =
+    typeof body?.address === "string" ? body.address.trim() : undefined;
+  const avatarUrl =
+    typeof body?.avatarUrl === "string" ? body.avatarUrl.trim() : undefined;
+
+  const data: Record<string, string> = {};
+  if (name !== undefined) data.name = name;
+  if (email !== undefined) data.email = email;
+  if (address !== undefined) data.address = address;
+  if (avatarUrl !== undefined) data.avatarUrl = avatarUrl;
+
+  const updated = await prisma.user.update({
+    where: { id },
+    data,
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phone: true,
+      address: true,
+      avatarUrl: true,
+      role: true,
+      isActive: true,
+      createdAt: true,
+    },
+  });
+
+  return NextResponse.json({ user: updated });
 }
