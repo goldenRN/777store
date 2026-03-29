@@ -26,12 +26,13 @@ export default function CartPage() {
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
   const [invoiceExpiry, setInvoiceExpiry] = useState<string | null>(null);
   const [invoiceStatus, setInvoiceStatus] = useState<string | null>(null);
+  const [invoiceEnableExpiry, setInvoiceEnableExpiry] = useState<boolean | null>(null);
   const totalCountdownMs = 60 * 60 * 1000;
   const [deliveryMethod, setDeliveryMethod] = useState<"delivery" | "pickup" | "">("");
   const [deliveryName, setDeliveryName] = useState("");
   const [deliveryPhone, setDeliveryPhone] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
-  const activeExpiry = invoiceExpiry || qpay?.expires_at || null;
+  const activeExpiry = invoiceEnableExpiry ? invoiceExpiry || qpay?.expires_at || null : null;
 
   const resolveImageUrl = (url?: string | null) => {
     if (!url) return "";
@@ -41,7 +42,7 @@ export default function CartPage() {
   };
 
   useEffect(() => {
-    if (!activeExpiry || !qpay?.orderId) return;
+    if (!activeExpiry || !qpay?.orderId || invoiceEnableExpiry === false) return;
     const ms = new Date(activeExpiry).getTime() - Date.now();
     if (ms <= 0) {
       setRemainingMs(0);
@@ -59,13 +60,13 @@ export default function CartPage() {
   }, [activeExpiry, qpay?.orderId]);
 
   useEffect(() => {
-    if (!activeExpiry) return;
+    if (!activeExpiry || invoiceEnableExpiry === false) return;
     const interval = setInterval(() => {
       const ms = new Date(activeExpiry as string).getTime() - Date.now();
       setRemainingMs(Math.max(0, ms));
     }, 1000);
     return () => clearInterval(interval);
-  }, [activeExpiry]);
+  }, [activeExpiry, invoiceEnableExpiry]);
 
   useEffect(() => {
     if (!qpay?.orderId) return;
@@ -74,8 +75,10 @@ export default function CartPage() {
       .then((data) => {
         const expiry = data?.invoice?.expiry_date;
         const status = data?.invoice?.invoice_status;
+        const enableExpiry = data?.invoice?.enable_expiry;
         if (expiry) setInvoiceExpiry(expiry);
         if (status) setInvoiceStatus(status);
+        if (typeof enableExpiry === "boolean") setInvoiceEnableExpiry(enableExpiry);
       })
       .catch(() => null);
   }, [qpay?.orderId]);
