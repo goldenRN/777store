@@ -83,6 +83,13 @@ export default function Header() {
     router.push("/login");
   };
 
+  const resolveMediaUrl = (url?: string | null) => {
+    if (!url) return "";
+    if (url.startsWith("http://") || url.startsWith("https://")) return url;
+    if (typeof window !== "undefined") return `${window.location.origin}${url}`;
+    return url;
+  };
+
   return (
     <>
       <div className="bg-[var(--accent-2)] text-white text-xs">
@@ -174,7 +181,7 @@ export default function Header() {
                   {user.avatarUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={user.avatarUrl}
+                      src={resolveMediaUrl(user.avatarUrl)}
                       alt="User"
                       className="h-7 w-7 rounded-full object-cover ring-2 ring-[var(--accent-2)]"
                     />

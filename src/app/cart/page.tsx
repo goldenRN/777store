@@ -2,7 +2,6 @@
 
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import Image from "next/image";
 import { useCart } from "@/components/cart/CartProvider";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -33,6 +32,13 @@ export default function CartPage() {
   const [deliveryPhone, setDeliveryPhone] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const activeExpiry = invoiceExpiry || qpay?.expires_at || null;
+
+  const resolveImageUrl = (url?: string | null) => {
+    if (!url) return "";
+    if (url.startsWith("http://") || url.startsWith("https://")) return url;
+    if (url.startsWith("/")) return url;
+    return `/uploads/${url}`;
+  };
 
   useEffect(() => {
     if (!activeExpiry || !qpay?.orderId) return;
@@ -223,7 +229,12 @@ export default function CartPage() {
                 <div key={item.id} className="flex items-center gap-4 rounded-xl border p-3">
                   <div className="relative h-16 w-16 overflow-hidden rounded-lg bg-[var(--sky-100)]">
                     {item.image_url ? (
-                      <Image src={item.image_url} alt={item.name} fill className="object-cover" />
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={resolveImageUrl(item.image_url)}
+                        alt={item.name}
+                        className="h-full w-full object-cover"
+                      />
                     ) : null}
                   </div>
                   <div className="flex-1">
@@ -350,14 +361,6 @@ export default function CartPage() {
                 ) : null}
               </div>
               <div>
-                {qpay.short_url && (
-                  <div className="text-sm">
-                    Богино холбоос:{" "}
-                    <a className="text-blue-600 underline" href={qpay.short_url} target="_blank">
-                      {qpay.short_url}
-                    </a>
-                  </div>
-                )}
                 {qpay.deeplinks && qpay.deeplinks.length > 0 && (
                   <div className="mt-4 grid grid-cols-2 gap-3">
                     {qpay.deeplinks.map((b) => (

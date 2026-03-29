@@ -34,6 +34,13 @@ export default function ProfilePage() {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState("");
 
+  const resolveMediaUrl = (url?: string | null) => {
+    if (!url) return "";
+    if (url.startsWith("http://") || url.startsWith("https://")) return url;
+    if (typeof window !== "undefined") return `${window.location.origin}${url}`;
+    return url;
+  };
+
   useEffect(() => {
     if (!localUser?.id) {
       setLoading(false);
@@ -156,7 +163,7 @@ export default function ProfilePage() {
                   {preview || avatarUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={preview || avatarUrl}
+                      src={preview || resolveMediaUrl(avatarUrl)}
                       alt="Profile"
                       className="h-full w-full object-cover"
                     />

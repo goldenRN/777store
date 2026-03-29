@@ -30,9 +30,21 @@ export default function ProductCard({
   duration_hours,
   created_at,
 }: ProductCardProps) {
-  const finalPrice = discount_price && discount_price > 0 ? discount_price : price;
+  const resolveImageUrl = (url?: string | null) => {
+    if (!url) return "";
+    if (url.startsWith("http://") || url.startsWith("https://")) return url;
+    if (url.startsWith("/")) return url;
+    return `/uploads/${url}`;
+  };
+
+  const resolvedImage = resolveImageUrl(image_url);
+  const priceNumber = Number(price) || 0;
+  const discountNumber = Number(discount_price) || 0;
+  const finalPrice = discountNumber > 0 ? discountNumber : priceNumber;
   const discountPercent =
-    discount_price && discount_price < price ? Math.round(((price - discount_price) / price) * 100) : null;
+    discountNumber > 0 && priceNumber > 0 && discountNumber < priceNumber
+      ? Math.round(((priceNumber - discountNumber) / priceNumber) * 100)
+      : null;
   const endDate = (() => {
     if (!created_at || !duration_hours) return null;
     const endMs = new Date(created_at).getTime() + duration_hours * 60 * 60 * 1000;
@@ -54,12 +66,11 @@ export default function ProductCard({
           href={`/product/${id}`}
           className="relative flex h-[260px] w-full items-center justify-center overflow-hidden rounded-2xl bg-white"
         >
-          {image_url ? (
-            <Image src={image_url} alt={name} fill className="object-contain" />
+          {resolvedImage ? (
+            <Image src={resolvedImage} alt={name} fill className="object-contain" />
           ) : (
-            <div className="grid h-full w-full place-items-center text-xs font-semibold text-[var(--navy-800)]">
-              Image
-            </div>
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src="/logo.png" alt="Logo" className="h-16 w-16 object-contain opacity-80" />
           )}
         </Link>
       </div>

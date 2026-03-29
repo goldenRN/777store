@@ -3,6 +3,7 @@ import Footer from "@/components/Footer";
 import BannerSlider from "@/components/BannerSlider";
 import ProductCard from "@/components/ProductCard";
 import OrderProductsSlider from "@/components/OrderProductsSlider";
+import HomeAllProducts from "@/components/HomeAllProducts";
 
 type PublicProduct = {
   id: number;
@@ -82,6 +83,12 @@ const fetchProducts = async (params: Record<string, string | number | boolean | 
 
 export default async function Home() {
   const banners = await fetchBanners();
+  const resolveImageUrl = (url?: string | null) => {
+    if (!url) return "";
+    if (url.startsWith("http://") || url.startsWith("https://")) return url;
+    if (url.startsWith("/")) return url;
+    return `/uploads/${url}`;
+  };
   const [categories, promo, readyRes, preorderRes, liveRes, discountRes, allRes] = await Promise.all([
     fetchCategories(),
     fetchPromo(),
@@ -100,28 +107,22 @@ export default async function Home() {
   const orderItems = Array.from(
     new Map([...preorderRes.items, ...liveRes.items].map((p) => [p.id, p])).values()
   );
+  const smallBanners = banners.slice(0, 2);
 
   return (
     <div className="min-h-screen bg-[var(--sky-50)]">
       <Header />
-
+      <section >
+        <BannerSlider banners={banners} />
+      </section>
       <main className="container mx-auto px-6">
-        <section className="grid gap-6 py-5 lg:grid-cols-[1.4fr_0.6fr]">
-          <BannerSlider banners={banners} />
-          <div className="grid gap-4">
-            <div className="rounded-[28px] bg-[linear-gradient(160deg,#111111,#2a2a2a)] p-6 text-white shadow-xl">
-              <span className="text-xs opacity-70">{promo?.badge || "Онцгой хямдрал"}</span>
-              <h3 className="mt-2 text-xl font-semibold">{promo?.title || "LIVE бараа шинэчлэгдлээ"}</h3>
-              <p className="mt-2 text-sm opacity-80">{promo?.subtitle || "24 цагийн дотор дуусах hot deal."}</p>
-            </div>
-            <OrderProductsSlider items={orderItems} />
-          </div>
-        </section>
+
+
         {discountProducts.length > 0 && (
           <section className="py-6">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <h2 className="text-2xl font-bold">Онцгой хямдрал</h2>
+                <h2 className="text-xl font-bold">Онцгой хямдрал</h2>
                 <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-[var(--accent)]">
                   🔥 {discountProducts.length}
                 </span>
@@ -150,27 +151,66 @@ export default async function Home() {
           </section>
         )}
 
-        {[
-          { title: "Бэлэн бараа", items: readyProducts, href: "/products?type=ready" },
-          { title: "Захиалгын бараа", items: preorderProducts, href: "/products?type=preorder" },
-          { title: "Live бараа", items: liveProducts, href: "/live" },
-        ]
-          .filter((section) => section.items.length > 0)
-          .map((section) => (
-            <section key={section.title} className="py-6">
+        {readyProducts.length > 0 && (
+          <section className="py-6">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-bold">Бэлэн бараа</h2>
+                <span className="rounded-full bg-[var(--sky-100)] px-3 py-1 text-xs font-semibold text-[var(--navy-800)]">
+                  Нийт: {readyProducts.length}
+                </span>
+              </div>
+              <a href="/products?type=ready" className="text-xs font-semibold text-[var(--accent-2)]">
+                Бүгдийг харах
+              </a>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-4 sm:grid-cols-2">
+              {readyProducts.map((item) => (
+                <ProductCard
+                  key={item.id}
+                  id={item.id}
+                  name={item.name}
+                  description={item.description}
+                  price={item.price}
+                  discount_price={item.discount_price}
+                  image_url={item.image_url}
+                  type_name={item.type_name}
+                  type_has_duration={item.type_has_duration}
+                  duration_hours={item.duration_hours}
+                  created_at={item.created_at}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {preorderProducts.length > 0 && (
+          <>
+            <section className="grid gap-4 py-2 lg:grid-cols-[1.4fr_0.6fr]">
+              <div className="rounded-[28px] bg-[linear-gradient(160deg,#111111,#2a2a2a)] p-6 text-white shadow-xl">
+                <span className="text-xs opacity-70">{promo?.badge || "Онцгой хямдрал"}</span>
+                <h3 className="mt-2 text-xl font-semibold">{promo?.title || "LIVE бараа шинэчлэгдлээ"}</h3>
+                <p className="mt-2 text-sm opacity-80">{promo?.subtitle || "24 цагийн дотор дуусах hot deal."}</p>
+              </div>
+              <OrderProductsSlider items={orderItems} />
+            </section>
+            <section className="py-6">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <h2 className="text-2xl font-bold">{section.title}</h2>
+                  <h2 className="text-xl font-bold">Захиалгын бараа</h2>
                   <span className="rounded-full bg-[var(--sky-100)] px-3 py-1 text-xs font-semibold text-[var(--navy-800)]">
-                    Нийт: {section.items.length}
+                    Нийт: {preorderProducts.length}
                   </span>
                 </div>
-                <a href={section.href} className="text-xs font-semibold text-[var(--accent-2)]">
+                <a
+                  href="/products?type=preorder"
+                  className="text-xs font-semibold text-[var(--accent-2)]"
+                >
                   Бүгдийг харах
                 </a>
               </div>
               <div className="grid gap-4 lg:grid-cols-4 sm:grid-cols-2">
-                {section.items.map((item) => (
+                {preorderProducts.map((item) => (
                   <ProductCard
                     key={item.id}
                     id={item.id}
@@ -187,44 +227,24 @@ export default async function Home() {
                 ))}
               </div>
             </section>
-          ))}
+          </>
+        )}
 
-
-
-        <section className="py-6">
-          <h2 className="mb-4 text-2xl font-bold"> Ангилалууд</h2>
-          <div className="grid gap-3 lg:grid-cols-8 sm:grid-cols-4 grid-cols-2">
-            {categories.map((cat) => (
-              <div
-                key={cat.category_id}
-                className="flex flex-col items-center gap-2 rounded-full bg-white px-4 py-3 text-center text-xs font-semibold shadow"
-              >
-                {cat.category_image ? (
-                  <span className="relative h-6 w-6 overflow-hidden rounded-full bg-[var(--sky-100)]">
-                    <img src={cat.category_image} alt={cat.category_name} className="h-full w-full object-cover" />
-                  </span>
-                ) : null}
-                <span>{cat.category_name}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {allProducts.length > 0 && (
+        {liveProducts.length > 0 && (
           <section className="py-6">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <h2 className="text-2xl font-bold">Бүх бараа</h2>
+                <h2 className="text-xl font-bold">Live бараа</h2>
                 <span className="rounded-full bg-[var(--sky-100)] px-3 py-1 text-xs font-semibold text-[var(--navy-800)]">
-                  Нийт: {allProducts.length}
+                  Нийт: {liveProducts.length}
                 </span>
               </div>
-              <a href="/products" className="text-xs font-semibold text-[var(--accent-2)]">
+              <a href="/live" className="text-xs font-semibold text-[var(--accent-2)]">
                 Бүгдийг харах
               </a>
             </div>
             <div className="grid gap-4 lg:grid-cols-4 sm:grid-cols-2">
-              {allProducts.map((item) => (
+              {liveProducts.map((item) => (
                 <ProductCard
                   key={item.id}
                   id={item.id}
@@ -233,6 +253,7 @@ export default async function Home() {
                   price={item.price}
                   discount_price={item.discount_price}
                   image_url={item.image_url}
+                  type_name={item.type_name}
                   type_has_duration={item.type_has_duration}
                   duration_hours={item.duration_hours}
                   created_at={item.created_at}
@@ -241,6 +262,10 @@ export default async function Home() {
             </div>
           </section>
         )}
+
+
+
+        <HomeAllProducts products={allProducts} categories={categories} />
       </main>
 
       <Footer />

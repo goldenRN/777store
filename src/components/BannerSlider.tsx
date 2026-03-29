@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 type Banner = {
   id: number;
@@ -18,6 +19,13 @@ const FALLBACK_IMAGE =
   "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1400&q=60";
 
 export default function BannerSlider({ banners, intervalMs = 5000 }: BannerSliderProps) {
+  const resolveImageUrl = (url?: string | null) => {
+    if (!url) return "";
+    if (url.startsWith("http://") || url.startsWith("https://")) return url;
+    if (url.startsWith("/")) return url;
+    return `/uploads/${url}`;
+  };
+
   const safeBanners = useMemo(
     () =>
       banners.length > 0
@@ -36,25 +44,48 @@ export default function BannerSlider({ banners, intervalMs = 5000 }: BannerSlide
   }, [safeBanners.length, intervalMs]);
 
   const current = safeBanners[index];
+  const goPrev = () => {
+    setIndex((prev) => (prev - 1 + safeBanners.length) % safeBanners.length);
+  };
+  const goNext = () => {
+    setIndex((prev) => (prev + 1) % safeBanners.length);
+  };
+
+  const bannerImage = resolveImageUrl(current.image_url || FALLBACK_IMAGE);
 
   return (
-    <div className="relative overflow-hidden rounded-[28px] bg-white shadow-2xl">
-      <div className="relative h-[360px] w-full">
+    <div className="relative w-full overflow-hidden bg-white shadow-2xl">
+      <div className="relative h-[400px] w-full">
         <Image
-          src={current.image_url || FALLBACK_IMAGE}
+          src={bannerImage}
           alt={current.description || "Banner"}
           fill
           className="object-cover"
           priority
         />
-        <div className="absolute inset-0 bg-gradient-to-br from-[#ffe1b3]/70 via-white/40 to-white/80" />
+        <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-transparent" />
       </div>
 
-      <div className="absolute inset-0 flex items-end p-10">
-        <h1 className="max-w-2xl text-4xl font-bold text-[var(--gray-900)] drop-shadow">
-          {current.description || "Та чанарыг мэдэр..."}
-        </h1>
-      </div>
+      {safeBanners.length > 1 && (
+        <>
+          <button
+            type="button"
+            aria-label="Өмнөх"
+            onClick={goPrev}
+            className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-white/80 p-2 text-[var(--navy-900)] shadow hover:bg-white"
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <button
+            type="button"
+            aria-label="Дараах"
+            onClick={goNext}
+            className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-white/80 p-2 text-[var(--navy-900)] shadow hover:bg-white"
+          >
+            <ChevronRight size={20} />
+          </button>
+        </>
+      )}
     </div>
   );
 }

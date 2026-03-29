@@ -23,6 +23,13 @@ type ProductDetail = {
 };
 
 export default function ProductDetailClient({ product }: { product: ProductDetail }) {
+  const resolveImageUrl = (url?: string | null) => {
+    if (!url) return "";
+    if (url.startsWith("http://") || url.startsWith("https://")) return url;
+    if (url.startsWith("/")) return url;
+    return `/uploads/${url}`;
+  };
+
   const [qty, setQty] = useState(1);
   const [activeImage, setActiveImage] = useState<string | null>(product.image_url || product.images[0] || null);
   const endDate = useMemo(() => {
@@ -46,7 +53,7 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
       <div className="rounded-2xl bg-white p-4 shadow">
         <div className="relative h-[420px] w-full overflow-hidden rounded-xl bg-[var(--sky-100)]">
           {activeImage ? (
-            <Image src={activeImage} alt={product.name} fill className="object-cover" />
+            <Image src={resolveImageUrl(activeImage)} alt={product.name} fill className="object-cover" />
           ) : (
             <div className="grid h-full w-full place-items-center text-xs font-semibold text-[var(--navy-800)]">
               Image
@@ -63,7 +70,12 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
                   activeImage === img ? "ring-2 ring-red-500" : ""
                 }`}
               >
-                <Image src={img} alt={`${product.name}-${idx}`} fill className="object-cover" />
+                <Image
+                  src={resolveImageUrl(img)}
+                  alt={`${product.name}-${idx}`}
+                  fill
+                  className="object-cover"
+                />
               </button>
             ))}
           </div>
