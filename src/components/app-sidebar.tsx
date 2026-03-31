@@ -59,7 +59,7 @@ const data = {
       icon: <VideoIcon />,
       items: [
         { title: "Live бүртгэл", url: "/admin/live" },
-        { title: "Live бараа", url: "/admin/live" },
+        { title: "Live бараа", url: "/admin/product?type=live" },
       ],
     },
     {
@@ -112,7 +112,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <a href="#">
+              <a href="/">
                 <img src="/logo.png" alt="777 Family Store" className="h-10 w-10" />
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">777 Family store</span>

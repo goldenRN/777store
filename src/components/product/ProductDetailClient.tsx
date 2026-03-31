@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Image from "next/image";
 import AddToCartButton from "@/components/cart/AddToCartButton";
+import { useRouter } from "next/navigation";
 
 type ProductDetail = {
   id: number;
@@ -23,6 +24,13 @@ type ProductDetail = {
 };
 
 export default function ProductDetailClient({ product }: { product: ProductDetail }) {
+  const router = useRouter();
+  const actionLabel = (() => {
+    const t = String(product.type_name || "").toLowerCase();
+    if (t.includes("захиал") || t.includes("preorder") || t.includes("урьдчил")) return "Захиалах";
+    if (t.includes("лайв") || t.includes("live")) return "Захиалах";
+    return "Худалдан авах";
+  })();
   const resolveImageUrl = (url?: string | null) => {
     if (!url) return "";
     if (url.startsWith("http://") || url.startsWith("https://")) return url;
@@ -160,11 +168,11 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
             image_url={product.image_url}
             type_name={product.type_name}
             qty={qty}
+            onAdded={() => router.push("/cart")}
             className="rounded-full bg-black px-6 py-3 text-sm font-semibold text-white"
-          />
-          <a href="/cart" className="rounded-full border border-black px-6 py-3 text-sm font-semibold">
-            Сагс харах
-          </a>
+          >
+            {actionLabel}
+          </AddToCartButton>
         </div>
       </div>
     </div>

@@ -12,6 +12,7 @@ type AddToCartButtonProps = {
   qty?: number;
   className?: string;
   children?: ReactNode;
+  onAdded?: () => void;
 };
 
 export default function AddToCartButton({
@@ -23,12 +24,16 @@ export default function AddToCartButton({
   qty,
   className,
   children,
+  onAdded,
 }: AddToCartButtonProps) {
   const { addItem } = useCart();
 
   return (
     <button
-      onClick={() => addItem({ id, name, price, image_url, type_name }, qty)}
+      onClick={() => {
+        addItem({ id, name, price, image_url, type_name }, qty);
+        onAdded?.();
+      }}
       className={className || "rounded-full bg-black py-2 text-sm font-semibold text-white"}
     >
       {children ?? "Сагсанд хийх"}

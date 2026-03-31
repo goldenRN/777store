@@ -1,5 +1,20 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { unlink } from "fs/promises";
+import path from "path";
+
+const tryDeleteFile = async (imageUrl: string | null) => {
+  if (!imageUrl) return;
+  if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) return;
+  const clean = imageUrl.startsWith("/") ? imageUrl : `/${imageUrl}`;
+  if (!clean.startsWith("/uploads/")) return;
+  const filePath = path.join(process.cwd(), "public", clean);
+  try {
+    await unlink(filePath);
+  } catch {
+    // ignore missing file
+  }
+};
 
 export async function PUT(
   request: Request,
@@ -125,6 +140,17 @@ export async function DELETE(
     return NextResponse.json({ message: "Invalid id" }, { status: 400 });
   }
 
+  const images = await prisma.adminProductImage.findMany({
+    where: { product_id: id, product_variant_id: null },
+    select: { image_url: true },
+  });
+
+  await prisma.adminProductImage.deleteMany({
+    where: { product_id: id, product_variant_id: null },
+  });
+
   await prisma.adminProduct.delete({ where: { id } });
+
+  await Promise.all(images.map((img) => tryDeleteFile(img.image_url ?? null)));
   return NextResponse.json({ success: true });
 }
