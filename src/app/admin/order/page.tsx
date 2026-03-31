@@ -24,6 +24,7 @@ export default function AdminOrdersTable() {
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
   const [pages, setPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Order | null>(null);
@@ -60,6 +61,7 @@ export default function AdminOrdersTable() {
       setOrders(json.data || []);
       setPages(json.meta?.pages || 1);
       setPage(json.meta?.page || 1);
+      setTotal(json.meta?.total || 0);
     } catch (err) {
       console.error(err);
     } finally {
@@ -225,12 +227,83 @@ export default function AdminOrdersTable() {
         </table>
       </div>
 
-      {/* pagination */}
-      <div className="flex items-center justify-between mt-4">
-        <div className="text-sm text-gray-600">Хуудас {page}/{pages}</div>
-        <div className="flex items-center gap-2">
-          <button disabled={page <= 1} onClick={() => fetchOrders(page - 1)} className="px-3 py-1 border rounded disabled:opacity-50">Өмнөх</button>
-          <button disabled={page >= pages} onClick={() => fetchOrders(page + 1)} className="px-3 py-1 border rounded disabled:opacity-50">Дараах</button>
+      <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm">
+        <div className="text-gray-600">
+          Нийт {total} захиалгаас {total === 0 ? 0 : (page - 1) * limit + 1} - {Math.min(page * limit, total)} харуулж байна
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            disabled={page <= 1}
+            onClick={() => fetchOrders(page - 1)}
+            className="h-8 px-3 text-xs border rounded disabled:opacity-50"
+          >
+            Өмнөх
+          </button>
+          {pages <= 7 && (
+            <div className="flex items-center gap-1">
+              {Array.from({ length: pages }, (_, i) => i + 1).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => fetchOrders(p)}
+                  className={`h-8 min-w-8 rounded-md px-2 text-xs ${
+                    p === page
+                      ? "bg-[var(--accent-2)] text-white"
+                      : "border border-gray-200 text-gray-700 hover:bg-gray-100"
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          )}
+          {pages > 7 && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => fetchOrders(1)}
+                className={`h-8 min-w-8 rounded-md px-2 text-xs ${
+                  page === 1
+                    ? "bg-[var(--accent-2)] text-white"
+                    : "border border-gray-200 text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                1
+              </button>
+              {page > 3 && <span className="px-1 text-gray-400">…</span>}
+              {Array.from({ length: 3 }, (_, i) => page - 1 + i)
+                .filter((p) => p > 1 && p < pages)
+                .map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => fetchOrders(p)}
+                    className={`h-8 min-w-8 rounded-md px-2 text-xs ${
+                      p === page
+                        ? "bg-[var(--accent-2)] text-white"
+                        : "border border-gray-200 text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+              {page < pages - 2 && <span className="px-1 text-gray-400">…</span>}
+              <button
+                onClick={() => fetchOrders(pages)}
+                className={`h-8 min-w-8 rounded-md px-2 text-xs ${
+                  page === pages
+                    ? "bg-[var(--accent-2)] text-white"
+                    : "border border-gray-200 text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                {pages}
+              </button>
+            </div>
+          )}
+          <button
+            disabled={page >= pages}
+            onClick={() => fetchOrders(page + 1)}
+            className="h-8 px-3 text-xs border rounded disabled:opacity-50"
+          >
+            Дараах
+          </button>
         </div>
       </div>
 

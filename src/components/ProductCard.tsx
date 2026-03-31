@@ -2,8 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ShoppingBagIcon } from "lucide-react";
-import AddToCartButton from "@/components/cart/AddToCartButton";
+import { ShoppingBagIcon, X } from "lucide-react";
+import { useCart } from "@/components/cart/CartProvider";
+import { useEffect, useMemo, useState } from "react";
 
 type ProductCardProps = {
   id: number;
@@ -18,6 +19,15 @@ type ProductCardProps = {
   created_at?: string | null;
 };
 
+type Variant = {
+  id: number;
+  sku?: string | null;
+  attribute?: Record<string, unknown> | null;
+  price?: number | null;
+  stock?: number | null;
+  images?: { image_url: string }[];
+};
+
 export default function ProductCard({
   id,
   name,
@@ -30,6 +40,12 @@ export default function ProductCard({
   duration_hours,
   created_at,
 }: ProductCardProps) {
+  const { addItem } = useCart();
+  const [variantOpen, setVariantOpen] = useState(false);
+  const [variantLoading, setVariantLoading] = useState(false);
+  const [variants, setVariants] = useState<Variant[]>([]);
+  const [variantError, setVariantError] = useState<string | null>(null);
+
   const resolveImageUrl = (url?: string | null) => {
     if (!url) return "";
     if (url.startsWith("http://") || url.startsWith("https://")) return url;
@@ -50,6 +66,59 @@ export default function ProductCard({
     const endMs = new Date(created_at).getTime() + duration_hours * 60 * 60 * 1000;
     return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ulaanbaatar" }).format(new Date(endMs));
   })();
+
+  const variantLabel = (v: Variant) => {
+    const attr = (v.attribute || {}) as Record<string, unknown>;
+    const type = typeof attr.type === "string" ? attr.type : "";
+    const color = typeof attr.color === "string" ? attr.color : "";
+    const size = typeof attr.size === "string" ? attr.size : "";
+    const merged = [type, color, size].filter(Boolean).join(" / ");
+    return merged || v.sku || `SKU-${v.id}`;
+  };
+
+  const loadVariants = async () => {
+    setVariantLoading(true);
+    setVariantError(null);
+    try {
+      const res = await fetch(`/api/productvar/${id}`);
+      const json = await res.json();
+      const list = Array.isArray(json) ? (json as Variant[]) : [];
+      setVariants(list);
+      if (list.length === 0) {
+        addItem({ id, name, price: finalPrice, image_url, type_name });
+      } else {
+        setVariantOpen(true);
+      }
+    } catch {
+      setVariantError("SKU мэдээлэл уншиж чадсангүй");
+      addItem({ id, name, price: finalPrice, image_url, type_name });
+    } finally {
+      setVariantLoading(false);
+    }
+  };
+
+  const handleSelectVariant = (v: Variant) => {
+    const vPrice = v.price != null ? Number(v.price) : finalPrice;
+    const vImage = v.images?.[0]?.image_url || image_url;
+    addItem({
+      id,
+      name,
+      price: vPrice,
+      image_url: vImage || null,
+      type_name,
+      variant_id: v.id,
+      variant_sku: v.sku ?? null,
+      variant_label: variantLabel(v),
+    });
+    setVariantOpen(false);
+  };
+
+  useEffect(() => {
+    if (!variantOpen) {
+      setVariants([]);
+      setVariantError(null);
+    }
+  }, [variantOpen]);
 
   return (
     <div className="flex flex-col rounded-3xl border border-[#e5e7eb] bg-white shadow-sm">
@@ -121,17 +190,17 @@ export default function ProductCard({
             )}
           </div>
 
-          {/* ADD TO CART */}
-          <AddToCartButton
-            id={id}
-            name={name}
-            price={finalPrice}
-            image_url={image_url}
-            type_name={type_name}
+          <button
+            onClick={loadVariants}
             className="flex h-10 w-10 mt-2 items-center justify-center rounded-xl bg-[#f6f6f6] text-[var(--navy-900)]"
+            aria-label="Сагсанд нэмэх"
           >
-            <ShoppingBagIcon size={18} />
-          </AddToCartButton>
+            {variantLoading ? (
+              <span className="text-xs">...</span>
+            ) : (
+              <ShoppingBagIcon size={18} />
+            )}
+          </button>
 
         </div>
         {type_has_duration && (
@@ -147,6 +216,68 @@ export default function ProductCard({
           </>
         )}
       </div>
+
+      {variantOpen && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setVariantOpen(false)} />
+          <div className="absolute right-0 top-0 h-full w-full max-w-[360px] bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b p-4">
+              <div>
+                <div className="text-sm font-semibold">SKU сонгох</div>
+                <div className="text-xs text-[var(--gray-500)]">{name}</div>
+              </div>
+              <button onClick={() => setVariantOpen(false)} className="rounded-full p-2 hover:bg-gray-100">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3 overflow-auto h-[calc(100%-64px)]">
+              {variantError && (
+                <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">
+                  {variantError}
+                </div>
+              )}
+              {variants.length === 0 ? (
+                <div className="text-xs text-[var(--gray-500)]">SKU олдсонгүй.</div>
+              ) : (
+                variants.map((v) => {
+                  const vImage = v.images?.[0]?.image_url || image_url;
+                  const vPrice = v.price != null ? Number(v.price) : finalPrice;
+                  return (
+                    <button
+                      key={v.id}
+                      onClick={() => handleSelectVariant(v)}
+                      className="w-full rounded-xl border p-3 text-left hover:border-[var(--accent-2)]"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="h-12 w-12 rounded-lg border bg-[var(--sky-100)] overflow-hidden">
+                          {vImage ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={resolveImageUrl(vImage)}
+                              alt={v.sku || "SKU"}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : null}
+                        </div>
+                        <div className="flex-1">
+                          <div className="text-xs font-semibold text-[var(--navy-900)]">
+                            {v.sku || `SKU-${v.id}`}
+                          </div>
+                          <div className="text-[10px] text-[var(--gray-500)]">{variantLabel(v)}</div>
+                          <div className="mt-1 text-xs font-semibold text-red-500">
+                            {Number(vPrice).toLocaleString()}₮
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

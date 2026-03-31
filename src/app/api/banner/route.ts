@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { saveFile } from "@/lib/upload";
+import { saveBannerFile } from "@/lib/upload";
 
 export async function GET() {
   const list = await prisma.adminBanner.findMany({ orderBy: { id: "asc" } });
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
 
   let imageUrl: string | null = null;
   if (image && image instanceof File && image.size > 0) {
-    const saved = await saveFile(image);
+    const saved = await saveBannerFile(image);
     imageUrl = saved.url;
   }
 

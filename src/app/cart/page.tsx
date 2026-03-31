@@ -172,6 +172,9 @@ export default function CartPage() {
           deliveryAddress: deliveryMethod === "delivery" ? deliveryAddress : null,
           items: items.map((it) => ({
             product_id: it.id,
+            variant_id: it.variant_id ?? null,
+            variant_sku: it.variant_sku ?? null,
+            variant_label: it.variant_label ?? null,
             name: it.name,
             price: it.price,
             qty: it.qty,
@@ -250,7 +253,10 @@ export default function CartPage() {
           ) : (
             <div className="mt-6 space-y-4">
               {items.map((item) => (
-                <div key={item.id} className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-xl border p-3">
+                <div
+                  key={`${item.id}-${item.variant_id ?? "base"}`}
+                  className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-xl border p-3"
+                >
                   <div className="relative h-16 w-16 overflow-hidden rounded-lg bg-[var(--sky-100)]">
                     {item.image_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -266,17 +272,28 @@ export default function CartPage() {
                     <div className="text-xs text-[var(--gray-500)]">
                       {Number(item.price).toLocaleString()}₮
                     </div>
+                    {(item.variant_sku || item.variant_label) && (
+                      <div className="mt-1 text-[10px] text-[var(--gray-500)]">
+                        SKU:{" "}
+                        <span className="font-semibold text-[var(--navy-900)]">
+                          {item.variant_sku || item.variant_label}
+                        </span>
+                        {item.variant_label && item.variant_sku && item.variant_label !== item.variant_sku && (
+                          <span className="ml-1 text-[var(--gray-400)]">({item.variant_label})</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => updateQty(item.id, item.qty - 1)}
+                      onClick={() => updateQty(item.id, item.qty - 1, item.variant_id ?? null)}
                       className="h-8 w-8 rounded-full border text-sm"
                     >
                       -
                     </button>
                     <div className="w-8 text-center text-sm">{item.qty}</div>
                     <button
-                      onClick={() => updateQty(item.id, item.qty + 1)}
+                      onClick={() => updateQty(item.id, item.qty + 1, item.variant_id ?? null)}
                       className="h-8 w-8 rounded-full border text-sm"
                     >
                       +
@@ -285,7 +302,10 @@ export default function CartPage() {
                   <div className="w-full sm:w-24 text-right text-sm font-semibold">
                     {(item.price * item.qty).toLocaleString()}₮
                   </div>
-                  <button onClick={() => removeItem(item.id)} className="text-xs text-red-600">
+                  <button
+                    onClick={() => removeItem(item.id, item.variant_id ?? null)}
+                    className="text-xs text-red-600"
+                  >
                     Устгах
                   </button>
                 </div>

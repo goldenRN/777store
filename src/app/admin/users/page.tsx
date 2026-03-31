@@ -52,22 +52,31 @@ export default function AdminUsersPage() {
   const [currentRole, setCurrentRole] = useState<string>("");
   const [sortField, setSortField] = useState<keyof UserRow>("createdAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const limit = 20;
 
-  const fetchUsers = async () => {
+  const fetchUsers = async (nextPage = page) => {
     setLoading(true);
     try {
       const url = new URL(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/users`, window.location.origin);
       if (q) url.searchParams.set("q", q);
+      url.searchParams.set("page", String(nextPage));
+      url.searchParams.set("limit", String(limit));
       const res = await fetch(url.toString());
       const json = await res.json();
       setUsers(json.data || []);
+      setPage(json?.meta?.page ?? nextPage);
+      setPages(json?.meta?.pages ?? 1);
+      setTotal(json?.meta?.total ?? 0);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchUsers();
+    fetchUsers(1);
     try {
       const raw = localStorage.getItem("user");
       if (raw) {
@@ -117,7 +126,7 @@ export default function AdminUsersPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ role }),
     });
-    fetchUsers();
+    fetchUsers(page);
   };
 
   const updateStatus = async (id: string, isActive: boolean) => {
@@ -126,7 +135,7 @@ export default function AdminUsersPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ isActive }),
     });
-    fetchUsers();
+    fetchUsers(page);
   };
 
   return (
@@ -140,7 +149,7 @@ export default function AdminUsersPage() {
             placeholder="Нэр / Имэйл / Утас хайх..."
             className="border rounded px-3 py-1 text-sm"
           />
-          <Button onClick={fetchUsers} className="text-sm px-3 py-1">Хайх</Button>
+          <Button onClick={() => fetchUsers(1)} className="text-sm px-3 py-1">Хайх</Button>
         </div>
       </div>
 
@@ -225,6 +234,88 @@ export default function AdminUsersPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm">
+        <div className="text-gray-600">
+          Нийт {total} хэрэглэгчээс {total === 0 ? 0 : (page - 1) * limit + 1} - {Math.min(page * limit, total)} харуулж байна
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            className="h-8 px-3 text-xs"
+            disabled={page <= 1}
+            onClick={() => fetchUsers(page - 1)}
+          >
+            Өмнөх
+          </Button>
+          {pages <= 7 && (
+            <div className="flex items-center gap-1">
+              {Array.from({ length: pages }, (_, i) => i + 1).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => fetchUsers(p)}
+                  className={`h-8 min-w-8 rounded-md px-2 text-xs ${
+                    p === page
+                      ? "bg-[var(--accent-2)] text-white"
+                      : "border border-gray-200 text-gray-700 hover:bg-gray-100"
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          )}
+          {pages > 7 && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => fetchUsers(1)}
+                className={`h-8 min-w-8 rounded-md px-2 text-xs ${
+                  page === 1
+                    ? "bg-[var(--accent-2)] text-white"
+                    : "border border-gray-200 text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                1
+              </button>
+              {page > 3 && <span className="px-1 text-gray-400">…</span>}
+              {Array.from({ length: 3 }, (_, i) => page - 1 + i)
+                .filter((p) => p > 1 && p < pages)
+                .map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => fetchUsers(p)}
+                    className={`h-8 min-w-8 rounded-md px-2 text-xs ${
+                      p === page
+                        ? "bg-[var(--accent-2)] text-white"
+                        : "border border-gray-200 text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+              {page < pages - 2 && <span className="px-1 text-gray-400">…</span>}
+              <button
+                onClick={() => fetchUsers(pages)}
+                className={`h-8 min-w-8 rounded-md px-2 text-xs ${
+                  page === pages
+                    ? "bg-[var(--accent-2)] text-white"
+                    : "border border-gray-200 text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                {pages}
+              </button>
+            </div>
+          )}
+          <Button
+            variant="outline"
+            className="h-8 px-3 text-xs"
+            disabled={page >= pages}
+            onClick={() => fetchUsers(page + 1)}
+          >
+            Дараах
+          </Button>
+        </div>
       </div>
 
       {selected && (

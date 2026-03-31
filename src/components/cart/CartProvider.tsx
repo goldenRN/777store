@@ -9,6 +9,9 @@ export type CartItem = {
   image_url: string | null;
   qty: number;
   type_name?: string | null;
+  variant_id?: number | null;
+  variant_sku?: string | null;
+  variant_label?: string | null;
 };
 
 type CartContextValue = {
@@ -16,8 +19,8 @@ type CartContextValue = {
   count: number;
   total: number;
   addItem: (item: Omit<CartItem, "qty">, qty?: number) => void;
-  removeItem: (id: number) => void;
-  updateQty: (id: number, qty: number) => void;
+  removeItem: (id: number, variantId?: number | null) => void;
+  updateQty: (id: number, qty: number, variantId?: number | null) => void;
   clear: () => void;
 };
 
@@ -71,21 +74,33 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const addItem = (item: Omit<CartItem, "qty">, qty = 1) => {
     setItems((prev) => {
-      const existing = prev.find((p) => p.id === item.id);
+      const existing = prev.find(
+        (p) => p.id === item.id && (p.variant_id ?? null) === (item.variant_id ?? null)
+      );
       if (existing) {
-        return prev.map((p) => (p.id === item.id ? { ...p, qty: p.qty + qty } : p));
+        return prev.map((p) =>
+          p.id === item.id && (p.variant_id ?? null) === (item.variant_id ?? null)
+            ? { ...p, qty: p.qty + qty }
+            : p
+        );
       }
       return [...prev, { ...item, qty }];
     });
   };
 
-  const removeItem = (id: number) => {
-    setItems((prev) => prev.filter((p) => p.id !== id));
+  const removeItem = (id: number, variantId: number | null = null) => {
+    setItems((prev) =>
+      prev.filter((p) => !(p.id === id && (p.variant_id ?? null) === variantId))
+    );
   };
 
-  const updateQty = (id: number, qty: number) => {
+  const updateQty = (id: number, qty: number, variantId: number | null = null) => {
     const safeQty = Math.max(1, Math.floor(qty));
-    setItems((prev) => prev.map((p) => (p.id === id ? { ...p, qty: safeQty } : p)));
+    setItems((prev) =>
+      prev.map((p) =>
+        p.id === id && (p.variant_id ?? null) === variantId ? { ...p, qty: safeQty } : p
+      )
+    );
   };
 
   const clear = () => setItems([]);

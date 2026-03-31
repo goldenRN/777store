@@ -51,6 +51,8 @@ const ProductPage = () => {
   const [statusTarget, setStatusTarget] = useState<Product | null>(null);
   const [statusChoice, setStatusChoice] = useState<"OPEN" | "CLOSED" | "WAITING" | "ARRIVED">("OPEN");
   const [cargoInput, setCargoInput] = useState<string>("");
+  const [page, setPage] = useState(1);
+  const limit = 20;
 
   // ✅ Variant modal states
   const [variantOpen, setVariantOpen] = useState(false);
@@ -154,6 +156,13 @@ const ProductPage = () => {
 
     return data;
   }, [products, search, sortField, sortOrder, searchParams]);
+
+  const pages = Math.max(Math.ceil(filteredProducts.length / limit), 1);
+  const pagedProducts = filteredProducts.slice((page - 1) * limit, page * limit);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, sortField, sortOrder, searchParams]);
 
   const handleViewImages = async (productId: number) => {
     try {
@@ -348,7 +357,7 @@ const ProductPage = () => {
 
             <tbody>
               {filteredProducts.length > 0 ? (
-                filteredProducts.map((p) => (
+                pagedProducts.map((p) => (
                   <tr key={p.id} className="border-b hover:bg-gray-50">
                     <td className="py-2 px-4 text-xs">{p.name}</td>
                     {!isPreorderLive && (
@@ -491,6 +500,90 @@ const ProductPage = () => {
           </table>
         </CardContent>
       </Card>
+
+      <div className="mt-2 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm">
+        <div className="text-gray-600">
+          Нийт {filteredProducts.length} бараанаас{" "}
+          {filteredProducts.length === 0 ? 0 : (page - 1) * limit + 1} -{" "}
+          {Math.min(page * limit, filteredProducts.length)} харуулж байна
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            className="h-8 px-3 text-xs"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            Өмнөх
+          </Button>
+          {pages <= 7 && (
+            <div className="flex items-center gap-1">
+              {Array.from({ length: pages }, (_, i) => i + 1).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPage(p)}
+                  className={`h-8 min-w-8 rounded-md px-2 text-xs ${
+                    p === page
+                      ? "bg-[var(--accent-2)] text-white"
+                      : "border border-gray-200 text-gray-700 hover:bg-gray-100"
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          )}
+          {pages > 7 && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage(1)}
+                className={`h-8 min-w-8 rounded-md px-2 text-xs ${
+                  page === 1
+                    ? "bg-[var(--accent-2)] text-white"
+                    : "border border-gray-200 text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                1
+              </button>
+              {page > 3 && <span className="px-1 text-gray-400">…</span>}
+              {Array.from({ length: 3 }, (_, i) => page - 1 + i)
+                .filter((p) => p > 1 && p < pages)
+                .map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setPage(p)}
+                    className={`h-8 min-w-8 rounded-md px-2 text-xs ${
+                      p === page
+                        ? "bg-[var(--accent-2)] text-white"
+                        : "border border-gray-200 text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+              {page < pages - 2 && <span className="px-1 text-gray-400">…</span>}
+              <button
+                onClick={() => setPage(pages)}
+                className={`h-8 min-w-8 rounded-md px-2 text-xs ${
+                  page === pages
+                    ? "bg-[var(--accent-2)] text-white"
+                    : "border border-gray-200 text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                {pages}
+              </button>
+            </div>
+          )}
+          <Button
+            variant="outline"
+            className="h-8 px-3 text-xs"
+            disabled={page >= pages}
+            onClick={() => setPage((p) => Math.min(pages, p + 1))}
+          >
+            Дараах
+          </Button>
+        </div>
+      </div>
 
       {/* Бараа нэмэх / засах */}
       <AddProductModal

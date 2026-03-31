@@ -5,7 +5,7 @@ import axios from "axios";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Trash2 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 
@@ -234,6 +234,9 @@ export default function ProductVariantModal({ open, onClose, productId, productN
             <DialogContent className="max-w-6xl w-full">
                 <DialogHeader>
                     <DialogTitle>Барааны төрлүүдийн мэдээлэл {productName && `(Нэр: ${productName})`}</DialogTitle>
+                    <DialogDescription>
+                        Барааны SKU төрлүүдийг нэмэх, засах, устгах.
+                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

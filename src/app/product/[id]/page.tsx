@@ -14,6 +14,14 @@ type ProductDetail = {
   material: string | null;
   image_url: string | null;
   images: string[];
+  variants: {
+    id: number;
+    sku: string | null;
+    attribute: Record<string, unknown> | null;
+    images: string[];
+    price: number | null;
+    stock: number | null;
+  }[];
   category_id: number | null;
   category_name: string | null;
   subcategory_name: string | null;
@@ -50,6 +58,10 @@ const fetchProduct = async (id: string): Promise<ProductDetail | null> => {
         where: { product_variant_id: null },
         orderBy: { id: "asc" },
       },
+      variants: {
+        orderBy: { id: "desc" },
+        include: { images: true },
+      },
     },
   });
 
@@ -65,6 +77,15 @@ const fetchProduct = async (id: string): Promise<ProductDetail | null> => {
     material: product.material,
     image_url: product.images?.[0]?.image_url ?? null,
     images: product.images?.map((img) => img.image_url) ?? [],
+    variants:
+      product.variants?.map((v) => ({
+        id: v.id,
+        sku: v.sku ?? null,
+        attribute: (v.attribute ?? null) as Record<string, unknown> | null,
+        images: v.images?.map((img) => img.image_url) ?? [],
+        price: v.price ?? null,
+        stock: v.stock ?? null,
+      })) ?? [],
     category_id: product.category_id ?? null,
     category_name: product.category?.category_name ?? null,
     subcategory_name: product.subcategory?.name ?? null,
