@@ -45,6 +45,7 @@ export default function OrderProductsSlider({ items, intervalMs = 4000 }: OrderP
           alt={current.name || "Product"}
           fill
           className="object-cover"
+          unoptimized
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
         <div className="absolute bottom-3 left-3 right-3 text-sm font-semibold text-white drop-shadow">

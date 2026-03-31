@@ -210,6 +210,17 @@ model AdminPromo {
   updated_at DateTime @updatedAt
 }
 
+model AdminStoreInfo {
+  id            Int      @id @default(autoincrement())
+  working_hours String?
+  phone         String?
+  email         String?
+  facebook_url  String?
+  address       String?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+}
+
 model AdminProduct {
   id             Int                  @id @default(autoincrement())
   name           String

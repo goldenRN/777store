@@ -53,7 +53,13 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
       <div className="rounded-2xl bg-white p-4 shadow">
         <div className="relative h-[420px] w-full overflow-hidden rounded-xl bg-[var(--sky-100)]">
           {activeImage ? (
-            <Image src={resolveImageUrl(activeImage)} alt={product.name} fill className="object-cover" />
+            <Image
+              src={resolveImageUrl(activeImage)}
+              alt={product.name}
+              fill
+              className="object-cover"
+              unoptimized
+            />
           ) : (
             <div className="grid h-full w-full place-items-center text-xs font-semibold text-[var(--navy-800)]">
               Image
@@ -75,6 +81,7 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
                   alt={`${product.name}-${idx}`}
                   fill
                   className="object-cover"
+                  unoptimized
                 />
               </button>
             ))}

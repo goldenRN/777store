@@ -32,6 +32,12 @@ export default function Header() {
     phone?: string;
     avatarUrl?: string;
   } | null>(null);
+  const [storeInfo, setStoreInfo] = useState<{
+    working_hours?: string;
+    phone?: string;
+    email?: string;
+    facebook_url?: string;
+  } | null>(null);
   const [categories, setCategories] = useState<
     { category_id: number; category_name: string; subcategories: { id: number; name: string }[] }[]
   >([]);
@@ -42,6 +48,13 @@ export default function Header() {
       .then((res) => res.json())
       .then((data) => setCategories(Array.isArray(data) ? data : []))
       .catch(() => setCategories([]));
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/store-info")
+      .then((r) => r.json())
+      .then((data) => setStoreInfo(data))
+      .catch(() => null);
   }, []);
 
   useEffect(() => {
@@ -98,16 +111,16 @@ export default function Header() {
           <div className="flex items-center gap-4 opacity-90">
             <span className="inline-flex items-center gap-2">
               <Phone size={16} />
-              7777-7777
+              {storeInfo?.phone || "7777-7777"}
             </span>
             •
             <span className="inline-flex items-center gap-2">
-              <Mail size={16} /> info@777.mn
+              <Mail size={16} /> {storeInfo?.email || "info@777.mn"}
             </span>
             •
             <span className="inline-flex items-center gap-2">
               <a
-                href="https://www.facebook.com/profile.php?id=61550729457619"
+                href={storeInfo?.facebook_url || "https://www.facebook.com/profile.php?id=61550729457619"}
                 target="_blank"
                 rel="noreferrer"
                 aria-label="Facebook"

@@ -62,6 +62,7 @@ export default function BannerSlider({ banners, intervalMs = 5000 }: BannerSlide
           fill
           className="object-cover"
           priority
+          unoptimized
         />
         <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-transparent" />
       </div>

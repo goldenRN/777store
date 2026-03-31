@@ -1,4 +1,23 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
 export default function Footer() {
+  const [storeInfo, setStoreInfo] = useState<{
+    working_hours?: string;
+    phone?: string;
+    email?: string;
+    facebook_url?: string;
+    address?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/store-info")
+      .then((r) => r.json())
+      .then((data) => setStoreInfo(data))
+      .catch(() => null);
+  }, []);
+
   return (
     <footer className="mt-10 border-t-[3px] border-[var(--accent-2)] bg-white text-black shadow-[0_-6px_20px_rgba(0,0,0,0.08)]">
       <div className="container mx-auto grid gap-10 px-6 py-12 lg:grid-cols-4 sm:grid-cols-2">
@@ -24,13 +43,18 @@ export default function Footer() {
             <li><a className="hover:text-[var(--accent-2)]" href="#">Бидний тухай</a></li>
             <li><a className="hover:text-[var(--accent-2)]" href="/terms">Үйлчилгээний нөхцөл</a></li>
             <li><a className="hover:text-[var(--accent-2)]" href="#">Нууцлалын бодлого</a></li>
+            {storeInfo?.facebook_url && (
+              <li><a className="hover:text-[var(--accent-2)]" href={storeInfo.facebook_url}>Facebook</a></li>
+            )}
           </ul>
         </div>
         <div>
           <h4 className="mb-3 text-sm font-bold">Хаяг, Байршил</h4>
           <ul className="list-disc space-y-2 pl-4 text-xs text-black/80">
-            <li>Улаанбаатар хот, БГД 3-р хороо</li>
-            <li>09:00 - 21:00</li>
+            <li>{storeInfo?.address || "Улаанбаатар хот, БГД 3-р хороо"}</li>
+            <li>{storeInfo?.working_hours || "09:00 - 21:00"}</li>
+            {storeInfo?.phone && <li>{storeInfo.phone}</li>}
+            {storeInfo?.email && <li>{storeInfo.email}</li>}
           </ul>
         </div>
       </div>

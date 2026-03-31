@@ -67,7 +67,7 @@ export default function ProductCard({
           className="relative flex h-[260px] w-full items-center justify-center overflow-hidden rounded-2xl bg-white"
         >
           {resolvedImage ? (
-            <Image src={resolvedImage} alt={name} fill className="object-contain" />
+            <Image src={resolvedImage} alt={name} fill className="object-contain" unoptimized />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
             <img src="/logo.png" alt="Logo" className="h-16 w-16 object-contain opacity-80" />
