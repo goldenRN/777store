@@ -55,7 +55,7 @@ export default function BannerSlider({ banners, intervalMs = 5000 }: BannerSlide
 
   return (
     <div className="relative w-full overflow-hidden bg-white shadow-2xl">
-      <div className="relative h-[400px] w-full">
+      <div className="relative h-[220px] sm:h-[320px] lg:h-[400px] w-full">
         <Image
           src={bannerImage}
           alt={current.description || "Banner"}

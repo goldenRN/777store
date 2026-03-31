@@ -27,6 +27,7 @@ export default function CartPage() {
   const [invoiceExpiry, setInvoiceExpiry] = useState<string | null>(null);
   const [invoiceStatus, setInvoiceStatus] = useState<string | null>(null);
   const [invoiceEnableExpiry, setInvoiceEnableExpiry] = useState<boolean | null>(null);
+  const [showBankApps, setShowBankApps] = useState(false);
   const totalCountdownMs = 60 * 60 * 1000;
   const [deliveryMethod, setDeliveryMethod] = useState<"delivery" | "pickup" | "">("");
   const [deliveryName, setDeliveryName] = useState("");
@@ -229,7 +230,7 @@ export default function CartPage() {
           ) : (
             <div className="mt-6 space-y-4">
               {items.map((item) => (
-                <div key={item.id} className="flex items-center gap-4 rounded-xl border p-3">
+                <div key={item.id} className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-xl border p-3">
                   <div className="relative h-16 w-16 overflow-hidden rounded-lg bg-[var(--sky-100)]">
                     {item.image_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -261,7 +262,7 @@ export default function CartPage() {
                       +
                     </button>
                   </div>
-                  <div className="w-24 text-right text-sm font-semibold">
+                  <div className="w-full sm:w-24 text-right text-sm font-semibold">
                     {(item.price * item.qty).toLocaleString()}₮
                   </div>
                   <button onClick={() => removeItem(item.id)} className="text-xs text-red-600">
@@ -352,7 +353,7 @@ export default function CartPage() {
           <div className="mt-6 rounded-2xl bg-white p-6 shadow">
             <div className="text-lg font-bold">QPay төлбөр</div>
             <div className="mt-4 grid gap-6 lg:grid-cols-2">
-              <div className="flex items-center justify-center">
+              <div className="flex flex-col items-center justify-center">
                 {qpay.qr_image ? (
                   <img
                     src={`data:image/png;base64,${qpay.qr_image}`}
@@ -362,24 +363,6 @@ export default function CartPage() {
                 ) : qpay.qr_text ? (
                   <div className="text-xs break-all">{qpay.qr_text}</div>
                 ) : null}
-              </div>
-              <div>
-                {qpay.deeplinks && qpay.deeplinks.length > 0 && (
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    {qpay.deeplinks.map((b) => (
-                      <a
-                        key={b.link}
-                        href={b.link}
-                        className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs"
-                      >
-                        {b.logo && (
-                          <img src={b.logo} alt={b.name} className="h-5 w-5" />
-                        )}
-                        <span>{b.description || b.name}</span>
-                      </a>
-                    ))}
-                  </div>
-                )}
                 <div className="mt-4">
                   <button
                     onClick={checkPayment}
@@ -392,6 +375,35 @@ export default function CartPage() {
                 {checkMessage && (
                   <div className="mt-3 rounded-xl bg-[var(--sky-50)] px-4 py-2 text-xs font-semibold text-black">
                     {checkMessage}
+                  </div>
+                )}
+              </div>
+              <div>
+                {qpay.deeplinks && qpay.deeplinks.length > 0 && (
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowBankApps((v) => !v)}
+                      className="w-full rounded-full bg-black px-4 py-2 text-xs font-semibold text-white"
+                    >
+                      Банкны апп-аар төлөх
+                    </button>
+                    {showBankApps && (
+                      <div className="mt-3 grid grid-cols-2 gap-3">
+                        {qpay.deeplinks.map((b) => (
+                          <a
+                            key={b.link}
+                            href={b.link}
+                            className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs"
+                          >
+                            {b.logo && (
+                              <img src={b.logo} alt={b.name} className="h-5 w-5" />
+                            )}
+                            <span>{b.description || b.name}</span>
+                          </a>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
                 {remainingMs !== null && (
@@ -439,7 +451,7 @@ export default function CartPage() {
                       />
                     </div>
                     <div className="mt-2 text-[11px] font-semibold text-[var(--navy-900)]">
-                      {remainingMs > 0 ? "QR хүчинтэй байна" : "Хугацаа дууссан"}
+                      {remainingMs > 0 ? "Хугацаа тоолж байна" : "Хугацаа дууссан"}
                     </div>
                     {activeExpiry && (
                       <div className="mt-2 text-[10px] text-[var(--gray-500)]">
@@ -455,7 +467,7 @@ export default function CartPage() {
                 )}
                 {remainingMs === null && invoiceStatus && (
                   <div className="mt-4 rounded-xl border bg-[var(--sky-50)] p-3 text-center text-xs">
-                    {invoiceStatus === "OPEN" ? "QR хүчинтэй байна" : `QPay төлөв: ${invoiceStatus}`}
+                    {`QPay төлөв: ${invoiceStatus}`}
                   </div>
                 )}
               </div>

@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
         }
       : {};
 
+  where.payment_status = "PAID";
   if (status) {
     where.status = status;
   }

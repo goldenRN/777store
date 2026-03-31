@@ -30,7 +30,7 @@ export async function GET(
   }
 
   const orders = await prisma.adminOrder.findMany({
-    where: { user_id: id },
+    where: { user_id: id, payment_status: "PAID" },
     orderBy: { created_at: "desc" },
     include: { items: true },
   });

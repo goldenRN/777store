@@ -38,6 +38,12 @@ function OrdersPageContent() {
   const [selected, setSelected] = useState<Order | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [statusOptions, setStatusOptions] = useState<{ id: number; name: string }[]>([]);
+  const resolveImageUrl = (url?: string | null) => {
+    if (!url) return "";
+    if (url.startsWith("http://") || url.startsWith("https://")) return url;
+    if (url.startsWith("/")) return url;
+    return `/uploads/${url}`;
+  };
 
   useEffect(() => {
     fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/status`)
@@ -131,10 +137,16 @@ function OrdersPageContent() {
 
                   <div className="mt-4 space-y-3">
                     {o.items.map((it) => (
-                      <div key={it.id} className="flex items-center gap-3">
+                      <div key={it.id} className="flex flex-col sm:flex-row sm:items-center gap-3">
                         <div className="relative h-12 w-12 overflow-hidden rounded-lg bg-[var(--sky-100)]">
                           {it.productImage ? (
-                            <Image src={it.productImage} alt={it.productName} fill className="object-cover" />
+                            <Image
+                              src={resolveImageUrl(it.productImage)}
+                              alt={it.productName}
+                              fill
+                              className="object-cover"
+                              unoptimized
+                            />
                           ) : null}
                         </div>
                         <div className="flex-1">
@@ -143,7 +155,7 @@ function OrdersPageContent() {
                             {it.qty}ш × {Number(it.unitPrice).toLocaleString()}₮
                           </div>
                         </div>
-                        <div className="text-sm font-semibold">
+                        <div className="text-sm font-semibold sm:text-right">
                           {(it.qty * it.unitPrice).toLocaleString()}₮
                         </div>
                       </div>
@@ -184,10 +196,16 @@ function OrdersPageContent() {
                 </div>
                 <div className="mt-4 space-y-3">
                   {selected.items.map((it) => (
-                    <div key={it.id} className="flex items-center gap-3">
+                    <div key={it.id} className="flex flex-col sm:flex-row sm:items-center gap-3">
                       <div className="relative h-12 w-12 overflow-hidden rounded-lg bg-[var(--sky-100)]">
                         {it.productImage ? (
-                          <Image src={it.productImage} alt={it.productName} fill className="object-cover" />
+                          <Image
+                            src={resolveImageUrl(it.productImage)}
+                            alt={it.productName}
+                            fill
+                            className="object-cover"
+                            unoptimized
+                          />
                         ) : null}
                       </div>
                       <div className="flex-1">

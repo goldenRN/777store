@@ -11,8 +11,8 @@ export async function GET(
     return NextResponse.json({ message: "Invalid id" }, { status: 400 });
   }
 
-  const order = await prisma.adminOrder.findUnique({
-    where: { id },
+  const order = await prisma.adminOrder.findFirst({
+    where: { id, payment_status: "PAID" },
     include: { items: true },
   });
 

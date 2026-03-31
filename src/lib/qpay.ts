@@ -77,7 +77,15 @@ export async function createInvoice(payload: Record<string, unknown>) {
     const text = await res.text();
     throw new Error(`QPay invoice error: ${res.status} ${text}`);
   }
-  return (await res.json()) as QPayInvoiceResponse;
+  const raw = (await res.json()) as any;
+  const normalized: QPayInvoiceResponse = {
+    invoice_id: raw.invoice_id,
+    qr_text: raw.qr_text ?? raw.qrText,
+    qr_image: raw.qr_image ?? raw.qrImage,
+    qPay_shortUrl: raw.qPay_shortUrl ?? raw.qpay_short_url ?? raw.short_url,
+    qPay_deeplink: raw.qPay_deeplink ?? raw.qpay_deeplink ?? raw.urls,
+  };
+  return normalized;
 }
 
 export async function cancelInvoice(invoiceId: string) {

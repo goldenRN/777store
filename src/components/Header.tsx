@@ -105,19 +105,19 @@ export default function Header() {
 
   return (
     <>
-      <div className="bg-[var(--accent-2)] text-white text-xs">
-        <div className="container mx-auto flex flex-wrap items-center justify-between gap-4 px-6 py-2">
-          <span>Чанартай бараа, Шуурхай захиалга</span>
-          <div className="flex items-center gap-4 opacity-90">
+      <div className="bg-[var(--accent-2)] text-white text-[10px] sm:text-xs">
+        <div className="container mx-auto flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-2">
+          <span className="hidden sm:inline">Чанартай бараа, Шуурхай захиалга</span>
+          <div className="flex flex-wrap items-center gap-3 opacity-90">
             <span className="inline-flex items-center gap-2">
               <Phone size={16} />
               {storeInfo?.phone || "7777-7777"}
             </span>
-            •
+            <span className="hidden sm:inline">•</span>
             <span className="inline-flex items-center gap-2">
               <Mail size={16} /> {storeInfo?.email || "info@777.mn"}
             </span>
-            •
+            <span className="hidden sm:inline">•</span>
             <span className="inline-flex items-center gap-2">
               <a
                 href={storeInfo?.facebook_url || "https://www.facebook.com/profile.php?id=61550729457619"}
@@ -135,7 +135,7 @@ export default function Header() {
       </div>
 
       <header className="sticky top-0 border-b-[3px] border-[var(--accent-2)] z-20 bg-white text-black shadow-md">
-        <div className="container mx-auto flex items-center justify-between gap-6 px-6 py-4">
+        <div className="container mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-4 px-4 sm:px-6 py-4">
           <Link href="/" className="flex items-center gap-3">
             <img src="/logo.png" alt="777 Family Store" className="h-12 w-12" />
             <div>
@@ -143,10 +143,10 @@ export default function Header() {
               <div className="text-xs opacity-70">Онлайн дэлгүүр</div>
             </div>
           </Link>
-          <div className="flex items-center gap-4 text-xs">
+          <div className="flex w-full flex-wrap items-center gap-4 text-xs md:w-auto md:justify-end">
             <form
               onSubmit={handleSearch}
-              className="flex w-full max-w-lg items-center gap-3 rounded-full border border-black bg-white px-4 mr-5 text-sm text-[var(--gray-700)] shadow-inner focus-within:border-red-500"
+              className="flex w-full md:w-[360px] items-center gap-3 rounded-full border border-black bg-white px-4 text-sm text-[var(--gray-700)] shadow-inner focus-within:border-red-500"
             >
               <Search size={16} />
               <input
@@ -206,7 +206,7 @@ export default function Header() {
                   {user.phone || "Хэрэглэгч"}
                 </span>
                 {userMenuOpen && (
-                  <div className="absolute left-1/2 top-full z-40 mt-3 w-52 -translate-x-1/2 rounded-2xl border bg-white p-3 text-xs shadow-xl">
+                  <div className="absolute left-1/2 top-full z-40 mt-3 w-52 max-w-[90vw] -translate-x-1/2 rounded-2xl border bg-white p-3 text-xs shadow-xl">
                     <div className="rounded-xl bg-[var(--sky-50)] px-3 py-2 text-center text-sm font-bold text-[var(--navy-900)]">
                       {user.phone || "Хэрэглэгч"}
                     </div>
@@ -267,7 +267,7 @@ export default function Header() {
       </header>
 
       <nav className="bg-white relative">
-        <div className="container mx-auto flex flex-wrap gap-6 px-6 py-3 text-sm font-semibold text-[var(--gray-700)]">
+        <div className="container mx-auto flex gap-4 overflow-x-auto whitespace-nowrap px-4 sm:px-6 py-3 text-sm font-semibold text-[var(--gray-700)] md:flex-wrap">
           <button
             onClick={() => setCategoryOpen((v) => !v)}
             className="inline-flex items-center gap-2 rounded-full px-4 text-sm font-semibold text-black hover:bg-[var(--sky-100)]"
