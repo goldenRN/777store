@@ -440,7 +440,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
     // 🧱 UI хэсэг
     return (
         <Modal open={open} onClose={handleClose}>
-            <div className="grid grid-cols-2 gap-8 p-2 h-full">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-2 h-full">
                 {/* -------- LEFT FORM -------- */}
                 <div className="space-y-4 overflow-auto p-2">
                     <h2 className="text-2xl font-bold mb-2">{editData ? "✏️ Бараа засах" : "🛍️ Шинэ бүтээгдэхүүн нэмэх"}</h2>
@@ -448,7 +448,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                     {!editData && initialType !== "live" && (
                         <div>
                             <Label>Ямар төрлийн бараа бүртгэх вэ?</Label>
-                            <div className="mt-2 grid grid-cols-2 gap-3">
+                            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <button
                                     type="button"
                                     onClick={() => handleModeSelect("ready")}
@@ -494,7 +494,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                         <Textarea name="description" value={form.description} onChange={handleChange} className="h-28 text-lg" />
                     </div>
 
-                    <div className="grid grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div>
                             <Label>Үнэ (₮)</Label>
                             <Input name="price" type="number" value={form.price} onChange={handleChange} className="h-12 text-lg" />
@@ -532,7 +532,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                     </div>
 
                     {(productMode === "ready" || forceReadyEdit) && (
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                             <div>
                                 <Label>Бодогдсон хямдрал (₮)</Label>
                                 <Input
@@ -583,7 +583,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                     )}
 
                     {(productMode === "ready" || forceReadyEdit) && (
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <Label>Ангилал</Label>
                                 <Select value={form.category_id} onValueChange={handleCategorySelect}>
@@ -617,7 +617,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                             </div>
                         </div>
                     )}
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <Label>Хэмжих нэгж</Label>
                             <Select value={form.unit_id} onValueChange={(v) => handleSelectWithName("unit_id", "unit_name", units, v)}>
@@ -634,7 +634,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                             </Select>
                         </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <Label>Брэнд</Label>
                             <Select value={form.brand_id} onValueChange={(v) => handleSelectWithName("brand_id", "brand_name", brands, v)}>
@@ -675,17 +675,17 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                     <div
                         onDrop={handleDrop}
                         onDragOver={(e) => e.preventDefault()}
-                        className="w-full h-40 border-2 border-dashed border-gray-400 rounded-xl flex items-center justify-center cursor-pointer mb-4"
+                        className="w-full h-32 sm:h-40 border-2 border-dashed border-gray-400 rounded-xl flex items-center justify-center cursor-pointer mb-4 text-center px-3 text-sm sm:text-base"
                         onClick={() => fileInputRef.current?.click()}
                     >
                         Зургаа энд чирээд эсвэл click хийж зураг оруулна
                     </div>
                     <Input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
 
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                         {form.images.map((img, index) => (
                             <div key={index} className="relative">
-                                <img src={img.preview} alt={`preview-${index}`} className="w-full h-40 object-cover rounded-xl border shadow-lg" />
+                                <img src={img.preview} alt={`preview-${index}`} className="w-full h-28 sm:h-36 object-cover rounded-xl border shadow-lg" />
                                 <Button
                                     type="button"
                                     onClick={() => removeImage(index)}
@@ -699,11 +699,11 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                 </div>
             </div>
 
-            <div className="sticky bottom-0 bg-white border-t pt-3 flex justify-end gap-3 mt-6 pb-3">
-                <Button variant="outline" onClick={handleClose} className="h-12 px-6 text-base">
+            <div className="sticky bottom-0 bg-white border-t pt-3 flex flex-col sm:flex-row justify-end gap-3 mt-6 pb-3">
+                <Button variant="outline" onClick={handleClose} className="h-12 px-6 text-base w-full sm:w-auto">
                     Хаах
                 </Button>
-                <Button onClick={handleSubmit} disabled={loading} className="h-12 px-6 text-base">
+                <Button onClick={handleSubmit} disabled={loading} className="h-12 px-6 text-base w-full sm:w-auto">
                     {loading ? "Хадгалж байна..." : editData ? "Засах" : "Хадгалах"}
                 </Button>
             </div>
