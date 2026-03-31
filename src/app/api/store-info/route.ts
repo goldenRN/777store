@@ -12,7 +12,7 @@ type StoreInfoRow = {
 
 async function hasStoreInfoTable(): Promise<boolean> {
   const rows = await prisma.$queryRaw<{ exists: string | null }[]>`
-    SELECT to_regclass('public."AdminStoreInfo"') as exists
+    SELECT to_regclass('public."AdminStoreInfo"')::text as exists
   `;
   return Boolean(rows?.[0]?.exists);
 }
@@ -80,9 +80,9 @@ export async function PUT(request: NextRequest) {
   } else {
     await prisma.$executeRaw`
       INSERT INTO "AdminStoreInfo"
-        (working_hours, phone, email, facebook_url, address)
+        (working_hours, phone, email, facebook_url, address, created_at, updated_at)
       VALUES
-        (${working_hours}, ${phone}, ${email}, ${facebook_url}, ${address})
+        (${working_hours}, ${phone}, ${email}, ${facebook_url}, ${address}, NOW(), NOW())
     `;
   }
 

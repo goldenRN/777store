@@ -75,7 +75,7 @@ const BrandPage = () => {
   };
 
   return (
-    <div className="w-[calc(100vw-300px)] p-4">
+    <div className="w-full p-4 md:p-6">
       <div className="flex justify-between items-center bg-white sticky top-0 z-10 p-2 mb-4">
         <BackButton text="Буцах" link="/admin/dashboard" />
         <button

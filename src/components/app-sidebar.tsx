@@ -3,7 +3,6 @@
 import * as React from "react"
 
 import { NavMain } from "@/components/nav-main"
-import { NavProjects } from "@/components/nav-projects"
 import { NavSecondary } from "@/components/nav-secondary"
 import { NavUser } from "@/components/nav-user"
 import Image from 'next/image';
@@ -60,20 +59,37 @@ const data = {
       icon: <VideoIcon />,
       items: [
         { title: "Live бүртгэл", url: "/admin/live" },
-        { title: "Live бараа", url: "/admin/products?type=live" },
+        { title: "Live бараа", url: "/admin/live" },
+      ],
+    },
+    {
+      title: "Тохиргоо",
+      url: "/admin/settings/store-info",
+      icon: <Settings2Icon />,
+      items: [
+        { title: "Мэдээлэл шинэчлэх", url: "/admin/settings/store-info" },
+        { title: "Нууц үг солих", url: "/admin/settings/password" },
+      ],
+    },
+    {
+      title: "Бүртгэл",
+      url: "/admin/category",
+      icon: <ListPlusIcon />,
+      items: [
+        { title: "Ангилал", url: "/admin/category" },
+        { title: "Дэд ангилал", url: "/admin/subCategory" },
+        { title: "Төлөв", url: "/admin/state" },
+        { title: "Төрөл", url: "/admin/type" },
+        { title: "Брэнд", url: "/admin/brand" },
+        { title: "Хэмжих нэгж", url: "/admin/units" },
+        { title: "Баннер", url: "/admin/banner" },
+        { title: "Хэрэглэгчид", url: "/admin/users" },
+        { title: "Онцгой хямдрал", url: "/admin/promo" },
       ],
     },
   ],
 
   navSecondary: [
-    {
-      title: "Нууц үг солих",
-      url: "/admin/settings",
-      icon: (
-        <LockIcon
-        />
-      ),
-    },
     {
       title: "Гарах",
       url: "#",
@@ -83,80 +99,7 @@ const data = {
       ),
     },
   ],
-  projects: [
-    {
-      name: "Ангилал",
-      url: "/admin/category",
-      icon: (
-        <ListPlusIcon
-        />
-      ),
-    },
-    {
-      name: "Дэд ангилал",
-      url: "/admin/subCategory",
-      icon: (
-        <ListPlusIcon
-        />
-      ),
-    },
-    {
-      name: "Төлөв",
-      url: "/admin/state",
-      icon: (
-        <ListPlusIcon
-        />
-      ),
-    },
-    {
-      name: "Төрөл",
-      url: "/admin/type",
-      icon: (
-        <ListPlusIcon
-        />
-      ),
-    },
-    {
-      name: "Брэнд",
-      url: "/admin/brand",
-      icon: (
-        <ListPlusIcon
-        />
-      ),
-    },
-    {
-      name: "Хэмжих нэгж",
-      url: "/admin/units",
-      icon: (
-        <ListPlusIcon
-        />
-      ),
-    },
-    {
-      name: "Баннер",
-      url: "/admin/banner",
-      icon: (
-        <ListPlusIcon
-        />
-      ),
-    },
-    {
-      name: "Хэрэглэгчид",
-      url: "/admin/users",
-      icon: (
-        <ListPlusIcon
-        />
-      ),
-    },
-    {
-      name: "Онцгой хямдрал",
-      url: "/admin/promo",
-      icon: (
-        <ListPlusIcon
-        />
-      ),
-    },
-  ],
+  projects: [],
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -182,7 +125,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
-        <NavProjects projects={data.projects} />
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>

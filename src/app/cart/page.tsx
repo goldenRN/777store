@@ -100,11 +100,31 @@ export default function CartPage() {
     try {
       const raw = localStorage.getItem("user");
       if (!raw) return null;
-      return JSON.parse(raw) as { id?: string; name?: string; phone?: string };
+      return JSON.parse(raw) as { id?: string; name?: string; phone?: string; address?: string };
     } catch {
       return null;
     }
   })();
+
+  useEffect(() => {
+    if (deliveryMethod !== "delivery" || !user?.id) return;
+    // If already filled, skip
+    if (deliveryName && deliveryPhone && deliveryAddress) return;
+
+    const fillFromUser = async () => {
+      try {
+        const res = await fetch(`/api/users/${user.id}`);
+        const data = await res.json();
+        const u = data?.user ?? {};
+        if (!deliveryName) setDeliveryName(u.name || user.name || "");
+        if (!deliveryPhone) setDeliveryPhone(u.phone || user.phone || "");
+        if (!deliveryAddress) setDeliveryAddress(u.address || user.address || "");
+      } catch {
+        // ignore
+      }
+    };
+    fillFromUser();
+  }, [deliveryMethod, user?.id, deliveryName, deliveryPhone, deliveryAddress, user?.name, user?.phone, user?.address]);
 
   const normalizeType = (name?: string | null) => {
     const t = (name || "").toLowerCase();

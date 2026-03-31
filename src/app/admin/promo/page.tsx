@@ -58,7 +58,7 @@ export default function PromoPage() {
   };
 
   return (
-    <div className="w-[calc(100vw-300px)] p-4">
+    <div className="w-full p-4 md:p-6">
       <div className="mb-4 rounded-2xl bg-white p-4 shadow">
         <h2 className="text-xl font-bold">Онцгой хямдралын текст</h2>
         <p className="text-sm text-muted-foreground">Нүүр хуудсан дээрх хар блокийн текстүүд.</p>

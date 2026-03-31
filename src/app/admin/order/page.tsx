@@ -102,16 +102,16 @@ export default function AdminOrdersTable() {
   });
 
   return (
-    <div className="w-full mx-auto p-6">
-      <div className="flex items-center justify-between mb-4">
+    <div className="w-full mx-auto p-4 md:p-6">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
         <h1 className="text-2xl font-semibold">{titleLabel}</h1>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Нэр / Имэйл / ID хайх..."
-            className="border rounded px-3 py-1 text-sm"
+            className="border rounded px-3 py-1 text-sm w-full sm:w-64"
           />
           <button onClick={onSearch} className="bg-blue-600 text-white px-3 py-1 rounded">Хайх</button>
           {/* <button onClick={exportCSV} className="bg-gray-700 text-white px-3 py-1 rounded">Export CSV</button> */}
