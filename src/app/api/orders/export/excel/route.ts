@@ -40,12 +40,12 @@ export async function GET() {
     ].join(",");
   });
 
-  const csv = [header.join(","), ...rows].join("\n");
+  const csv = "\uFEFF" + [header.join(","), ...rows].join("\n");
 
   return new NextResponse(csv, {
     headers: {
-      "Content-Type": "application/vnd.ms-excel; charset=utf-8",
-      "Content-Disposition": "attachment; filename=orders.xls",
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": "attachment; filename=orders.csv",
     },
   });
 }

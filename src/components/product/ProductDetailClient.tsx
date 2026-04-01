@@ -118,11 +118,7 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
     return merged || v.sku || `SKU-${v.id}`;
   };
 
-  const isMobile = typeof window !== "undefined" && /android|iphone|ipad|ipod/i.test(navigator.userAgent);
-  const fbDeeplink = useMemo(() => {
-    if (!product.video_url) return "";
-    return `fb://facewebmodal/f?href=${encodeURIComponent(product.video_url)}`;
-  }, [product.video_url]);
+  // keep simple: use normal https link so mobile can open FB app via universal link
 
   const selectedVariantLabel = selectedVariant ? variantLabel(selectedVariant) : null;
 
@@ -197,7 +193,7 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
         {product.video_url && (
           <div className="mt-4">
             <a
-              href={isMobile ? fbDeeplink : product.video_url}
+              href={product.video_url}
               data-fb-video="true"
               target="_blank"
               rel="noreferrer"
