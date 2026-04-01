@@ -17,6 +17,7 @@ export async function GET() {
     id: p.id,
     name: p.name,
     description: p.description,
+    video_url: p.video_url ?? null,
     price: p.price,
     discount_price: p.discount_price,
     stock: p.stock,
@@ -47,6 +48,7 @@ export async function POST(request: Request) {
   const body = await request.json();
   const name = String(body?.name ?? "").trim();
   const description = String(body?.description ?? "").trim();
+  const video_url = String(body?.video_url ?? "").trim();
   const price = Math.round(Number(body?.price ?? 0));
   const discount_price =
     body?.discount_price != null ? Math.round(Number(body.discount_price)) : null;
@@ -71,6 +73,7 @@ export async function POST(request: Request) {
     data: {
       name,
       description: description || null,
+      video_url: video_url || null,
       price,
       discount_price: discount_price ?? null,
       stock,

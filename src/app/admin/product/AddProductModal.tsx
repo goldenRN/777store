@@ -29,6 +29,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
     const [form, setForm] = useState({
         name: "",
         description: "",
+        video_url: "",
         price: "",
         discount_price: "",
         stock: "",
@@ -103,6 +104,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                 ...prev,
                 ...editData,
                 price: editData.price?.toString() || "",
+                video_url: editData.video_url?.toString() || "",
                 discount_price: editData.discount_price?.toString() || "",
                 stock: editData.stock?.toString() || "",
                 material: editData.material?.toString() || "",
@@ -225,6 +227,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
         setForm({
             name: "",
             description: "",
+            video_url: "",
             price: "",
             discount_price: "",
             stock: "",
@@ -394,6 +397,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
             const payload = {
                 name: form.name,
                 description: form.description,
+                video_url: form.video_url,
                 category_id: (productMode === "ready" || forceReadyEdit) ? form.category_id : null,
                 category_name: (productMode === "ready" || forceReadyEdit) ? form.category_name : "",
                 subcategory_id: (productMode === "ready" || forceReadyEdit) ? form.subcategory_id : null,
@@ -492,6 +496,16 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                     <div>
                         <Label>Тайлбар</Label>
                         <Textarea name="description" value={form.description} onChange={handleChange} className="h-28 text-lg" />
+                    </div>
+                    <div>
+                        <Label>Видео линк (YouTube/Facebook/Instagram)</Label>
+                        <Input
+                            name="video_url"
+                            value={form.video_url}
+                            onChange={handleChange}
+                            className="h-12 text-lg"
+                            placeholder="https://..."
+                        />
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

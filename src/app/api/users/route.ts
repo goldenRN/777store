@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
   const userIds = users.map((u) => u.id);
   const orderAgg = await prisma.adminOrder.groupBy({
     by: ["user_id"],
-    where: { user_id: { in: userIds } },
+    where: { user_id: { in: userIds }, payment_status: "PAID" },
     _count: { _all: true },
     _sum: { total: true },
   });

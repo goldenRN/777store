@@ -12,6 +12,8 @@ type ProductCardProps = {
   description?: string | null;
   price: number;
   discount_price: number | null;
+  stock?: number | null;
+  ordered_qty?: number | null;
   image_url: string | null;
   type_name?: string | null;
   type_has_duration?: boolean;
@@ -34,6 +36,8 @@ export default function ProductCard({
   description,
   price,
   discount_price,
+  stock,
+  ordered_qty,
   image_url,
   type_name,
   type_has_duration,
@@ -66,6 +70,10 @@ export default function ProductCard({
     const endMs = new Date(created_at).getTime() + duration_hours * 60 * 60 * 1000;
     return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ulaanbaatar" }).format(new Date(endMs));
   })();
+  const t = String(type_name || "").toLowerCase();
+  const isPreorderLive =
+    t.includes("захиал") || t.includes("preorder") || t.includes("урьдчил") || t.includes("лайв") || t.includes("live");
+  const remaining = Math.max(0, Number(stock || 0) - Number(ordered_qty || 0));
 
   const variantLabel = (v: Variant) => {
     const attr = (v.attribute || {}) as Record<string, unknown>;
@@ -203,7 +211,7 @@ export default function ProductCard({
           </button>
 
         </div>
-        {type_has_duration && (
+        {type_has_duration && duration_hours && (
           <>
             <div className="mt-3 text-center text-xs text-[var(--gray-500)]">
               Дуусах огноо: {endDate || "тохируулгагүй"}
@@ -214,6 +222,12 @@ export default function ProductCard({
               </div>
             </div>
           </>
+        )}
+        {isPreorderLive && (!duration_hours || duration_hours === 0) && Number(stock || 0) > 0 && (
+          <div className="mt-3 text-center text-xs text-[var(--gray-500)]">
+            Захиалах үлдэгдэл:{" "}
+            <span className="font-semibold text-[var(--navy-900)]">{remaining}</span>
+          </div>
         )}
       </div>
 

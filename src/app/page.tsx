@@ -11,6 +11,8 @@ type PublicProduct = {
   description?: string | null;
   price: number;
   discount_price: number | null;
+  stock?: number | null;
+  ordered_qty?: number | null;
   image_url: string | null;
   type_has_duration?: boolean;
   duration_hours?: number | null;
@@ -140,6 +142,8 @@ export default async function Home() {
                   description={item.description}
                   price={item.price}
                   discount_price={item.discount_price}
+                  stock={item.stock}
+                  ordered_qty={item.ordered_qty}
                   image_url={item.image_url}
                   type_name={item.type_name}
                   type_has_duration={item.type_has_duration}
@@ -173,6 +177,8 @@ export default async function Home() {
                   description={item.description}
                   price={item.price}
                   discount_price={item.discount_price}
+                  stock={item.stock}
+                  ordered_qty={item.ordered_qty}
                   image_url={item.image_url}
                   type_name={item.type_name}
                   type_has_duration={item.type_has_duration}
@@ -218,6 +224,8 @@ export default async function Home() {
                     description={item.description}
                     price={item.price}
                     discount_price={item.discount_price}
+                    stock={item.stock}
+                    ordered_qty={item.ordered_qty}
                     image_url={item.image_url}
                     type_name={item.type_name}
                     type_has_duration={item.type_has_duration}
@@ -252,6 +260,8 @@ export default async function Home() {
                   description={item.description}
                   price={item.price}
                   discount_price={item.discount_price}
+                  stock={item.stock}
+                  ordered_qty={item.ordered_qty}
                   image_url={item.image_url}
                   type_name={item.type_name}
                   type_has_duration={item.type_has_duration}

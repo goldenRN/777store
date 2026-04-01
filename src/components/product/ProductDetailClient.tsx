@@ -9,9 +9,11 @@ type ProductDetail = {
   id: number;
   name: string;
   description: string | null;
+  video_url?: string | null;
   price: number;
   discount_price: number | null;
   stock: number;
+  ordered_qty?: number | null;
   material: string | null;
   image_url: string | null;
   images: string[];
@@ -67,6 +69,19 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
     return product.stock;
   }, [selectedVariant, product.stock]);
 
+  const isPreorderLive = useMemo(() => {
+    const t = String(product.type_name || "").toLowerCase();
+    return (
+      t.includes("захиал") ||
+      t.includes("preorder") ||
+      t.includes("урьдчил") ||
+      t.includes("лайв") ||
+      t.includes("live")
+    );
+  }, [product.type_name]);
+
+  const remainingQty = Math.max(0, Number(product.stock || 0) - Number(product.ordered_qty || 0));
+
   const baseImages = useMemo(() => {
     const list = [product.image_url, ...product.images].filter(Boolean) as string[];
     return Array.from(new Set(list));
@@ -118,8 +133,9 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
               unoptimized
             />
           ) : (
-            <div className="grid h-full w-full place-items-center text-xs font-semibold text-[var(--navy-800)]">
-              Image
+            <div className="grid h-full w-full place-items-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="Logo" className="h-16 w-16 object-contain opacity-80" />
             </div>
           )}
         </div>
@@ -170,6 +186,18 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
         <div className="mt-4 text-sm text-[var(--gray-700)]">
           {product.description || "Тайлбар байхгүй."}
         </div>
+        {product.video_url && (
+          <div className="mt-4">
+            <a
+              href={product.video_url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-100"
+            >
+              Видео үзэх
+            </a>
+          </div>
+        )}
 
         <div className="mt-4 grid gap-2 text-xs text-[var(--gray-600)]">
           {product.category_name && (
@@ -183,7 +211,7 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
               Төрөл: <span className="font-semibold text-[var(--navy-900)]">{product.type_name}</span>
             </div>
           )}
-          {product.type_has_duration && (
+          {product.type_has_duration && product.duration_hours && (
             <div>
               Дуусах огноо:{" "}
               <span className="font-semibold text-[var(--navy-900)]">
@@ -194,6 +222,12 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
           <div>
             Үлдэгдэл: <span className="font-semibold text-[var(--navy-900)]">{displayStock}</span>
           </div>
+          {isPreorderLive && (!product.duration_hours || product.duration_hours === 0) && Number(product.stock || 0) > 0 && (
+            <div>
+              Захиалах үлдэгдэл:{" "}
+              <span className="font-semibold text-[var(--navy-900)]">{remainingQty}</span>
+            </div>
+          )}
           {product.material && (
             <div>
               Материал: <span className="font-semibold text-[var(--navy-900)]">{product.material}</span>

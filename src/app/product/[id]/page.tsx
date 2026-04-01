@@ -3,14 +3,17 @@ import Footer from "@/components/Footer";
 import { prisma } from "@/lib/prisma";
 import ProductDetailClient from "@/components/product/ProductDetailClient";
 import ProductCard from "@/components/ProductCard";
+import { headers } from "next/headers";
 
 type ProductDetail = {
   id: number;
   name: string;
   description: string | null;
+  video_url?: string | null;
   price: number;
   discount_price: number | null;
   stock: number;
+  ordered_qty?: number | null;
   material: string | null;
   image_url: string | null;
   images: string[];
@@ -37,11 +40,28 @@ type RelatedProduct = {
   description: string | null;
   price: number;
   discount_price: number | null;
+  stock?: number | null;
+  ordered_qty?: number | null;
   image_url: string | null;
   type_name?: string | null;
   type_has_duration?: boolean;
   duration_hours?: number | null;
   created_at?: string | null;
+};
+
+const getBaseUrl = () => {
+  if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL;
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+  const host = headers().get("host");
+  const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
+  return host ? `${protocol}://${host}` : "";
+};
+
+const resolveImageUrl = (base: string, url?: string | null) => {
+  if (!url) return "";
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  if (url.startsWith("/")) return `${base}${url}`;
+  return `${base}/uploads/${url}`;
 };
 
 const fetchProduct = async (id: string): Promise<ProductDetail | null> => {
@@ -71,9 +91,11 @@ const fetchProduct = async (id: string): Promise<ProductDetail | null> => {
     id: product.id,
     name: product.name,
     description: product.description,
+    video_url: product.video_url ?? null,
     price: product.price,
     discount_price: product.discount_price,
     stock: product.stock,
+    ordered_qty: product.ordered_qty,
     material: product.material,
     image_url: product.images?.[0]?.image_url ?? null,
     images: product.images?.map((img) => img.image_url) ?? [],
@@ -95,6 +117,40 @@ const fetchProduct = async (id: string): Promise<ProductDetail | null> => {
     created_at: product.created_at?.toISOString() ?? null,
   };
 };
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const resolved = await params;
+  const product = await fetchProduct(resolved.id);
+  if (!product) {
+    return {
+      title: "Бараа олдсонгүй",
+    };
+  }
+
+  const base = getBaseUrl();
+  const imageUrl = resolveImageUrl(base, product.image_url || product.images?.[0]);
+  const title = product.name || "Бараа";
+  const description =
+    product.description?.trim() ||
+    `${title} - ${Number(product.discount_price ?? product.price).toLocaleString()}₮`;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: "article",
+      images: imageUrl ? [{ url: imageUrl }] : [],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: imageUrl ? [imageUrl] : [],
+    },
+  };
+}
 
 export default async function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolved = await params;
@@ -133,6 +189,8 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     description: p.description,
     price: p.price,
     discount_price: p.discount_price,
+    stock: p.stock,
+    ordered_qty: p.ordered_qty,
     image_url: p.images?.[0]?.image_url ?? null,
     type_name: p.type?.name ?? null,
     type_has_duration: p.type?.has_duration ?? false,
@@ -157,6 +215,8 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 description={item.description}
                 price={item.price}
                 discount_price={item.discount_price}
+                stock={item.stock}
+                ordered_qty={item.ordered_qty}
                 image_url={item.image_url}
                 type_name={item.type_name}
                 type_has_duration={item.type_has_duration}

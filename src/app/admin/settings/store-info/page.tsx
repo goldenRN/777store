@@ -13,6 +13,7 @@ const StoreInfoPage = () => {
     phone: "",
     email: "",
     facebook_url: "",
+    instagram_url: "",
     address: "",
   });
 
@@ -27,6 +28,7 @@ const StoreInfoPage = () => {
           phone: data?.phone ?? "",
           email: data?.email ?? "",
           facebook_url: data?.facebook_url ?? "",
+          instagram_url: data?.instagram_url ?? "",
           address: data?.address ?? "",
         });
       } catch {
@@ -108,6 +110,15 @@ const StoreInfoPage = () => {
                 onChange={(e) => setForm({ ...form, facebook_url: e.target.value })}
                 className="mt-2 w-full rounded-xl border px-4 py-3 text-sm"
                 placeholder="https://facebook.com/..."
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[var(--gray-700)]">Instagram холбоос</label>
+              <input
+                value={form.instagram_url}
+                onChange={(e) => setForm({ ...form, instagram_url: e.target.value })}
+                className="mt-2 w-full rounded-xl border px-4 py-3 text-sm"
+                placeholder="https://instagram.com/..."
               />
             </div>
             <div className="md:col-span-2">

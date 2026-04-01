@@ -29,6 +29,7 @@ export async function PUT(
   const body = await request.json();
   const name = String(body?.name ?? "").trim();
   const description = String(body?.description ?? "").trim();
+  const video_url = String(body?.video_url ?? "").trim();
   const price = Math.round(Number(body?.price ?? 0));
   const discount_price =
     body?.discount_price != null ? Math.round(Number(body.discount_price)) : null;
@@ -54,6 +55,7 @@ export async function PUT(
     data: {
       name,
       description: description || null,
+      video_url: video_url || null,
       price,
       discount_price: discount_price ?? null,
       stock,

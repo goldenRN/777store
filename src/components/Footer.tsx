@@ -8,6 +8,7 @@ export default function Footer() {
     phone?: string;
     email?: string;
     facebook_url?: string;
+    instagram_url?: string;
     address?: string;
   } | null>(null);
 
@@ -45,6 +46,9 @@ export default function Footer() {
             <li><a className="hover:text-[var(--accent-2)]" href="#">Нууцлалын бодлого</a></li>
             {storeInfo?.facebook_url && (
               <li><a className="hover:text-[var(--accent-2)]" href={storeInfo.facebook_url}>Facebook</a></li>
+            )}
+            {storeInfo?.instagram_url && (
+              <li><a className="hover:text-[var(--accent-2)]" href={storeInfo.instagram_url}>Instagram</a></li>
             )}
           </ul>
         </div>

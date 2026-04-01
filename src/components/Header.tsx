@@ -37,6 +37,7 @@ export default function Header() {
     phone?: string;
     email?: string;
     facebook_url?: string;
+    instagram_url?: string;
   } | null>(null);
   const [categories, setCategories] = useState<
     { category_id: number; category_name: string; subcategories: { id: number; name: string }[] }[]
@@ -128,7 +129,15 @@ export default function Header() {
               >
                 <FacebookIcon size={16} />
               </a>
-              <InstagramIcon size={16} />
+              <a
+                href={storeInfo?.instagram_url || "#"}
+                target={storeInfo?.instagram_url ? "_blank" : undefined}
+                rel={storeInfo?.instagram_url ? "noreferrer" : undefined}
+                aria-label="Instagram"
+                className={`inline-flex items-center ${storeInfo?.instagram_url ? "" : "pointer-events-none opacity-60"}`}
+              >
+                <InstagramIcon size={16} />
+              </a>
             </span>
           </div>
         </div>

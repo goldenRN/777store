@@ -7,6 +7,15 @@ export async function GET(request: NextRequest) {
   const limit = Math.max(Number(searchParams.get("limit") ?? 20), 1);
   const q = (searchParams.get("q") ?? "").trim();
   const status = (searchParams.get("status") ?? "").trim();
+  const payment = (searchParams.get("payment") ?? "").trim().toUpperCase();
+
+  // auto cleanup: unpaid + expired
+  await prisma.adminOrder.deleteMany({
+    where: {
+      payment_status: "UNPAID",
+      payment_expires_at: { not: null, lt: new Date() },
+    },
+  });
 
   const where: Record<string, unknown> =
     q.length > 0
@@ -20,7 +29,11 @@ export async function GET(request: NextRequest) {
         }
       : {};
 
-  where.payment_status = "PAID";
+  if (payment === "UNPAID") {
+    where.payment_status = "UNPAID";
+  } else {
+    where.payment_status = "PAID";
+  }
   if (status) {
     where.status = status;
   }

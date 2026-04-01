@@ -225,6 +225,7 @@ model AdminProduct {
   id             Int                  @id @default(autoincrement())
   name           String
   description    String?
+  video_url      String?
   price          Int
   discount_price Int?
   stock          Int

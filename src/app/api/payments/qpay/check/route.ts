@@ -17,8 +17,12 @@ export async function GET(request: NextRequest) {
 
   // expiry check
   if (order.payment_expires_at && new Date(order.payment_expires_at) < new Date()) {
+    if (order.payment_status !== "PAID") {
+      await prisma.adminOrder.delete({ where: { id: order.id } });
+    }
     return NextResponse.json({
       status: "EXPIRED",
+      deleted: order.payment_status !== "PAID",
       ...(debug
         ? {
             now: new Date().toISOString(),

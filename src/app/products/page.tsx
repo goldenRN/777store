@@ -9,6 +9,8 @@ type PublicProduct = {
   description?: string | null;
   price: number;
   discount_price: number | null;
+  stock?: number | null;
+  ordered_qty?: number | null;
   image_url: string | null;
   type_name?: string | null;
   type_has_duration?: boolean;
