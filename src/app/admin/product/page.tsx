@@ -217,6 +217,17 @@ const ProductPage = () => {
     }
   };
 
+  const handleCopyLink = async (productId: number) => {
+    try {
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const url = `${origin}/product/${productId}`;
+      await navigator.clipboard.writeText(url);
+      alert("Линк хууллаа");
+    } catch {
+      alert("Линк хуулж чадсангүй");
+    }
+  };
+
   const openStatusModal = (p: Product) => {
     setStatusTarget(p);
     setCargoInput(p.cargo_fee != null ? String(p.cargo_fee) : "");
@@ -463,6 +474,13 @@ const ProductPage = () => {
                           onClick={() => handleViewImages(p.id)}
                         >
                           🖼️
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleCopyLink(p.id)}
+                        >
+                          🔗
                         </Button>
 
                         {/* Бараа засах */}

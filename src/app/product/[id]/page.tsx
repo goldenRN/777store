@@ -49,10 +49,11 @@ type RelatedProduct = {
   created_at?: string | null;
 };
 
-const getBaseUrl = () => {
+const getBaseUrl = async () => {
   if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL;
   if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
-  const host = headers().get("host");
+  const headerList = await headers();
+  const host = headerList.get("host");
   const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
   return host ? `${protocol}://${host}` : "";
 };
@@ -127,7 +128,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     };
   }
 
-  const base = getBaseUrl();
+  const base = await getBaseUrl();
   const imageUrl = resolveImageUrl(base, product.image_url || product.images?.[0]);
   const title = product.name || "Бараа";
   const description =

@@ -118,6 +118,12 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
     return merged || v.sku || `SKU-${v.id}`;
   };
 
+  const isMobile = typeof window !== "undefined" && /android|iphone|ipad|ipod/i.test(navigator.userAgent);
+  const fbDeeplink = useMemo(() => {
+    if (!product.video_url) return "";
+    return `fb://facewebmodal/f?href=${encodeURIComponent(product.video_url)}`;
+  }, [product.video_url]);
+
   const selectedVariantLabel = selectedVariant ? variantLabel(selectedVariant) : null;
 
   return (
@@ -189,7 +195,8 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
         {product.video_url && (
           <div className="mt-4">
             <a
-              href={product.video_url}
+              href={isMobile ? fbDeeplink : product.video_url}
+              data-fb-video="true"
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-100"
