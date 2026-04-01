@@ -199,7 +199,7 @@ export default function ProductCard({
               {Number(finalPrice).toLocaleString()}₮
             </div>
 
-            {discount_price && discount_price < price && (
+            {discount_price != null && discount_price > 0 && discount_price < price && (
               <div className="text-sm text-[var(--gray-400)] line-through">
                 {price.toLocaleString()}₮
               </div>
@@ -219,7 +219,7 @@ export default function ProductCard({
           </button>
 
         </div>
-        {type_has_duration && duration_hours && (
+        {type_has_duration && duration_hours ? (
           <>
             <div className="mt-3 text-center text-xs text-[var(--gray-500)]">
               Дуусах огноо: {endDate || "тохируулгагүй"}
@@ -230,12 +230,18 @@ export default function ProductCard({
               </div>
             </div>
           </>
-        )}
+        ) : null}
         {isPreorderLive && (!duration_hours || duration_hours === 0) && Number(stock || 0) > 0 && (
-          <div className="mt-3 text-center text-xs text-[var(--gray-500)]">
-            Захиалах үлдэгдэл:{" "}
-            <span className="font-semibold text-[var(--navy-900)]">{remaining}</span>
-          </div>
+          remaining > 0 ? (
+            <div className="mt-3 text-center text-xs text-[var(--gray-500)]">
+              Захиалга авах тоо:{" "}
+              <span className="font-semibold text-[var(--navy-900)]">{remaining}</span>
+            </div>
+          ) : (
+            <div className="mt-3 text-center text-xs font-semibold text-red-600">
+              Захиалга хаагдсан
+            </div>
+          )
         )}
       </div>
 

@@ -182,7 +182,9 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
             {Number(finalPrice).toLocaleString()}₮
           </span>
           {(!selectedVariant || selectedVariant.price == null) &&
-            product.discount_price && product.discount_price < product.price && (
+            product.discount_price != null &&
+            product.discount_price > 0 &&
+            product.discount_price < product.price && (
             <span className="ml-3 text-sm text-[var(--gray-500)] line-through">
               {product.price.toLocaleString()}₮
             </span>
@@ -218,22 +220,26 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
               Төрөл: <span className="font-semibold text-[var(--navy-900)]">{product.type_name}</span>
             </div>
           )}
-          {product.type_has_duration && product.duration_hours && (
+          {product.type_has_duration ? (
             <div>
               Дуусах огноо:{" "}
               <span className="font-semibold text-[var(--navy-900)]">
                 {endDate || "тохируулгагүй"}
               </span>
             </div>
-          )}
+          ) : null}
           <div>
             Үлдэгдэл: <span className="font-semibold text-[var(--navy-900)]">{displayStock}</span>
           </div>
           {isPreorderLive && (!product.duration_hours || product.duration_hours === 0) && Number(product.stock || 0) > 0 && (
-            <div>
-              Захиалах үлдэгдэл:{" "}
-              <span className="font-semibold text-[var(--navy-900)]">{remainingQty}</span>
-            </div>
+            remainingQty > 0 ? (
+              <div>
+                Захиалга авах тоо:{" "}
+                <span className="font-semibold text-[var(--navy-900)]">{remainingQty}</span>
+              </div>
+            ) : (
+              <div className="font-semibold text-red-600">Захиалга хаагдсан</div>
+            )
           )}
           {product.material && (
             <div>
