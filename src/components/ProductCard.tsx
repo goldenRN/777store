@@ -58,6 +58,7 @@ export default function ProductCard({
   };
 
   const resolvedImage = resolveImageUrl(image_url);
+  const [imgError, setImgError] = useState(false);
   const priceNumber = Number(price) || 0;
   const discountNumber = Number(discount_price) || 0;
   const finalPrice = discountNumber > 0 ? discountNumber : priceNumber;
@@ -143,8 +144,15 @@ export default function ProductCard({
           href={`/product/${id}`}
           className="relative flex h-[260px] w-full items-center justify-center overflow-hidden rounded-2xl bg-white"
         >
-          {resolvedImage ? (
-            <Image src={resolvedImage} alt={name} fill className="object-contain" unoptimized />
+          {resolvedImage && !imgError ? (
+            <Image
+              src={resolvedImage}
+              alt={name}
+              fill
+              className="object-contain"
+              unoptimized
+              onError={() => setImgError(true)}
+            />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
             <img src="/logo.png" alt="Logo" className="h-16 w-16 object-contain opacity-80" />
