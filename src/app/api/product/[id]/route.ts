@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { logAdminAction } from "@/lib/audit";
 import { unlink } from "fs/promises";
 import path from "path";
 
@@ -50,6 +51,11 @@ export async function PUT(
     return NextResponse.json({ message: "Нэр шаардлагатай" }, { status: 400 });
   }
 
+  const before = await prisma.adminProduct.findUnique({
+    where: { id },
+    select: { name: true, price: true, discount_price: true, stock: true },
+  });
+
   await prisma.adminProduct.update({
     where: { id },
     data: {
@@ -89,6 +95,22 @@ export async function PUT(
     }
   }
 
+  await logAdminAction({
+    request,
+    action: "PRODUCT_UPDATE",
+    entityType: "AdminProduct",
+    entityId: id,
+    details: {
+      before,
+      after: {
+        name,
+        price,
+        discount_price,
+        stock,
+      },
+    },
+  });
+
   return NextResponse.json({ success: true });
 }
 
@@ -120,6 +142,11 @@ export async function PATCH(
     return NextResponse.json({ message: "Invalid order_accept_status" }, { status: 400 });
   }
 
+  const before = await prisma.adminProduct.findUnique({
+    where: { id },
+    select: { arrival_status: true, cargo_fee: true, order_accept_status: true },
+  });
+
   await prisma.adminProduct.update({
     where: { id },
     data: {
@@ -129,11 +156,26 @@ export async function PATCH(
     },
   });
 
+  await logAdminAction({
+    request,
+    action: "PRODUCT_STATUS_UPDATE",
+    entityType: "AdminProduct",
+    entityId: id,
+    details: {
+      before,
+      after: {
+        arrival_status: status || null,
+        cargo_fee,
+        order_accept_status: order_accept_status || null,
+      },
+    },
+  });
+
   return NextResponse.json({ success: true });
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: rawId } = await params;
@@ -151,8 +193,21 @@ export async function DELETE(
     where: { product_id: id, product_variant_id: null },
   });
 
+  const before = await prisma.adminProduct.findUnique({
+    where: { id },
+    select: { name: true, price: true },
+  });
+
   await prisma.adminProduct.delete({ where: { id } });
 
   await Promise.all(images.map((img) => tryDeleteFile(img.image_url ?? null)));
+
+  await logAdminAction({
+    request,
+    action: "PRODUCT_DELETE",
+    entityType: "AdminProduct",
+    entityId: id,
+    details: { before },
+  });
   return NextResponse.json({ success: true });
 }

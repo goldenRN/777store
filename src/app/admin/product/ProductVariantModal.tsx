@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 
 type VariantImage = {
@@ -59,6 +59,7 @@ export default function ProductVariantModal({ open, onClose, productId, productN
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [editingId, setEditingId] = useState<number | null>(null);
 
     const [form, setForm] = useState({
         sku: "",
@@ -89,6 +90,7 @@ export default function ProductVariantModal({ open, onClose, productId, productN
             attributeJson: "",
             images: [],
         });
+        setEditingId(null);
         setError(null);
     };
 
@@ -134,7 +136,7 @@ export default function ProductVariantModal({ open, onClose, productId, productN
         });
     };
 
-    /** -------------------- ADD VARIANT -------------------- **/
+    /** -------------------- ADD/UPDATE VARIANT -------------------- **/
     const handleAddVariant = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!productId) return;
@@ -163,6 +165,20 @@ export default function ProductVariantModal({ open, onClose, productId, productN
 
         setSaving(true);
         try {
+            if (editingId) {
+                const res = await axios.put(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/productvar/${editingId}`, {
+                    sku: form.sku || null,
+                    attribute: finalAttr,
+                    price: form.price ? Number(form.price) : null,
+                    stock: form.stock ? Number(form.stock) : null,
+                });
+                const updated = res.data?.data;
+                setVariants(prev => prev.map(v => (v.id === editingId ? { ...v, ...updated } : v)));
+                resetForm();
+                onRefresh && onRefresh();
+                return;
+            }
+
             let uploadedImages: { image_url: string; public_id: string }[] = [];
             // 2️⃣ Зураг upload API
             for (const img of form.images) {
@@ -212,7 +228,7 @@ export default function ProductVariantModal({ open, onClose, productId, productN
             onRefresh && onRefresh();
 
         } catch (err: any) {
-            setError(err?.response?.data?.message || "Төрөл нэмэхэд алдаа гарлаа");
+            setError(err?.response?.data?.message || (editingId ? "Төрөл засахад алдаа гарлаа" : "Төрөл нэмэхэд алдаа гарлаа"));
         } finally { setSaving(false); }
     };
 
@@ -231,7 +247,7 @@ export default function ProductVariantModal({ open, onClose, productId, productN
 
     return (
         <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
-            <DialogContent className="max-w-6xl w-full">
+            <DialogContent className="max-w-6xl w-full max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Барааны төрлүүдийн мэдээлэл {productName && `(Нэр: ${productName})`}</DialogTitle>
                     <DialogDescription>
@@ -239,7 +255,7 @@ export default function ProductVariantModal({ open, onClose, productId, productN
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
                     <div className="space-y-3">
                         <div className="flex justify-between">
@@ -296,15 +312,38 @@ export default function ProductVariantModal({ open, onClose, productId, productN
                                                 </div>
                                             </div>
 
-                                            {/* DELETE BUTTON */}
-                                            <Button
-                                                size="icon"
-                                                variant="destructive"
-                                                onClick={() => handleDeleteVariant(v.id)}
-                                                className="ml-2"
-                                            >
-                                                <Trash2 size={14} />
-                                            </Button>
+                                            {/* ACTIONS */}
+                                            <div className="flex items-center gap-2">
+                                                <Button
+                                                    size="icon"
+                                                    variant="outline"
+                                                    onClick={() => {
+                                                        const attr = (v.attribute || {}) as Record<string, unknown>;
+                                                        setEditingId(v.id);
+                                                        setForm({
+                                                            sku: v.sku || "",
+                                                            typeName: typeof attr.type === "string" ? attr.type : "",
+                                                            color: typeof attr.color === "string" ? attr.color : "",
+                                                            size: typeof attr.size === "string" ? attr.size : "",
+                                                            price: v.price != null ? String(v.price) : "",
+                                                            stock: v.stock != null ? String(v.stock) : "",
+                                                            attributeJson: "",
+                                                            images: [],
+                                                        });
+                                                    }}
+                                                    className="h-9 w-9"
+                                                >
+                                                    <Pencil size={14} />
+                                                </Button>
+                                                <Button
+                                                    size="icon"
+                                                    variant="destructive"
+                                                    onClick={() => handleDeleteVariant(v.id)}
+                                                    className="ml-1 h-9 w-9"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </Button>
+                                            </div>
                                         </div>
                                     );
                                 })
@@ -314,7 +353,9 @@ export default function ProductVariantModal({ open, onClose, productId, productN
 
                     {/* RIGHT: Form */}
                     <div>
-                        <h4 className="font-semibold mb-2">Шинэ төрөл нэмэх</h4>
+                        <h4 className="font-semibold mb-2">
+                            {editingId ? "Төрөл засах" : "Шинэ төрөл нэмэх"}
+                        </h4>
                         <form onSubmit={handleAddVariant} className="space-y-3">
                             <div>
                                 <label className="text-xs mb-1 block">Төрлийн нэр (ж: 13 inch, Улаан, XL)</label>
@@ -328,7 +369,7 @@ export default function ProductVariantModal({ open, onClose, productId, productN
                                 <label className="text-xs mb-1 block">SKU</label>
                                 <Input value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
                             </div>
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 <div>
                                     <label className="text-xs mb-1 block">Өнгө</label>
                                     <Input
@@ -367,7 +408,9 @@ export default function ProductVariantModal({ open, onClose, productId, productN
                             <DialogFooter>
                                 <div className="flex justify-end gap-2">
                                     <Button type="button" variant="outline" onClick={resetForm}>Цэвэрлэх</Button>
-                                    <Button type="submit" disabled={saving}>{saving ? "Хадгалж..." : "Нэмэх"}</Button>
+                                    <Button type="submit" disabled={saving}>
+                                        {saving ? "Хадгалж..." : editingId ? "Хадгалах" : "Нэмэх"}
+                                    </Button>
                                 </div>
                             </DialogFooter>
                         </form>
@@ -376,7 +419,7 @@ export default function ProductVariantModal({ open, onClose, productId, productN
                     <div>
                         <Label className="py-2">Зураг оруулах (ихдээ 5 зураг)</Label>
                         <div
-                            className="w-full h-20 border-2 border-dashed border-gray-400 rounded-xl flex items-center justify-center cursor-pointer"
+                            className="w-full h-20 border-2 border-dashed border-gray-400 rounded-xl flex items-center justify-center cursor-pointer text-sm text-gray-600"
                             onDragOver={(e) => e.preventDefault()}
                             onDrop={handleDrop}
                             onClick={() => fileInputRef.current?.click()}

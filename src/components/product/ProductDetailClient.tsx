@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import AddToCartButton from "@/components/cart/AddToCartButton";
 import { useRouter } from "next/navigation";
@@ -48,6 +48,8 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
   const [qty, setQty] = useState(1);
   const [activeImage, setActiveImage] = useState<string | null>(product.image_url || product.images[0] || null);
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
+  const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const endDate = useMemo(() => {
     if (!product.created_at || !product.duration_hours) return null;
     const endMs = new Date(product.created_at).getTime() + product.duration_hours * 60 * 60 * 1000;
@@ -117,6 +119,88 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
     const merged = [type, color, size].filter(Boolean).join(" / ");
     return merged || v.sku || `SKU-${v.id}`;
   };
+
+  const getVariantColor = (v: ProductDetail["variants"][number]) => {
+    const attr = (v.attribute || {}) as Record<string, unknown>;
+    const color = typeof attr.color === "string" ? attr.color.trim() : "";
+    return color || "Бусад";
+  };
+
+  const getVariantSize = (v: ProductDetail["variants"][number]) => {
+    const attr = (v.attribute || {}) as Record<string, unknown>;
+    const size = typeof attr.size === "string" ? attr.size.trim() : "";
+    return size || v.sku || `SKU-${v.id}`;
+  };
+
+  const colorGroups = useMemo(() => {
+    const map = new Map<string, ProductDetail["variants"]>();
+    product.variants.forEach((v) => {
+      const c = getVariantColor(v);
+      if (!map.has(c)) map.set(c, []);
+      map.get(c)!.push(v);
+    });
+    return map;
+  }, [product.variants]);
+
+  const colorList = useMemo(() => Array.from(colorGroups.keys()), [colorGroups]);
+
+  const sizeOptions = useMemo(() => {
+    if (!selectedColor) return [];
+    const list: string[] = [];
+    const seen = new Set<string>();
+    const variants = colorGroups.get(selectedColor) || [];
+    variants.forEach((v) => {
+      const s = getVariantSize(v);
+      if (!seen.has(s)) {
+        seen.add(s);
+        list.push(s);
+      }
+    });
+    return list;
+  }, [selectedColor, colorGroups]);
+
+  const matchedVariant = useMemo(() => {
+    if (!selectedColor) return null;
+    const variants = colorGroups.get(selectedColor) || [];
+    if (variants.length === 0) return null;
+    if (selectedSize) {
+      const v = variants.find((it) => getVariantSize(it) === selectedSize);
+      if (v) return v;
+    }
+    return variants[0];
+  }, [selectedColor, selectedSize, colorGroups]);
+
+  useEffect(() => {
+    if (!selectedColor && colorList.length > 0) {
+      setSelectedColor(colorList[0]);
+    }
+  }, [colorList, selectedColor]);
+
+  useEffect(() => {
+    if (!selectedColor) return;
+    if (sizeOptions.length === 0) return;
+    if (!selectedSize || !sizeOptions.includes(selectedSize)) {
+      setSelectedSize(sizeOptions[0]);
+    }
+  }, [selectedColor, selectedSize, sizeOptions]);
+
+  useEffect(() => {
+    if (!matchedVariant) return;
+    if (matchedVariant.id !== selectedVariantId) {
+      setSelectedVariantId(matchedVariant.id);
+    }
+    if (matchedVariant.images && matchedVariant.images.length > 0) {
+      setActiveImage(matchedVariant.images[0]);
+    }
+  }, [matchedVariant, selectedVariantId]);
+
+  useEffect(() => {
+    if (!selectedVariant) return;
+    const c = getVariantColor(selectedVariant);
+    const s = getVariantSize(selectedVariant);
+    setSelectedColor(c);
+    setSelectedSize(s);
+  }, [selectedVariant?.id]);
 
   // keep simple: use normal https link so mobile can open FB app via universal link
 
@@ -245,35 +329,55 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
         </div>
 
         {product.variants && product.variants.length > 0 && (
-          <div className="mt-5">
-            <div className="text-xs font-semibold text-[var(--navy-900)] mb-2">Төрлүүд (SKU)</div>
-            <div className="flex flex-wrap gap-2">
-              {product.variants.map((v) => (
-                <button
-                  key={v.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedVariantId(v.id);
-                    const nextImages =
-                      v.images && v.images.length > 0
-                        ? Array.from(new Set(v.images.filter(Boolean) as string[]))
-                        : baseImages;
-                    setActiveImage(nextImages[0] || null);
-                  }}
-                  className={`rounded-full border px-3 py-1 text-xs text-[var(--gray-700)] transition ${
-                    selectedVariantId === v.id
-                      ? "border-red-500 bg-red-50 text-red-600"
-                      : "hover:bg-[var(--sky-100)]"
-                  }`}
-                >
-                  <span className="font-semibold text-[var(--navy-900)]">
-                    {v.sku || `SKU-${v.id}`}
-                  </span>
-                  {variantLabel(v) !== (v.sku || `SKU-${v.id}`) && (
-                    <span className="ml-2 text-[var(--gray-500)]">{variantLabel(v)}</span>
-                  )}
-                </button>
-              ))}
+          <div className="mt-5 space-y-4">
+            <div>
+              <div className="text-xs font-semibold text-[var(--navy-900)] mb-2">Өнгө</div>
+              <div className="flex flex-wrap gap-2">
+                {colorList.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => {
+                      setSelectedColor(color);
+                      setSelectedSize(null);
+                    }}
+                    className={`rounded-full border px-3 py-1 text-xs transition ${
+                      selectedColor === color
+                        ? "border-red-500 bg-red-50 text-red-600"
+                        : "text-[var(--gray-700)] hover:bg-[var(--sky-100)]"
+                    }`}
+                  >
+                    {color}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-xs font-semibold text-[var(--navy-900)] mb-2">Размер</div>
+              <div className="flex flex-wrap gap-2">
+                {sizeOptions.map((size) => (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => {
+                      setSelectedSize(size);
+                      const next =
+                        matchedVariant && matchedVariant.images && matchedVariant.images.length > 0
+                          ? Array.from(new Set(matchedVariant.images.filter(Boolean) as string[]))
+                          : baseImages;
+                      if (next[0]) setActiveImage(next[0]);
+                    }}
+                    className={`rounded-full border px-3 py-1 text-xs transition ${
+                      selectedSize === size
+                        ? "border-red-500 bg-red-50 text-red-600"
+                        : "text-[var(--gray-700)] hover:bg-[var(--sky-100)]"
+                    }`}
+                  >
+                    {size}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}

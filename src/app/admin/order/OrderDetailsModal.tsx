@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
+import { getActorHeaders } from "@/lib/actorHeaders";
 
 export default function OrderDetailsModal({ id, onClose }: { id: number, onClose: () => void }) {
   const [order, setOrder] = useState<any>(null);
@@ -38,7 +39,7 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
   const markStatus = async (status: string) => {
     await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/orders/${id}/status`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getActorHeaders() },
       body: JSON.stringify({ status }),
     });
     await fetchDetail();
@@ -47,18 +48,41 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
   const updateItemStatus = async (itemId: number, status: string) => {
     await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/orders/items/${itemId}/status`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getActorHeaders() },
       body: JSON.stringify({ status }),
     });
     await fetchDetail();
   };
 
+  const orderStatusLabels: Record<string, string> = {
+    "Бараа олгосон": "Бараа олгосон",
+    "Хүргэлтэнд бүртгэгдсэн": "Хүргэлтэнд бүртгэгдсэн",
+    "Буцаагдсан": "Буцаагдсан",
+    "Цуцлагдсан": "Цуцлагдсан",
+    shipping: "Хүргэлтэнд бүртгэгдсэн",
+    handed: "Бараа олгосон",
+    returned: "Буцаагдсан",
+    cancelled: "Цуцлагдсан",
+    completed: "Бараа олгосон",
+    confirmed: "Бараа олгосон",
+  };
+
+  const itemStatusLabels: Record<string, string> = {
+    "Бараа ирсэн": "Бараа ирсэн",
+    "Хүлээгдэж байгаа": "Хүлээгдэж байгаа",
+    "Захиалга авч байгаа": "Захиалга авч байгаа",
+    "Захиалга хаагдсан": "Захиалга хаагдсан",
+    pending: "Хүлээгдэж байгаа",
+    arrived: "Бараа ирсэн",
+    open: "Захиалга авч байгаа",
+    closed: "Захиалга хаагдсан",
+  };
+
   const fallbackOptions = [
-    { value: "pending", label: "Хүлээгдэж байгаа" },
-    { value: "arrived", label: "Бараа ирсэн" },
-    { value: "handed", label: "Хүлээлгэж өгсөн" },
-    { value: "shipping", label: "Хүргэлтэнд бүртгүүлсэн" },
-    { value: "delivered", label: "Хүргэгдсэн" },
+    { value: "Хүлээгдэж байгаа", label: "Хүлээгдэж байгаа" },
+    { value: "Бараа ирсэн", label: "Бараа ирсэн" },
+    { value: "Захиалга авч байгаа", label: "Захиалга авч байгаа" },
+    { value: "Захиалга хаагдсан", label: "Захиалга хаагдсан" },
   ];
 
   return (
@@ -96,16 +120,12 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
                   </div>
                 )}
                 <div className="text-gray-600">Төлөв</div>
-                <div className="mt-1">
-                  <span className={`px-2 py-0.5 rounded text-xs ${order.status === "pending" ? "bg-yellow-100 text-yellow-800" : order.status === "completed" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-700"}`}>
-                    {order.status}
-                  </span>
+                <div className="mt-1 text-sm text-gray-800">
+                  {orderStatusLabels[order.status] || order.status}
                 </div>
                 <div className="mt-2 text-gray-600">Төлбөрийн төлөв</div>
-                <div className="mt-1">
-                  <span className="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">
-                    {order.payment_status || "UNPAID"}
-                  </span>
+                <div className="mt-1 text-sm text-gray-800">
+                  {order.payment_status || "UNPAID"}
                 </div>
               </div>
             </div>
@@ -171,7 +191,7 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
                       <th className="py-2">Тоо ширхэг</th>
                       <th className="py-2">Үнэ</th>
                       <th className="py-2">Нийт</th>
-                      <th className="py-2">Статус</th>
+                      <th className="py-2">Төлөв</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -182,24 +202,11 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
                         <td className="py-2">{it.quantity}</td>
                         <td className="py-2">{Number(it.price).toLocaleString()}₮</td>
                         <td className="py-2">{(it.quantity * Number(it.price)).toLocaleString()}₮</td>
-                        <td className="py-2">
-                          <select
-                            value={it.status || (statusOptions[0]?.name ?? "pending")}
-                            onChange={(e) => updateItemStatus(it.id, e.target.value)}
-                            className="border rounded px-2 py-1 text-xs"
-                          >
-                            {statusOptions.length > 0
-                              ? statusOptions.map((s) => (
-                                  <option key={s.id} value={s.name}>
-                                    {s.name}
-                                  </option>
-                                ))
-                              : fallbackOptions.map((s) => (
-                                  <option key={s.value} value={s.value}>
-                                    {s.label}
-                                  </option>
-                                ))}
-                          </select>
+                        <td className="py-2 text-sm text-gray-800">
+                          {orderStatusLabels[order.status] ||
+                            itemStatusLabels[it.status] ||
+                            it.status ||
+                            order.status}
                         </td>
                       </tr>
                     ))}
@@ -208,8 +215,6 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
 
                 <div className="flex justify-end mt-3 items-center gap-3">
                   <div className="text-sm font-medium">Нийт: {Number(order.total || 0).toLocaleString()}₮</div>
-                  <button onClick={() => markStatus("completed")} className="px-3 py-1 bg-green-600 text-white rounded text-sm">Баталгаажуулах</button>
-                  <button onClick={() => markStatus("cancelled")} className="px-3 py-1 bg-red-600 text-white rounded text-sm">Цуцлах</button>
                 </div>
               </div>
             </div>

@@ -5,6 +5,7 @@ import AddCategoryModal from './AddCategoryModal';
 import EditCategoryModal from './EditCategoryModal';
 import CategoryTable, { Category } from './categoryTable';
 import BackButton from '@/components/BackButton';
+import { getActorHeaders } from '@/lib/actorHeaders';
 import { Plus, Loader2 } from 'lucide-react';
 
 const CategoryPage: React.FC = () => {
@@ -27,7 +28,7 @@ const CategoryPage: React.FC = () => {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/category`, {
         method: 'GET',
-        headers: { Authorization: `Bearer ${user.token}` },
+        headers: { Authorization: `Bearer ${user.token}`, ...getActorHeaders() },
       });
 
       if (!res.ok) throw new Error('Ангиллын мэдээлэл татахад алдаа гарлаа');
@@ -56,7 +57,7 @@ const CategoryPage: React.FC = () => {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/category`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${user.token}` },
+        headers: { Authorization: `Bearer ${user.token}`, ...getActorHeaders() },
         body: formData,
       });
 
@@ -80,7 +81,7 @@ const CategoryPage: React.FC = () => {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/category/${id}`, {
         method: 'PUT',
-        headers: { Authorization: `Bearer ${user.token}` },
+        headers: { Authorization: `Bearer ${user.token}`, ...getActorHeaders() },
         body: formData,
       });
 
@@ -105,7 +106,7 @@ const CategoryPage: React.FC = () => {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/category/${id}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${user.token}` },
+        headers: { Authorization: `Bearer ${user.token}`, ...getActorHeaders() },
       });
 
       if (!res.ok) {

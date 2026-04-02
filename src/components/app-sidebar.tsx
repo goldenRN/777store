@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import { NavMain } from "@/components/nav-main"
 import { NavSecondary } from "@/components/nav-secondary"
@@ -52,6 +53,11 @@ const data = {
         { title: "Цуцлагдсан", url: "/admin/order?status=cancelled" },
       ],
     },
+    {
+      title: "Бараа олгох",
+      url: "/admin/fulfillment",
+      icon: <MapIcon />,
+    },
 
     {
       title: "Лайв худалдаа",
@@ -84,6 +90,7 @@ const data = {
         { title: "Хэмжих нэгж", url: "/admin/units" },
         { title: "Баннер", url: "/admin/banner" },
         { title: "Хэрэглэгчид", url: "/admin/users" },
+        { title: "Төлбөрийн төрөл", url: "/admin/payment-methods" },
         { title: "Онцгой хямдрал", url: "/admin/promo" },
       ],
     },
@@ -103,6 +110,30 @@ const data = {
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("user");
+      const role = raw ? JSON.parse(raw).role : null;
+      setIsSuperAdmin(role === "SUPER_ADMIN");
+    } catch {
+      setIsSuperAdmin(false);
+    }
+  }, []);
+
+  const navMain = useMemo(() => {
+    if (!isSuperAdmin) return data.navMain;
+    return [
+      ...data.navMain,
+      {
+        title: "Аудит лог",
+        url: "/admin/audit",
+        icon: <BookOpenIcon />,
+      },
+    ];
+  }, [isSuperAdmin]);
+
   return (
     <Sidebar
       className=" h-[calc(100svh-var(--header-height))]!"
@@ -124,7 +155,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
+        <NavMain items={navMain} />
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>

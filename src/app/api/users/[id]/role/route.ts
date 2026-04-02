@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { UserRole } from "@prisma/client";
+import { logAdminAction } from "@/lib/audit";
 
 export async function PATCH(
   request: Request,
@@ -25,10 +26,28 @@ export async function PATCH(
     return NextResponse.json({ message: "role шаардлагатай" }, { status: 400 });
   }
 
+  const before = await prisma.user.findUnique({
+    where: { id },
+    select: { role: true, phone: true, name: true },
+  });
+
   const updated = await prisma.user.update({
     where: { id },
     data: { role },
     select: { id: true, role: true },
+  });
+
+  await logAdminAction({
+    request,
+    action: "USER_ROLE_UPDATE",
+    entityType: "User",
+    entityId: id,
+    details: {
+      before_role: before?.role ?? null,
+      after_role: role,
+      user_phone: before?.phone ?? null,
+      user_name: before?.name ?? null,
+    },
   });
 
   return NextResponse.json(updated);

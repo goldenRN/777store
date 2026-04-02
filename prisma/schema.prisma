@@ -288,6 +288,8 @@ model AdminOrder {
   status     String           @default("pending")
   payment_status String?      @default("UNPAID")
   payment_provider String?    @default("qpay")
+  payment_method_id Int?
+  payment_method_name String?
   order_kind String?          @default("ready")
   delivery_method String?
   delivery_name String?
@@ -304,8 +306,19 @@ model AdminOrder {
   paid_at   DateTime?
   total      Int              @default(0)
   items      AdminOrderItem[]
+  payment_method AdminPaymentMethod? @relation(fields: [payment_method_id], references: [id], onDelete: SetNull)
   created_at DateTime         @default(now())
   updated_at DateTime         @updatedAt
+}
+
+model AdminPaymentMethod {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  orders      AdminOrder[]
 }
 
 model AdminOrderItem {
@@ -319,4 +332,17 @@ model AdminOrderItem {
   status       String     @default("pending")
   order        AdminOrder @relation(fields: [order_id], references: [id], onDelete: Cascade)
   product      AdminProduct? @relation(fields: [product_id], references: [id], onDelete: SetNull)
+}
+
+model AdminAuditLog {
+  id          Int      @id @default(autoincrement())
+  actor_id    String?
+  actor_name  String?
+  actor_phone String?
+  actor_role  String?
+  action      String
+  entity_type String
+  entity_id   String?
+  details     Json?
+  created_at  DateTime @default(now())
 }

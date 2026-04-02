@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { getActorHeaders } from "@/lib/actorHeaders";
 
 type UserRow = {
   id: string;
@@ -123,7 +124,7 @@ export default function AdminUsersPage() {
   const updateRole = async (id: string, role: string) => {
     await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/users/${id}/role`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getActorHeaders() },
       body: JSON.stringify({ role }),
     });
     fetchUsers(page);

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { saveFile } from "@/lib/upload";
+import { logAdminAction } from "@/lib/audit";
 
 export async function GET() {
   const list = await prisma.adminBrand.findMany({ orderBy: { id: "asc" } });
@@ -36,6 +37,14 @@ export async function POST(request: Request) {
       description: description || null,
       image_url: imageUrl,
     },
+  });
+
+  await logAdminAction({
+    request,
+    action: "BRAND_CREATE",
+    entityType: "AdminBrand",
+    entityId: created.id,
+    details: { name: created.name },
   });
 
   return NextResponse.json({

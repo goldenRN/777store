@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { saveFile } from "@/lib/upload";
+import { logAdminAction } from "@/lib/audit";
 
 export async function PUT(
   request: Request,
@@ -41,6 +42,20 @@ export async function PUT(
     },
   });
 
+  await logAdminAction({
+    request,
+    action: "BRAND_UPDATE",
+    entityType: "AdminBrand",
+    entityId: id,
+    details: {
+      before: {
+        name: existing.name,
+        description: existing.description,
+      },
+      after: { name, description },
+    },
+  });
+
   return NextResponse.json({
     id: updated.id,
     name: updated.name,
@@ -50,7 +65,7 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: rawId } = await params;
@@ -59,6 +74,19 @@ export async function DELETE(
     return NextResponse.json({ message: "Invalid id" }, { status: 400 });
   }
 
+  const before = await prisma.adminBrand.findUnique({
+    where: { id },
+    select: { name: true },
+  });
+
   await prisma.adminBrand.delete({ where: { id } });
+
+  await logAdminAction({
+    request,
+    action: "BRAND_DELETE",
+    entityType: "AdminBrand",
+    entityId: id,
+    details: { before },
+  });
   return NextResponse.json({ success: true });
 }

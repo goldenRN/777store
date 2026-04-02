@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 import BackButton from '@/components/BackButton';
+import { getActorHeaders } from '@/lib/actorHeaders';
 import BrandTable from './BrandTable';
 import AddBrandModal from './AddBrandModal';
 import EditBrandModal from './EditBrandModal';
@@ -34,7 +35,7 @@ const BrandPage = () => {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/brand`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${user.token}` },
+      headers: { Authorization: `Bearer ${user.token}`, ...getActorHeaders() },
       body: formData,
       // body: JSON.stringify(data),
     });
@@ -51,7 +52,7 @@ const BrandPage = () => {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/brand/${id}`, {
       method: 'PUT',
-      headers: { Authorization: `Bearer ${user.token}` },
+      headers: { Authorization: `Bearer ${user.token}`, ...getActorHeaders() },
       body: formData,
     });
     setOpenEdit(false);
@@ -62,7 +63,7 @@ const BrandPage = () => {
     if (!confirm('Устгах уу?')) return;
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/brand/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/brand/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${user.token}`, ...getActorHeaders() } });
       if (!res.ok) {
         const error = await res.json();
         return alert(error.message || 'Устгах үед алдаа гарлаа');

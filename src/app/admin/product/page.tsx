@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { RefreshCcw, Edit, Trash2, Plus } from "lucide-react";
 import AddProductModal from "./AddProductModal";
 import axios from "axios";
+import { getActorHeaders } from "@/lib/actorHeaders";
 import ImageViewerModal from "./ImageViewerModal";
 import ProductVariantModal from "./ProductVariantModal"; 
 
@@ -186,10 +187,14 @@ const ProductPage = () => {
 
   const updateArrival = async (productId: number, status: string, cargoFee?: number | null) => {
     try {
-      await axios.patch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/product/${productId}`, {
-        arrival_status: status,
-        cargo_fee: cargoFee ?? null,
-      });
+      await axios.patch(
+        `${process.env.NEXT_PUBLIC_API_URL || ""}/api/product/${productId}`,
+        {
+          arrival_status: status,
+          cargo_fee: cargoFee ?? null,
+        },
+        { headers: { ...getActorHeaders() } }
+      );
       setProducts((prev) =>
         prev.map((p) =>
           p.id === productId
@@ -205,9 +210,13 @@ const ProductPage = () => {
 
   const updateOrderAcceptStatus = async (productId: number, status: "OPEN" | "CLOSED") => {
     try {
-      await axios.patch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/product/${productId}`, {
-        order_accept_status: status,
-      });
+      await axios.patch(
+        `${process.env.NEXT_PUBLIC_API_URL || ""}/api/product/${productId}`,
+        {
+          order_accept_status: status,
+        },
+        { headers: { ...getActorHeaders() } }
+      );
       setProducts((prev) =>
         prev.map((p) => (p.id === productId ? { ...p, order_accept_status: status } : p))
       );
@@ -268,7 +277,10 @@ const ProductPage = () => {
     if (!confirm("⚠️ Энэ барааг устгах уу?")) return;
 
     try {
-      await axios.delete(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/product/${id}`);
+      await axios.delete(
+        `${process.env.NEXT_PUBLIC_API_URL || ""}/api/product/${id}`,
+        { headers: { ...getActorHeaders() } }
+      );
       await fetchProducts();
     } catch (err) {
       console.error("Устгах үед алдаа:", err);

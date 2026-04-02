@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { saveFile } from "@/lib/upload";
+import { logAdminAction } from "@/lib/audit";
 
 export async function GET(
   _request: Request,
@@ -73,6 +74,23 @@ export async function PUT(
     },
   });
 
+  await logAdminAction({
+    request,
+    action: "CATEGORY_UPDATE",
+    entityType: "AdminCategory",
+    entityId: id,
+    details: {
+      before: {
+        name: existing.category_name,
+        description: existing.description,
+      },
+      after: {
+        name,
+        description,
+      },
+    },
+  });
+
   return NextResponse.json({
     category_id: updated.id,
     category_name: updated.category_name,
@@ -82,7 +100,7 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: rawId } = await params;
@@ -91,6 +109,19 @@ export async function DELETE(
     return NextResponse.json({ message: "Invalid id" }, { status: 400 });
   }
 
+  const before = await prisma.adminCategory.findUnique({
+    where: { id },
+    select: { category_name: true },
+  });
+
   await prisma.adminCategory.delete({ where: { id } });
+
+  await logAdminAction({
+    request,
+    action: "CATEGORY_DELETE",
+    entityType: "AdminCategory",
+    entityId: id,
+    details: { before },
+  });
   return NextResponse.json({ success: true });
 }

@@ -75,7 +75,7 @@ const EditTypeModal: React.FC<EditTypeModalProps> = ({
       }}
     >
       <div
-        className="bg-white rounded-2xl shadow-xl w-full max-w-md relative p-6"
+        className="bg-white rounded-2xl shadow-xl w-full max-w-md relative p-5 md:p-6 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
@@ -91,25 +91,26 @@ const EditTypeModal: React.FC<EditTypeModalProps> = ({
         {error && <p className="text-red-500 mb-2">{error}</p>}
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block mb-1 text-sm font-medium text-gray-600">Төрөл нэр</label>
+            <Input
+              placeholder="Төрөл нэр"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </div>
 
-          <label className="block mb-1 text-sm font-medium text-gray-600">
-            Төрөл нэр
-          </label>
-          <Input
-            placeholder="Дэд ангиллын нэр"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
-
-          <label className="block mb-1 text-sm font-medium text-gray-600">
-            Тайлбар
-          </label>
-          <Input
-            placeholder="Тайлбар"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
+          <div>
+            <label className="block mb-1 text-sm font-medium text-gray-600">Тайлбар</label>
+            <textarea
+              placeholder="Тайлбар"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400"
+              rows={3}
+            />
+          </div>
           <label className="flex items-center gap-2 text-sm text-gray-600">
             <input
               type="checkbox"
@@ -122,7 +123,7 @@ const EditTypeModal: React.FC<EditTypeModalProps> = ({
           <Button
             type="submit"
             disabled={loading}
-            className="w-full bg-gradient-to-r from-[#1d3b86] via-[#2b4ea2] to-[#3b5fc3] text-white font-bold py-2 px-4 rounded-lg hover:opacity-90 transition flex justify-center items-center"
+            className="w-full bg-gradient-to-r from-[#1d3b86] via-[#2b4ea2] to-[#3b5fc3] text-white font-bold py-2.5 px-4 rounded-lg hover:opacity-90 transition flex justify-center items-center"
           >
             {loading && (
               <span className="animate-spin border-2 border-white border-t-transparent rounded-full w-5 h-5 mr-2"></span>

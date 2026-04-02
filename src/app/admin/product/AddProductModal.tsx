@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import axios from "axios";
+import { getActorHeaders } from "@/lib/actorHeaders";
 
 interface AddProductModalProps {
     open: boolean;
@@ -373,7 +374,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                 const res = await axios.post(
                     `${process.env.NEXT_PUBLIC_API_URL || ""}/api/productimg/upload-multiple`,
                     formData,
-                    { headers: { "Content-Type": "multipart/form-data" } }
+                    { headers: { "Content-Type": "multipart/form-data", ...getActorHeaders() } }
                 );
 
                 uploadedImages = res.data.images.map((imgObj: any) => ({
@@ -422,9 +423,17 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
 
             // 🟢 API дуудах
             if (editData) {
-                await axios.put(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/product/${editData.id}`, payload);
+                await axios.put(
+                    `${process.env.NEXT_PUBLIC_API_URL || ""}/api/product/${editData.id}`,
+                    payload,
+                    { headers: { ...getActorHeaders() } }
+                );
             } else {
-                await axios.post(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/product`, payload);
+                await axios.post(
+                    `${process.env.NEXT_PUBLIC_API_URL || ""}/api/product`,
+                    payload,
+                    { headers: { ...getActorHeaders() } }
+                );
             }
 
             onRefresh();
