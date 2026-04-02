@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+cd /Users/altantuyabereevenjav/Documents/work/777/web
+printf "\n# uploads\npublic/uploads\n" >> .gitignore
+
