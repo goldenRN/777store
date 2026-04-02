@@ -216,6 +216,7 @@ model AdminStoreInfo {
   phone         String?
   email         String?
   facebook_url  String?
+  instagram_url String?
   address       String?
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
