@@ -54,7 +54,10 @@ export async function POST(request: NextRequest) {
     };
   });
 
-  const total = orderItems.reduce((sum, it) => sum + it.quantity * it.price, 0);
+  const total = orderItems.reduce(
+    (sum: number, it: { quantity: number; price: number }) => sum + it.quantity * it.price,
+    0
+  );
 
   const firstStatus = await prisma.adminStatus.findFirst({ orderBy: { id: "asc" } });
   const defaultStatus = firstStatus?.name || "pending";
@@ -76,7 +79,10 @@ export async function POST(request: NextRequest) {
       payment_method_name: paymentMethod?.name ?? null,
       total,
       items: {
-        create: orderItems.map((it) => ({ ...it, status: defaultStatus })),
+        create: orderItems.map((it: { product_id: number; product_name: string; quantity: number; price: number; image_url: string | null }) => ({
+          ...it,
+          status: defaultStatus,
+        })),
       },
     },
   });

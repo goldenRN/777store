@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 
 export type ActorInfo = {
   id?: string | null;
@@ -22,7 +23,7 @@ export async function logAdminAction(params: {
   action: string;
   entityType: string;
   entityId?: string | number | null;
-  details?: Record<string, unknown> | null;
+  details?: Prisma.InputJsonValue | null;
 }) {
   const { request, action, entityType, entityId, details } = params;
   const actor = getActorFromRequest(request);
@@ -36,7 +37,7 @@ export async function logAdminAction(params: {
         action,
         entity_type: entityType,
         entity_id: entityId != null ? String(entityId) : null,
-        details: details ?? undefined,
+        details: (details ?? undefined) as Prisma.InputJsonValue | undefined,
       },
     });
   } catch {
