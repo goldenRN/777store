@@ -24,7 +24,9 @@ export async function POST(request: NextRequest) {
   const name = nameInput || user?.name || phone;
   const email = emailInput || user?.email || null;
 
-  const productIds = items.map((it: any) => Number(it.product_id)).filter((id) => Number.isFinite(id));
+  const productIds = items
+    .map((it: any) => Number(it.product_id))
+    .filter((id: number) => Number.isFinite(id));
   const products = await prisma.adminProduct.findMany({
     where: { id: { in: productIds } },
     include: { images: true },
