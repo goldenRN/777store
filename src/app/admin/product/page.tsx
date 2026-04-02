@@ -344,8 +344,6 @@ const ProductPage = () => {
                         { key: "cargo_fee", label: "Карго (₮)" },
                       ]
                     : [
-                        { key: "brand_name", label: "Брэнд" },
-                        { key: "unit_name", label: "Нэгж" },
                       ]),
                   { key: "type_name", label: "Төрөл" },
                   { key: "price", label: "Үнэ (₮)" },
@@ -436,8 +434,6 @@ const ProductPage = () => {
                       </>
                     ) : (
                       <>
-                        <td className="py-2 px-4 text-xs">{p.brand_name}</td>
-                        <td className="py-2 px-4 text-xs">{p.unit_name}</td>
                       </>
                     )}
                     <td className="py-2 px-4 text-xs">{p.type_name}</td>

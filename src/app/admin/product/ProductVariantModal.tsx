@@ -141,8 +141,8 @@ export default function ProductVariantModal({ open, onClose, productId, productN
         e.preventDefault();
         if (!productId) return;
 
-        if (!form.typeName.trim() && !form.sku.trim()) {
-            setError("Төрлийн нэр эсвэл SKU заавал оруулна уу");
+        if (!form.typeName.trim()) {
+            setError("Төрөл заавал оруулна уу");
             return;
         }
 
@@ -167,7 +167,7 @@ export default function ProductVariantModal({ open, onClose, productId, productN
         try {
             if (editingId) {
                 const res = await axios.put(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/productvar/${editingId}`, {
-                    sku: form.sku || null,
+                    sku: form.typeName || null,
                     attribute: finalAttr,
                     price: form.price ? Number(form.price) : null,
                     stock: form.stock ? Number(form.stock) : null,
@@ -206,7 +206,7 @@ export default function ProductVariantModal({ open, onClose, productId, productN
             // 1️⃣ Variant create
             const variantRes = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/productvar`, {
                 product_id: productId,
-                sku: form.sku || null,
+                sku: form.typeName || null,
                 attribute: finalAttr,
                 price: form.price ? Number(form.price) : null,
                 stock: form.stock ? Number(form.stock) : null,
@@ -251,7 +251,7 @@ export default function ProductVariantModal({ open, onClose, productId, productN
                 <DialogHeader>
                     <DialogTitle>Барааны төрлүүдийн мэдээлэл {productName && `(Нэр: ${productName})`}</DialogTitle>
                     <DialogDescription>
-                        Барааны SKU төрлүүдийг нэмэх, засах, устгах.
+                        Барааны төрлүүдийг нэмэх, засах, устгах.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -298,7 +298,7 @@ export default function ProductVariantModal({ open, onClose, productId, productN
                                                 {/* TEXT INFO */}
                                                 <div>
                                                     <div className="font-medium text-sm">
-                                                        {v.sku || `SKU-${v.id}`}
+                                                        {v.sku || `Төрөл-${v.id}`}
                                                     </div>
 
                                                     {/* ATTRIBUTE NICE LOOK */}
@@ -358,16 +358,12 @@ export default function ProductVariantModal({ open, onClose, productId, productN
                         </h4>
                         <form onSubmit={handleAddVariant} className="space-y-3">
                             <div>
-                                <label className="text-xs mb-1 block">Төрлийн нэр (ж: 13 inch, Улаан, XL)</label>
+                                <label className="text-xs mb-1 block">Төрөл (ж: 13 inch, Улаан, XL, SKU123)</label>
                                 <Input
                                     value={form.typeName}
                                     onChange={(e) => setForm({ ...form, typeName: e.target.value })}
-                                    placeholder="Төрлийн нэр"
+                                    placeholder="Төрөл"
                                 />
-                            </div>
-                            <div>
-                                <label className="text-xs mb-1 block">SKU</label>
-                                <Input value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 <div>
@@ -387,13 +383,15 @@ export default function ProductVariantModal({ open, onClose, productId, productN
                                     />
                                 </div>
                             </div>
-                            <div>
-                                <label className="text-xs mb-1 block">Үнэ</label>
-                                <Input value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
-                            </div>
-                            <div>
-                                <label className="text-xs mb-1 block">Үлдэгдэл</label>
-                                <Input value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <div>
+                                    <label className="text-xs mb-1 block">Үнэ</label>
+                                    <Input value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+                                </div>
+                                <div>
+                                    <label className="text-xs mb-1 block">Үлдэгдэл</label>
+                                    <Input value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
+                                </div>
                             </div>
                             <div>
                                 <label className="text-xs block mb-1">Нэмэлт attribute JSON (optional)</label>

@@ -50,6 +50,7 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
+  const [zoomOpen, setZoomOpen] = useState(false);
   const endDate = useMemo(() => {
     if (!product.created_at || !product.duration_hours) return null;
     const endMs = new Date(product.created_at).getTime() + product.duration_hours * 60 * 60 * 1000;
@@ -117,30 +118,40 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
     const color = typeof attr.color === "string" ? attr.color : "";
     const size = typeof attr.size === "string" ? attr.size : "";
     const merged = [type, color, size].filter(Boolean).join(" / ");
-    return merged || v.sku || `SKU-${v.id}`;
+    return merged || v.sku || `Төрөл-${v.id}`;
   };
 
   const getVariantColor = (v: ProductDetail["variants"][number]) => {
     const attr = (v.attribute || {}) as Record<string, unknown>;
     const color = typeof attr.color === "string" ? attr.color.trim() : "";
-    return color || "Бусад";
+    return color;
   };
 
   const getVariantSize = (v: ProductDetail["variants"][number]) => {
     const attr = (v.attribute || {}) as Record<string, unknown>;
     const size = typeof attr.size === "string" ? attr.size.trim() : "";
-    return size || v.sku || `SKU-${v.id}`;
+    return size;
   };
+
+  const hasColor = useMemo(
+    () => product.variants.some((v) => !!getVariantColor(v)),
+    [product.variants]
+  );
+  const hasSize = useMemo(
+    () => product.variants.some((v) => !!getVariantSize(v)),
+    [product.variants]
+  );
 
   const colorGroups = useMemo(() => {
     const map = new Map<string, ProductDetail["variants"]>();
+    if (!hasColor && !hasSize) return map;
     product.variants.forEach((v) => {
-      const c = getVariantColor(v);
+      const c = getVariantColor(v) || "Бусад";
       if (!map.has(c)) map.set(c, []);
       map.get(c)!.push(v);
     });
     return map;
-  }, [product.variants]);
+  }, [product.variants, hasColor, hasSize]);
 
   const colorList = useMemo(() => Array.from(colorGroups.keys()), [colorGroups]);
 
@@ -150,7 +161,7 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
     const seen = new Set<string>();
     const variants = colorGroups.get(selectedColor) || [];
     variants.forEach((v) => {
-      const s = getVariantSize(v);
+      const s = getVariantSize(v) || v.sku || `Төрөл-${v.id}`;
       if (!seen.has(s)) {
         seen.add(s);
         list.push(s);
@@ -160,6 +171,7 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
   }, [selectedColor, colorGroups]);
 
   const matchedVariant = useMemo(() => {
+    if (!hasColor && !hasSize) return null;
     if (!selectedColor) return null;
     const variants = colorGroups.get(selectedColor) || [];
     if (variants.length === 0) return null;
@@ -168,21 +180,23 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
       if (v) return v;
     }
     return variants[0];
-  }, [selectedColor, selectedSize, colorGroups]);
+  }, [selectedColor, selectedSize, colorGroups, hasColor, hasSize]);
 
   useEffect(() => {
+    if (!hasColor && !hasSize) return;
     if (!selectedColor && colorList.length > 0) {
       setSelectedColor(colorList[0]);
     }
-  }, [colorList, selectedColor]);
+  }, [colorList, selectedColor, hasColor, hasSize]);
 
   useEffect(() => {
+    if (!hasSize) return;
     if (!selectedColor) return;
     if (sizeOptions.length === 0) return;
     if (!selectedSize || !sizeOptions.includes(selectedSize)) {
       setSelectedSize(sizeOptions[0]);
     }
-  }, [selectedColor, selectedSize, sizeOptions]);
+  }, [selectedColor, selectedSize, sizeOptions, hasSize]);
 
   useEffect(() => {
     if (!matchedVariant) return;
@@ -196,11 +210,11 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
 
   useEffect(() => {
     if (!selectedVariant) return;
-    const c = getVariantColor(selectedVariant);
-    const s = getVariantSize(selectedVariant);
-    setSelectedColor(c);
-    setSelectedSize(s);
-  }, [selectedVariant?.id]);
+    const c = getVariantColor(selectedVariant) || null;
+    const s = getVariantSize(selectedVariant) || null;
+    if (hasColor) setSelectedColor(c || selectedColor);
+    if (hasSize) setSelectedSize(s || selectedSize);
+  }, [selectedVariant?.id, hasColor, hasSize]);
 
   // keep simple: use normal https link so mobile can open FB app via universal link
 
@@ -223,6 +237,13 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/logo.png" alt="Logo" className="h-16 w-16 object-contain opacity-80" />
             </div>
+          )}
+          {activeImage && (
+            <button
+              onClick={() => setZoomOpen(true)}
+              className="absolute inset-0"
+              aria-label="Zoom image"
+            />
           )}
         </div>
         {gallery.length > 1 && (
@@ -330,55 +351,100 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
 
         {product.variants && product.variants.length > 0 && (
           <div className="mt-5 space-y-4">
-            <div>
-              <div className="text-xs font-semibold text-[var(--navy-900)] mb-2">Өнгө</div>
-              <div className="flex flex-wrap gap-2">
-                {colorList.map((color) => (
-                  <button
-                    key={color}
-                    type="button"
-                    onClick={() => {
-                      setSelectedColor(color);
-                      setSelectedSize(null);
-                    }}
-                    className={`rounded-full border px-3 py-1 text-xs transition ${
-                      selectedColor === color
-                        ? "border-red-500 bg-red-50 text-red-600"
-                        : "text-[var(--gray-700)] hover:bg-[var(--sky-100)]"
-                    }`}
-                  >
-                    {color}
-                  </button>
-                ))}
+            {hasColor && (
+              <div>
+                <div className="text-xs font-semibold text-[var(--navy-900)] mb-2">Өнгө</div>
+                <div className="flex flex-wrap gap-2">
+                  {colorList.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => {
+                        setSelectedColor(color);
+                        setSelectedSize(null);
+                      }}
+                      className={`rounded-full border px-3 py-1 text-xs transition ${
+                        selectedColor === color
+                          ? "border-red-500 bg-red-50 text-red-600"
+                          : "text-[var(--gray-700)] hover:bg-[var(--sky-100)]"
+                      }`}
+                    >
+                      {color}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
-            <div>
-              <div className="text-xs font-semibold text-[var(--navy-900)] mb-2">Размер</div>
-              <div className="flex flex-wrap gap-2">
-                {sizeOptions.map((size) => (
-                  <button
-                    key={size}
-                    type="button"
-                    onClick={() => {
-                      setSelectedSize(size);
-                      const next =
-                        matchedVariant && matchedVariant.images && matchedVariant.images.length > 0
-                          ? Array.from(new Set(matchedVariant.images.filter(Boolean) as string[]))
-                          : baseImages;
-                      if (next[0]) setActiveImage(next[0]);
-                    }}
-                    className={`rounded-full border px-3 py-1 text-xs transition ${
-                      selectedSize === size
-                        ? "border-red-500 bg-red-50 text-red-600"
-                        : "text-[var(--gray-700)] hover:bg-[var(--sky-100)]"
-                    }`}
-                  >
-                    {size}
-                  </button>
-                ))}
+            {hasSize && (
+              <div>
+                <div className="text-xs font-semibold text-[var(--navy-900)] mb-2">Размер</div>
+                <div className="flex flex-wrap gap-2">
+                  {sizeOptions.map((size) => (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => {
+                        setSelectedSize(size);
+                        const next =
+                          matchedVariant && matchedVariant.images && matchedVariant.images.length > 0
+                            ? Array.from(new Set(matchedVariant.images.filter(Boolean) as string[]))
+                            : baseImages;
+                        if (next[0]) setActiveImage(next[0]);
+                      }}
+                      className={`rounded-full border px-3 py-1 text-xs transition ${
+                        selectedSize === size
+                          ? "border-red-500 bg-red-50 text-red-600"
+                          : "text-[var(--gray-700)] hover:bg-[var(--sky-100)]"
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
+
+            {!hasColor && !hasSize && (
+              <div>
+                <div className="text-xs font-semibold text-[var(--navy-900)] mb-2">Төрөл</div>
+                <div className="flex flex-wrap gap-2">
+                  {product.variants.map((v) => (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedVariantId(v.id);
+                        const nextImages =
+                          v.images && v.images.length > 0
+                            ? Array.from(new Set(v.images.filter(Boolean) as string[]))
+                            : baseImages;
+                        setActiveImage(nextImages[0] || null);
+                      }}
+                      className={`rounded-full border px-3 py-1 text-xs transition ${
+                        selectedVariantId === v.id
+                          ? "border-red-500 bg-red-50 text-red-600"
+                          : "text-[var(--gray-700)] hover:bg-[var(--sky-100)]"
+                      }`}
+                    >
+                      {v.sku || `Төрөл-${v.id}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {selectedVariant?.attribute && (
+              <div className="text-xs text-[var(--gray-700)]">
+                {Object.entries(selectedVariant.attribute)
+                  .filter(([k, v]) => k !== "color" && k !== "size" && k !== "type" && v != null && String(v).length > 0)
+                  .map(([k, v]) => (
+                    <div key={k}>
+                      {k}: <span className="font-semibold text-[var(--navy-900)]">{String(v)}</span>
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -416,6 +482,31 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
           </AddToCartButton>
         </div>
       </div>
+
+      {zoomOpen && activeImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setZoomOpen(false)} />
+          <div className="relative z-10 max-w-5xl w-full">
+            <div className="flex justify-end mb-2">
+              <button
+                onClick={() => setZoomOpen(false)}
+                className="px-3 py-1 rounded bg-white text-sm"
+              >
+                Хаах
+              </button>
+            </div>
+            <div className="relative w-full h-[70vh] rounded-xl overflow-hidden bg-black">
+              <Image
+                src={resolveImageUrl(activeImage)}
+                alt={product.name}
+                fill
+                className="object-contain"
+                unoptimized
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
