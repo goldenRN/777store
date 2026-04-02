@@ -399,10 +399,10 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                 name: form.name,
                 description: form.description,
                 video_url: form.video_url,
-                category_id: (productMode === "ready" || forceReadyEdit) ? form.category_id : null,
-                category_name: (productMode === "ready" || forceReadyEdit) ? form.category_name : "",
-                subcategory_id: (productMode === "ready" || forceReadyEdit) ? form.subcategory_id : null,
-                subcategory_name: (productMode === "ready" || forceReadyEdit) ? form.subcategory_name : "",
+                category_id: form.category_id || null,
+                category_name: form.category_name || "",
+                subcategory_id: form.subcategory_id || null,
+                subcategory_name: form.subcategory_name || "",
                 brand_id: form.brand_id,
                 brand_name: form.brand_name,
                 unit_id: form.unit_id,
@@ -605,41 +605,39 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                         </div>
                     )}
 
-                    {(productMode === "ready" || forceReadyEdit) && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <Label>Ангилал</Label>
-                                <Select value={form.category_id} onValueChange={handleCategorySelect}>
-                                    <SelectTrigger className="h-12">
-                                        <SelectValue placeholder="Сонгох..." />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {categories?.map((c) => (
-                                            <SelectItem key={c.category_id} value={c.category_id.toString()}>
-                                                {c.category_name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <div>
-                                <Label>Дэд ангилал</Label>
-                                <Select value={form.subcategory_id} onValueChange={handleSubCategorySelect}>
-                                    <SelectTrigger className="h-12">
-                                        <SelectValue placeholder="Сонгох..." />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {subCategories.map((s) => (
-                                            <SelectItem key={s.id} value={s.id.toString()}>
-                                                {s.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <Label>Ангилал</Label>
+                            <Select value={form.category_id} onValueChange={handleCategorySelect}>
+                                <SelectTrigger className="h-12">
+                                    <SelectValue placeholder="Сонгох..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {categories?.map((c) => (
+                                        <SelectItem key={c.category_id} value={c.category_id.toString()}>
+                                            {c.category_name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
-                    )}
+
+                        <div>
+                            <Label>Дэд ангилал</Label>
+                            <Select value={form.subcategory_id} onValueChange={handleSubCategorySelect}>
+                                <SelectTrigger className="h-12">
+                                    <SelectValue placeholder="Сонгох..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {subCategories.map((s) => (
+                                        <SelectItem key={s.id} value={s.id.toString()}>
+                                            {s.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <Label>Хэмжих нэгж</Label>
