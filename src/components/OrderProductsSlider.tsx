@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import Image from "next/image";
 
 type SliderItem = {
@@ -39,19 +40,21 @@ export default function OrderProductsSlider({ items, intervalMs = 4000 }: OrderP
 
   return (
     <div className="rounded-[24px] bg-white p-3 shadow">
-      <div className="relative h-[220px] w-full overflow-hidden rounded-[18px]">
-        <Image
-          src={current.image_url || FALLBACK_IMAGE}
-          alt={current.name || "Product"}
-          fill
-          className="object-cover"
-          unoptimized
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
-        <div className="absolute bottom-3 left-3 right-3 text-sm font-semibold text-white drop-shadow">
-          {current.name}
+      <Link href={`/product/${current.id}`} className="block">
+        <div className="relative h-[220px] w-full overflow-hidden rounded-[18px]">
+          <Image
+            src={current.image_url || FALLBACK_IMAGE}
+            alt={current.name || "Product"}
+            fill
+            className="object-cover"
+            unoptimized
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+          <div className="absolute bottom-3 left-3 right-3 text-sm font-semibold text-white drop-shadow">
+            {current.name}
+          </div>
         </div>
-      </div>
+      </Link>
       {safeItems.length > 1 && (
         <div className="mt-3 flex items-center justify-center gap-2">
           {safeItems.map((item, i) => (

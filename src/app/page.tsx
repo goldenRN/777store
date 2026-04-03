@@ -108,7 +108,9 @@ export default async function Home() {
   const allProducts = allRes.items;
   const orderItems = Array.from(
     new Map([...preorderRes.items, ...liveRes.items].map((p) => [p.id, p])).values()
-  );
+  )
+    .sort((a, b) => (b.ordered_qty ?? 0) - (a.ordered_qty ?? 0))
+    .slice(0, 10);
   const smallBanners = banners.slice(0, 2);
 
   return (

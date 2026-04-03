@@ -51,6 +51,7 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [zoomOpen, setZoomOpen] = useState(false);
+  const [selectedTypeGroup, setSelectedTypeGroup] = useState<string | null>(null);
   const endDate = useMemo(() => {
     if (!product.created_at || !product.duration_hours) return null;
     const endMs = new Date(product.created_at).getTime() + product.duration_hours * 60 * 60 * 1000;
@@ -114,10 +115,9 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
 
   const variantLabel = (v: ProductDetail["variants"][number]) => {
     const attr = (v.attribute || {}) as Record<string, unknown>;
-    const type = typeof attr.type === "string" ? attr.type : "";
     const color = typeof attr.color === "string" ? attr.color : "";
     const size = typeof attr.size === "string" ? attr.size : "";
-    const merged = [type, color, size].filter(Boolean).join(" / ");
+    const merged = [size].filter(Boolean).join(" / ");
     return merged || v.sku || `Төрөл-${v.id}`;
   };
 
@@ -133,14 +133,107 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
     return size;
   };
 
+  const enableColorSize = false;
   const hasColor = useMemo(
-    () => product.variants.some((v) => !!getVariantColor(v)),
-    [product.variants]
+    () => enableColorSize && product.variants.some((v) => !!getVariantColor(v)),
+    [enableColorSize, product.variants]
   );
   const hasSize = useMemo(
-    () => product.variants.some((v) => !!getVariantSize(v)),
-    [product.variants]
+    () => enableColorSize && product.variants.some((v) => !!getVariantSize(v)),
+    [enableColorSize, product.variants]
   );
+  const hasType = useMemo(() => {
+    return product.variants.some((v) => {
+      const attr = (v.attribute || {}) as Record<string, unknown>;
+      return typeof attr.type === "string" && attr.type.trim().length > 0;
+    });
+  }, [product.variants]);
+
+  const selectedType = useMemo(() => {
+    if (selectedVariant?.attribute && typeof selectedVariant.attribute.type === "string") {
+      const t = selectedVariant.attribute.type.trim();
+      if (t) return t;
+    }
+    return "";
+  }, [selectedVariant]);
+
+  const getVariantTypeName = (v: ProductDetail["variants"][number]) => {
+    const attr = (v.attribute || {}) as Record<string, unknown>;
+    const type = typeof attr.type === "string" ? attr.type.trim() : "";
+    return type || v.sku || `Төрөл-${v.id}`;
+  };
+
+  const typeGroups = useMemo(() => {
+    const map = new Map<string, ProductDetail["variants"]>();
+    product.variants.forEach((v) => {
+      const t = getVariantTypeName(v);
+      if (!map.has(t)) map.set(t, []);
+      map.get(t)!.push(v);
+    });
+    return map;
+  }, [product.variants]);
+
+  const typeGroupList = useMemo(() => Array.from(typeGroups.keys()), [typeGroups]);
+
+  useEffect(() => {
+    if (typeGroupList.length === 0) return;
+    if (!selectedTypeGroup || !typeGroups.has(selectedTypeGroup)) {
+      setSelectedTypeGroup(typeGroupList[0]);
+    }
+  }, [typeGroupList, typeGroups, selectedTypeGroup]);
+
+  useEffect(() => {
+    if (!selectedTypeGroup) return;
+    // reset selections when type changes
+    setSelectedVariantId(null);
+    setSelectedColor(null);
+  }, [selectedTypeGroup]);
+
+  const typeVariants = useMemo(() => {
+    return typeGroups.get(selectedTypeGroup || "") || [];
+  }, [typeGroups, selectedTypeGroup]);
+
+  const filteredOptions = useMemo(() => {
+    return typeVariants
+      .filter((v) => (selectedColor ? getVariantColor(v) === selectedColor : true))
+      .filter((v) => {
+        if (!selectedColor) return true;
+        const optionLabel = variantLabel(v).trim().toLowerCase();
+        const colorOnly = selectedColor.trim().toLowerCase();
+        return optionLabel !== colorOnly;
+      });
+  }, [typeVariants, selectedColor]);
+
+  const colorOptionsForType = useMemo(() => {
+    const seen = new Set<string>();
+    const list: string[] = [];
+    typeVariants.forEach((v) => {
+      const c = getVariantColor(v);
+      if (c && !seen.has(c)) {
+        seen.add(c);
+        list.push(c);
+      }
+    });
+    return list;
+  }, [typeVariants]);
+
+  useEffect(() => {
+    if (colorOptionsForType.length === 0) {
+      setSelectedColor(null);
+      return;
+    }
+    if (!selectedColor || !colorOptionsForType.includes(selectedColor)) {
+      setSelectedColor(colorOptionsForType[0]);
+    }
+  }, [colorOptionsForType, selectedColor]);
+
+  useEffect(() => {
+    if (filteredOptions.length === 0) return;
+    const exists = filteredOptions.some((v) => v.id === selectedVariantId);
+    if (!exists) {
+      setSelectedVariantId(filteredOptions[0].id);
+    }
+  }, [filteredOptions, selectedVariantId]);
 
   const colorGroups = useMemo(() => {
     const map = new Map<string, ProductDetail["variants"]>();
@@ -351,100 +444,100 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
 
         {product.variants && product.variants.length > 0 && (
           <div className="mt-5 space-y-4">
-            {hasColor && (
-              <div>
-                <div className="text-xs font-semibold text-[var(--navy-900)] mb-2">Өнгө</div>
-                <div className="flex flex-wrap gap-2">
-                  {colorList.map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      onClick={() => {
-                        setSelectedColor(color);
-                        setSelectedSize(null);
-                      }}
-                      className={`rounded-full border px-3 py-1 text-xs transition ${
-                        selectedColor === color
-                          ? "border-red-500 bg-red-50 text-red-600"
-                          : "text-[var(--gray-700)] hover:bg-[var(--sky-100)]"
-                      }`}
-                    >
-                      {color}
-                    </button>
-                  ))}
-                </div>
+            {/* Type + Color + Options */}
+            <div>
+              <div className="text-xs font-semibold text-[var(--navy-900)] mb-2">Төрлүүд</div>
+              <div className="flex flex-wrap gap-2">
+                {typeGroupList.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setSelectedTypeGroup(t)}
+                    className={`rounded-full border px-3 py-1 text-xs transition ${
+                      selectedTypeGroup === t
+                        ? "border-red-500 bg-red-50 text-red-600"
+                        : "text-[var(--gray-700)] hover:bg-[var(--sky-100)]"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
               </div>
-            )}
 
-            {hasSize && (
-              <div>
-                <div className="text-xs font-semibold text-[var(--navy-900)] mb-2">Размер</div>
-                <div className="flex flex-wrap gap-2">
-                  {sizeOptions.map((size) => (
-                    <button
-                      key={size}
-                      type="button"
-                      onClick={() => {
-                        setSelectedSize(size);
-                        const next =
-                          matchedVariant && matchedVariant.images && matchedVariant.images.length > 0
-                            ? Array.from(new Set(matchedVariant.images.filter(Boolean) as string[]))
-                            : baseImages;
-                        if (next[0]) setActiveImage(next[0]);
-                      }}
-                      className={`rounded-full border px-3 py-1 text-xs transition ${
-                        selectedSize === size
-                          ? "border-red-500 bg-red-50 text-red-600"
-                          : "text-[var(--gray-700)] hover:bg-[var(--sky-100)]"
-                      }`}
-                    >
-                      {size}
-                    </button>
-                  ))}
+              {colorOptionsForType.length > 0 && (
+                <div className="mt-4">
+                  <div className="text-xs font-semibold text-[var(--navy-900)] mb-2">Өнгө</div>
+                  <div className="flex flex-wrap gap-2">
+                    {colorOptionsForType.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setSelectedColor(c)}
+                        className={`rounded-full border px-3 py-1 text-xs transition ${
+                          selectedColor === c
+                            ? "border-red-500 bg-red-50 text-red-600"
+                            : "text-[var(--gray-700)] hover:bg-[var(--sky-100)]"
+                        }`}
+                      >
+                        {c}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {!hasColor && !hasSize && (
-              <div>
-                <div className="text-xs font-semibold text-[var(--navy-900)] mb-2">Төрөл</div>
-                <div className="flex flex-wrap gap-2">
-                  {product.variants.map((v) => (
-                    <button
-                      key={v.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedVariantId(v.id);
-                        const nextImages =
-                          v.images && v.images.length > 0
-                            ? Array.from(new Set(v.images.filter(Boolean) as string[]))
-                            : baseImages;
-                        setActiveImage(nextImages[0] || null);
-                      }}
-                      className={`rounded-full border px-3 py-1 text-xs transition ${
-                        selectedVariantId === v.id
-                          ? "border-red-500 bg-red-50 text-red-600"
-                          : "text-[var(--gray-700)] hover:bg-[var(--sky-100)]"
-                      }`}
-                    >
-                      {v.sku || `Төрөл-${v.id}`}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {selectedVariant?.attribute && (
-              <div className="text-xs text-[var(--gray-700)]">
-                {Object.entries(selectedVariant.attribute)
-                  .filter(([k, v]) => k !== "color" && k !== "size" && k !== "type" && v != null && String(v).length > 0)
-                  .map(([k, v]) => (
-                    <div key={k}>
-                      {k}: <span className="font-semibold text-[var(--navy-900)]">{String(v)}</span>
+              {filteredOptions.length > 1 && (
+                  <div className="mt-3">
+                    <div className="text-xs font-semibold text-[var(--navy-900)] mb-2">Хэмжээ</div>
+                    <div className="flex flex-wrap gap-2">
+                      {filteredOptions.map((v) => {
+                        const optionLabel = variantLabel(v);
+                        return (
+                          <button
+                            key={v.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedVariantId(v.id);
+                              const nextImages =
+                                v.images && v.images.length > 0
+                                  ? Array.from(new Set(v.images.filter(Boolean) as string[]))
+                                  : baseImages;
+                              setActiveImage(nextImages[0] || null);
+                            }}
+                            className={`rounded-full border px-3 py-1 text-xs transition ${
+                              selectedVariantId === v.id
+                                ? "border-red-500 bg-red-50 text-red-600"
+                                : "text-[var(--gray-700)] hover:bg-[var(--sky-100)]"
+                            }`}
+                          >
+                            {optionLabel}
+                          </button>
+                        );
+                      })}
                     </div>
-                  ))}
-              </div>
-            )}
+                  </div>
+              )}
+
+              {selectedVariant && (
+                <div className="mt-4 text-xs text-[var(--gray-700)]">
+                  {(() => {
+                    const color = getVariantColor(selectedVariant);
+                    const size = getVariantSize(selectedVariant);
+                    const parts = [
+                      selectedTypeGroup || "",
+                      color || "",
+                      size || "",
+                    ].filter(Boolean);
+                    return (
+                      <div>
+                        Сонгосон:{" "}
+                        <span className="font-semibold text-[var(--navy-900)]">{parts.join("/")}</span>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

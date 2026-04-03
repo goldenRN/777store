@@ -654,8 +654,6 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                                 </SelectContent>
                             </Select>
                         </div>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <Label>Брэнд</Label>
                             <Select value={form.brand_id} onValueChange={(v) => handleSelectWithName("brand_id", "brand_name", brands, v)}>

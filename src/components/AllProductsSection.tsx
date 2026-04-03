@@ -63,6 +63,15 @@ export default function AllProductsSection({
     } else if (sort === "price_desc") {
       data.sort((a, b) => (b.discount_price ?? b.price) - (a.discount_price ?? a.price));
     }
+    // shuffle for "all products" view
+    if (categoryId === "all" && subcategoryId === "all" && sort === "newest") {
+      const shuffled = [...data];
+      for (let i = shuffled.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return shuffled;
+    }
     return data;
   }, [products, categoryId, discountOnly, sort]);
 

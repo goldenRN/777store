@@ -35,8 +35,17 @@ export default function HomeAllProducts({
   const [activeCategory, setActiveCategory] = useState<string>("all");
 
   const filtered = useMemo(() => {
-    if (activeCategory === "all") return products;
-    return products.filter((p) => String(p.category_id ?? "") === activeCategory);
+    const base =
+      activeCategory === "all"
+        ? products
+        : products.filter((p) => String(p.category_id ?? "") === activeCategory);
+    if (activeCategory !== "all") return base;
+    const shuffled = [...base];
+    for (let i = shuffled.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
   }, [products, activeCategory]);
 
   const showItems = filtered.slice(0, 8);

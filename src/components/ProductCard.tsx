@@ -82,7 +82,7 @@ export default function ProductCard({
     const color = typeof attr.color === "string" ? attr.color : "";
     const size = typeof attr.size === "string" ? attr.size : "";
     const merged = [type, color, size].filter(Boolean).join(" / ");
-    return merged || v.sku || `SKU-${v.id}`;
+    return merged || v.sku || `Төрөл-${v.id}`;
   };
 
   const loadVariants = async () => {
@@ -99,7 +99,7 @@ export default function ProductCard({
         setVariantOpen(true);
       }
     } catch {
-      setVariantError("SKU мэдээлэл уншиж чадсангүй");
+      setVariantError("Төрөл мэдээлэл уншиж чадсангүй");
       addItem({ id, name, price: finalPrice, image_url, type_name });
     } finally {
       setVariantLoading(false);
@@ -251,7 +251,7 @@ export default function ProductCard({
           <div className="absolute right-0 top-0 h-full w-full max-w-[360px] bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b p-4">
               <div>
-                <div className="text-sm font-semibold">SKU сонгох</div>
+                <div className="text-sm font-semibold">Төрөл сонгох</div>
                 <div className="text-xs text-[var(--gray-500)]">{name}</div>
               </div>
               <button onClick={() => setVariantOpen(false)} className="rounded-full p-2 hover:bg-gray-100">
@@ -266,7 +266,7 @@ export default function ProductCard({
                 </div>
               )}
               {variants.length === 0 ? (
-                <div className="text-xs text-[var(--gray-500)]">SKU олдсонгүй.</div>
+                <div className="text-xs text-[var(--gray-500)]">Төрөл олдсонгүй.</div>
               ) : (
                 variants.map((v) => {
                   const vImage = v.images?.[0]?.image_url || image_url;
@@ -283,14 +283,14 @@ export default function ProductCard({
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
                               src={resolveImageUrl(vImage)}
-                              alt={v.sku || "SKU"}
+                              alt={v.sku || "Төрөл"}
                               className="h-full w-full object-cover"
                             />
                           ) : null}
                         </div>
                         <div className="flex-1">
                           <div className="text-xs font-semibold text-[var(--navy-900)]">
-                            {v.sku || `SKU-${v.id}`}
+                            {v.sku || `Төрөл-${v.id}`}
                           </div>
                           <div className="text-[10px] text-[var(--gray-500)]">{variantLabel(v)}</div>
                           <div className="mt-1 text-xs font-semibold text-red-500">

@@ -319,10 +319,11 @@ export default function ProductVariantModal({ open, onClose, productId, productN
                                                     variant="outline"
                                                     onClick={() => {
                                                         const attr = (v.attribute || {}) as Record<string, unknown>;
+                                                        const typeFromAttr = typeof attr.type === "string" ? attr.type : "";
                                                         setEditingId(v.id);
                                                         setForm({
                                                             sku: v.sku || "",
-                                                            typeName: typeof attr.type === "string" ? attr.type : "",
+                                                            typeName: typeFromAttr || v.sku || "",
                                                             color: typeof attr.color === "string" ? attr.color : "",
                                                             size: typeof attr.size === "string" ? attr.size : "",
                                                             price: v.price != null ? String(v.price) : "",
