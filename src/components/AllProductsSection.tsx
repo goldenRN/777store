@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import ProductCard from "@/components/ProductCard";
 
 type Product = {
@@ -37,6 +38,8 @@ export default function AllProductsSection({
   initialCategoryId?: string;
   initialSubcategoryId?: string;
 }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [categoryId, setCategoryId] = useState<string>(initialCategoryId);
   const [subcategoryId, setSubcategoryId] = useState<string>(initialSubcategoryId);
   const [sort, setSort] = useState<string>("newest");
@@ -46,6 +49,23 @@ export default function AllProductsSection({
     setCategoryId(initialCategoryId);
     setSubcategoryId(initialSubcategoryId);
   }, [initialCategoryId, initialSubcategoryId]);
+
+  const updateQuery = (nextCategory: string, nextSubcategory: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (nextCategory && nextCategory !== "all") {
+      params.set("category", nextCategory);
+    } else {
+      params.delete("category");
+    }
+    if (nextSubcategory && nextSubcategory !== "all") {
+      params.set("subcategory", nextSubcategory);
+    } else {
+      params.delete("subcategory");
+    }
+    params.set("page", "1");
+    const qs = params.toString();
+    router.push(`/products${qs ? `?${qs}` : ""}`);
+  };
 
   const filtered = useMemo(() => {
     let data = [...products];
@@ -86,6 +106,7 @@ export default function AllProductsSection({
             onClick={() => {
               setCategoryId("all");
               setSubcategoryId("all");
+              updateQuery("all", "all");
             }}
             className={`w-full rounded-lg px-3 py-2 text-left text-sm ${
               categoryId === "all" ? "bg-[var(--sky-100)]" : "hover:bg-[var(--sky-100)]"
@@ -99,6 +120,7 @@ export default function AllProductsSection({
               onClick={() => {
                 setCategoryId(String(c.category_id));
                 setSubcategoryId("all");
+                updateQuery(String(c.category_id), "all");
               }}
               className={`w-full rounded-lg px-3 py-2 text-left text-sm ${
                 String(c.category_id) === categoryId ? "bg-[var(--sky-100)]" : "hover:bg-[var(--sky-100)]"
@@ -124,7 +146,10 @@ export default function AllProductsSection({
               {activeCategory.subcategories.map((s) => (
                 <button
                   key={s.id}
-                  onClick={() => setSubcategoryId(String(s.id))}
+                  onClick={() => {
+                    setSubcategoryId(String(s.id));
+                    updateQuery(categoryId, String(s.id));
+                  }}
                   className={`w-full rounded-lg px-3 py-2 text-left text-xs ${
                     String(s.id) === subcategoryId ? "bg-[var(--sky-100)]" : "hover:bg-[var(--sky-100)]"
                   }`}

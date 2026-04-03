@@ -346,7 +346,7 @@ export default function Header() {
                       {activeCategory?.category_name || "Ангилал"}
                     </Link>
                     <Link
-                      href={`/products?category=${activeCategory?.category_id ?? ""}`}
+                      href="/products"
                       onClick={() => setCategoryOpen(false)}
                       className="rounded-full bg-[var(--navy-900)] px-4 py-2 text-xs font-semibold text-white"
                     >

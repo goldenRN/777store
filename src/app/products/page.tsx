@@ -83,7 +83,7 @@ export default async function ProductsPage({
   const category = params.category ?? "";
   const subcategory = params.subcategory ?? "";
   const page = Math.max(Number(params.page ?? 1), 1);
-  const limit = 20;
+  const limit = 15;
 
   const [productsRes, categories] = await Promise.all([
     fetchProducts({
@@ -121,7 +121,9 @@ export default async function ProductsPage({
             <h1 className="text-2xl font-bold">{title}</h1>
             {q && <div className="mt-1 text-xs text-[var(--gray-500)]">Хайлт: “{q}”</div>}
           </div>
-          <div className="text-xs text-[var(--gray-500)]">Нийт: {total}</div>
+          <div className="text-xs text-[var(--gray-500)]">
+            Нийт {total}‑аас {total === 0 ? 0 : (page - 1) * limit + 1}‑{Math.min(page * limit, total)} харуулж байна
+          </div>
         </div>
 
         {items.length === 0 ? (

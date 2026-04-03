@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
   const page = Math.max(Number(searchParams.get("page") ?? 1), 1);
   const limit = Math.max(Number(searchParams.get("limit") ?? 20), 1);
   const q = (searchParams.get("q") ?? "").trim();
-  const status = (searchParams.get("status") ?? "").trim();
+  let status = (searchParams.get("status") ?? "").trim();
   const payment = (searchParams.get("payment") ?? "").trim().toUpperCase();
 
   // auto cleanup: unpaid + expired
@@ -28,6 +28,11 @@ export async function GET(request: NextRequest) {
           ],
         }
       : {};
+
+  if (status && status.toLowerCase() === "pending") {
+    const first = await prisma.adminStatus.findFirst({ orderBy: { id: "asc" } });
+    if (first?.name) status = first.name;
+  }
 
   if (payment === "UNPAID") {
     where.payment_status = "UNPAID";

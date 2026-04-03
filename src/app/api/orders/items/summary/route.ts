@@ -3,9 +3,14 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const status = (searchParams.get("status") ?? "").trim();
+  let status = (searchParams.get("status") ?? "").trim();
   const payment = (searchParams.get("payment") ?? "PAID").trim().toUpperCase();
   const excludeArrived = searchParams.get("excludeArrived") === "true";
+
+  if (status && status.toLowerCase() === "pending") {
+    const first = await prisma.adminStatus.findFirst({ orderBy: { id: "asc" } });
+    if (first?.name) status = first.name;
+  }
 
   const whereOrder: Record<string, unknown> = {};
   if (payment === "PAID") {
