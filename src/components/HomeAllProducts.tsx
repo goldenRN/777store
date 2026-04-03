@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import ProductCard from "@/components/ProductCard";
 
 type Product = {
@@ -33,22 +33,55 @@ export default function HomeAllProducts({
   categories: Category[];
 }) {
   const [activeCategory, setActiveCategory] = useState<string>("all");
+  const [items, setItems] = useState<Product[]>(products);
+  const [total, setTotal] = useState<number>(products.length);
+  const [loading, setLoading] = useState(false);
 
-  const filtered = useMemo(() => {
-    const base =
-      activeCategory === "all"
-        ? products
-        : products.filter((p) => String(p.category_id ?? "") === activeCategory);
-    if (activeCategory !== "all") return base;
-    const shuffled = [...base];
-    for (let i = shuffled.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      const params = new URLSearchParams({ limit: "8" });
+      if (activeCategory !== "all") params.set("category", activeCategory);
+      const res = await fetch(`/api/public/products?${params.toString()}`);
+      if (!res.ok) {
+        setLoading(false);
+        return;
+      }
+      const json = await res.json();
+      if (cancelled) return;
+      const list = (json.items || []) as Product[];
+      setItems(list);
+      setTotal(Number(json.total ?? 0));
+      setLoading(false);
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCategory]);
+
+  const displayItems = useMemo(() => {
+    const base = items;
+    if (activeCategory === "all" && base.length > 1) {
+      const shuffled = [...base];
+      for (let i = shuffled.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return shuffled;
     }
-    return shuffled;
-  }, [products, activeCategory]);
+    if (activeCategory !== "all") {
+      return [...base].sort((a, b) => {
+        const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return bTime - aTime;
+      });
+    }
+    return base;
+  }, [items, activeCategory]);
 
-  const showItems = filtered.slice(0, 8);
+  const showItems = displayItems.slice(0, 8);
 
   const resolveImageUrl = (url?: string | null) => {
     if (!url) return "";
@@ -122,7 +155,7 @@ export default function HomeAllProducts({
           <div className="flex items-center gap-3">
             <h2 className="text-xl font-bold">Бүх бараа</h2>
             <span className="rounded-full bg-[var(--sky-100)] px-3 py-1 text-xs font-semibold text-[var(--navy-800)]">
-              Нийт: {filtered.length}
+              Нийт: {total}
             </span>
           </div>
           <a
@@ -132,7 +165,11 @@ export default function HomeAllProducts({
             Бүгдийг харах
           </a>
         </div>
-        {showItems.length === 0 ? (
+        {loading && showItems.length === 0 ? (
+          <div className="rounded-2xl bg-white p-6 text-sm text-[var(--gray-500)] shadow">
+            Ачаалж байна...
+          </div>
+        ) : showItems.length === 0 ? (
           <div className="rounded-2xl bg-white p-6 text-sm text-[var(--gray-500)] shadow">
             Одоогоор бараа олдсонгүй.
           </div>

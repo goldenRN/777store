@@ -142,26 +142,34 @@ export default function ProductVariantModal({ open, onClose, productId, productN
         if (!productId) return;
 
         if (!form.typeName.trim()) {
-            setError("Төрөл заавал оруулна уу");
-            return;
+            setError(null);
         }
 
-        let parsedAttr: Record<string, unknown> = {};
-        try {
-            parsedAttr = form.attributeJson.trim()
-                ? JSON.parse(form.attributeJson)
-                : {};
-        } catch {
-            setError("Нэмэлт attribute JSON буруу байна");
-            return;
-        }
-
-        const finalAttr: Record<string, unknown> = {
-            ...parsedAttr,
-        };
+        const finalAttr: Record<string, unknown> = {};
         if (form.typeName.trim()) finalAttr.type = form.typeName.trim();
         if (form.color.trim()) finalAttr.color = form.color.trim();
         if (form.size.trim()) finalAttr.size = form.size.trim();
+
+        // prevent duplicate variant (same type/color/size)
+        const key = JSON.stringify({
+            type: finalAttr.type ?? "",
+            color: finalAttr.color ?? "",
+            size: finalAttr.size ?? "",
+        });
+        const exists = variants.some((v) => {
+            if (editingId && v.id === editingId) return false;
+            const attr = (v.attribute || {}) as Record<string, unknown>;
+            const k = JSON.stringify({
+                type: attr.type ?? "",
+                color: attr.color ?? "",
+                size: attr.size ?? "",
+            });
+            return k === key;
+        });
+        if (exists) {
+            setError("Ижил төрөл аль хэдийн байна");
+            return;
+        }
 
         setSaving(true);
         try {
@@ -297,9 +305,9 @@ export default function ProductVariantModal({ open, onClose, productId, productN
 
                                                 {/* TEXT INFO */}
                                                 <div>
-                                                    <div className="font-medium text-sm">
-                                                        {v.sku || `Төрөл-${v.id}`}
-                                                    </div>
+                                                    {v.sku ? (
+                                                        <div className="font-medium text-sm">{v.sku}</div>
+                                                    ) : null}
 
                                                     {/* ATTRIBUTE NICE LOOK */}
                                                     <div className="text-xs text-gray-600">
@@ -394,15 +402,7 @@ export default function ProductVariantModal({ open, onClose, productId, productN
                                     <Input value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
                                 </div>
                             </div>
-                            <div>
-                                <label className="text-xs block mb-1">Нэмэлт attribute JSON (optional)</label>
-                                <Textarea
-                                    value={form.attributeJson}
-                                    onChange={(e) => setForm({ ...form, attributeJson: e.target.value })}
-                                    rows={4}
-                                    placeholder='{"memory":"16GB","speed":"3200Mhz"}'
-                                />
-                            </div>
+                            {/* JSON attribute removed */}
 
                             <DialogFooter>
                                 <div className="flex justify-end gap-2">

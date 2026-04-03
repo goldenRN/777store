@@ -27,24 +27,43 @@ export async function POST(request: NextRequest) {
   const productIds = items
     .map((it: any) => Number(it.product_id))
     .filter((id: number) => Number.isFinite(id));
-  const products = await prisma.adminProduct.findMany({
-    where: { id: { in: productIds } },
-    include: { images: true },
-  });
+  const variantIds = items
+    .map((it: any) => Number(it.variant_id))
+    .filter((id: number) => Number.isFinite(id));
+  const [products, variants] = await Promise.all([
+    prisma.adminProduct.findMany({
+      where: { id: { in: productIds } },
+      include: { images: true },
+    }),
+    variantIds.length > 0
+      ? prisma.adminProductVariant.findMany({
+          where: { id: { in: variantIds } },
+          include: { images: true },
+        })
+      : Promise.resolve([]),
+  ]);
   if (products.length !== productIds.length) {
     return NextResponse.json({ message: "Зарим бараа олдсонгүй" }, { status: 400 });
   }
   const productMap = new Map(products.map((p) => [p.id, p]));
+  const variantMap = new Map(variants.map((v) => [v.id, v]));
 
   const orderItems = items.map((it: any) => {
     const productId = Number(it.product_id);
+    const variantId = it.variant_id ? Number(it.variant_id) : null;
     const qty = Math.max(1, Number(it.qty ?? 1));
     const product = productMap.get(productId)!;
+    const variant = variantId ? variantMap.get(variantId) : null;
     const unitPrice =
-      product.discount_price != null && product.discount_price > 0
+      variant && variant.price != null
+        ? variant.price
+        : product.discount_price != null && product.discount_price > 0
         ? product.discount_price
         : product.price;
-    const imageUrl = product.images?.[0]?.image_url ?? null;
+    const imageUrl =
+      variant?.images?.[0]?.image_url ??
+      product.images?.[0]?.image_url ??
+      null;
     return {
       product_id: productId,
       product_name: product.name,

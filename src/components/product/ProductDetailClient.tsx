@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import AddToCartButton from "@/components/cart/AddToCartButton";
 import { useRouter } from "next/navigation";
@@ -52,6 +52,7 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [zoomOpen, setZoomOpen] = useState(false);
   const [selectedTypeGroup, setSelectedTypeGroup] = useState<string | null>(null);
+  const prevVariantIdRef = useRef<number | null>(null);
   const endDate = useMemo(() => {
     if (!product.created_at || !product.duration_hours) return null;
     const endMs = new Date(product.created_at).getTime() + product.duration_hours * 60 * 60 * 1000;
@@ -115,10 +116,10 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
 
   const variantLabel = (v: ProductDetail["variants"][number]) => {
     const attr = (v.attribute || {}) as Record<string, unknown>;
-    const color = typeof attr.color === "string" ? attr.color : "";
     const size = typeof attr.size === "string" ? attr.size : "";
-    const merged = [size].filter(Boolean).join(" / ");
-    return merged || v.sku || `Төрөл-${v.id}`;
+    const base = size ? size : "";
+    const merged = [base].filter(Boolean).join(" • ");
+    return merged || v.sku || "";
   };
 
   const getVariantColor = (v: ProductDetail["variants"][number]) => {
@@ -160,7 +161,7 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
   const getVariantTypeName = (v: ProductDetail["variants"][number]) => {
     const attr = (v.attribute || {}) as Record<string, unknown>;
     const type = typeof attr.type === "string" ? attr.type.trim() : "";
-    return type || v.sku || `Төрөл-${v.id}`;
+    return type;
   };
 
   const typeGroups = useMemo(() => {
@@ -204,6 +205,7 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
       });
   }, [typeVariants, selectedColor]);
 
+
   const colorOptionsForType = useMemo(() => {
     const seen = new Set<string>();
     const list: string[] = [];
@@ -229,11 +231,16 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
 
   useEffect(() => {
     if (filteredOptions.length === 0) return;
+    if (selectedVariantId == null) {
+      setSelectedVariantId(filteredOptions[0].id);
+      return;
+    }
     const exists = filteredOptions.some((v) => v.id === selectedVariantId);
     if (!exists) {
       setSelectedVariantId(filteredOptions[0].id);
     }
   }, [filteredOptions, selectedVariantId]);
+
 
   const colorGroups = useMemo(() => {
     const map = new Map<string, ProductDetail["variants"]>();
@@ -293,13 +300,24 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
 
   useEffect(() => {
     if (!matchedVariant) return;
-    if (matchedVariant.id !== selectedVariantId) {
+    if (selectedVariantId == null || matchedVariant.id !== selectedVariantId) {
       setSelectedVariantId(matchedVariant.id);
     }
-    if (matchedVariant.images && matchedVariant.images.length > 0) {
-      setActiveImage(matchedVariant.images[0]);
-    }
   }, [matchedVariant, selectedVariantId]);
+
+  useEffect(() => {
+    if (!selectedVariant) return;
+    const prevId = prevVariantIdRef.current;
+    if (prevId !== selectedVariant.id) {
+      const imgs = (selectedVariant.images || []).filter(Boolean) as string[];
+      if (imgs.length > 0) {
+        setActiveImage(imgs[0]);
+      } else if (baseImages[0]) {
+        setActiveImage(baseImages[0]);
+      }
+      prevVariantIdRef.current = selectedVariant.id;
+    }
+  }, [selectedVariant?.id, baseImages]);
 
   useEffect(() => {
     if (!selectedVariant) return;
@@ -348,8 +366,13 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
                   setActiveImage(img.url);
                   if (img.variantId) {
                     setSelectedVariantId(img.variantId);
-                  } else {
-                    setSelectedVariantId(null);
+                    const v = product.variants.find((pv) => pv.id === img.variantId) || null;
+                    if (v) {
+                      const t = getVariantTypeName(v);
+                      if (t) setSelectedTypeGroup(t);
+                      const c = getVariantColor(v);
+                      setSelectedColor(c || null);
+                    }
                   }
                 }}
                 className={`relative h-20 w-full overflow-hidden rounded-lg bg-[var(--sky-100)] ${
@@ -446,23 +469,29 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
           <div className="mt-5 space-y-4">
             {/* Type + Color + Options */}
             <div>
-              <div className="text-xs font-semibold text-[var(--navy-900)] mb-2">Төрлүүд</div>
-              <div className="flex flex-wrap gap-2">
-                {typeGroupList.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setSelectedTypeGroup(t)}
-                    className={`rounded-full border px-3 py-1 text-xs transition ${
-                      selectedTypeGroup === t
-                        ? "border-red-500 bg-red-50 text-red-600"
-                        : "text-[var(--gray-700)] hover:bg-[var(--sky-100)]"
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
+              {typeGroupList.some((t) => t.trim().length > 0) && (
+                <>
+                  <div className="text-xs font-semibold text-[var(--navy-900)] mb-2">Төрлүүд</div>
+                  <div className="flex flex-wrap gap-2">
+                    {typeGroupList
+                      .filter((t) => t.trim().length > 0)
+                      .map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => setSelectedTypeGroup(t)}
+                          className={`rounded-full border px-3 py-1 text-xs transition ${
+                            selectedTypeGroup === t
+                              ? "border-red-500 bg-red-50 text-red-600"
+                              : "text-[var(--gray-700)] hover:bg-[var(--sky-100)]"
+                          }`}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                  </div>
+                </>
+              )}
 
               {colorOptionsForType.length > 0 && (
                 <div className="mt-4">
@@ -490,8 +519,12 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
                   <div className="mt-3">
                     <div className="text-xs font-semibold text-[var(--navy-900)] mb-2">Хэмжээ</div>
                     <div className="flex flex-wrap gap-2">
-                      {filteredOptions.map((v) => {
-                        const optionLabel = variantLabel(v);
+                      {Array.from(
+                        new Map(
+                          filteredOptions.map((v) => [variantLabel(v) || `#${v.id}`, v])
+                        ).values()
+                      ).map((v) => {
+                        const optionLabel = variantLabel(v) || `#${v.id}`;
                         return (
                           <button
                             key={v.id}
@@ -518,16 +551,15 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
                   </div>
               )}
 
+
               {selectedVariant && (
                 <div className="mt-4 text-xs text-[var(--gray-700)]">
                   {(() => {
                     const color = getVariantColor(selectedVariant);
                     const size = getVariantSize(selectedVariant);
-                    const parts = [
-                      selectedTypeGroup || "",
-                      color || "",
-                      size || "",
-                    ].filter(Boolean);
+                    const parts = [selectedTypeGroup || "", color || "", size || ""]
+                      .filter(Boolean)
+                      .filter((p) => p.trim().length > 0);
                     return (
                       <div>
                         Сонгосон:{" "}

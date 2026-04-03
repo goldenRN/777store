@@ -41,6 +41,9 @@ export async function GET(request: NextRequest) {
       {
         description: p.description ?? "",
         image_url: p.images?.[0]?.image_url ?? null,
+        stock: p.stock ?? null,
+        ordered_qty: p.ordered_qty ?? null,
+        order_accept_status: p.order_accept_status ?? null,
       },
     ])
   );
@@ -52,6 +55,9 @@ export async function GET(request: NextRequest) {
       product_name: string;
       product_description: string;
       image_url: string | null;
+      product_stock: number | null;
+      product_ordered_qty: number | null;
+      order_accept_status: string | null;
       total_qty: number;
       order_count: number;
       item_ids: number[];
@@ -67,6 +73,9 @@ export async function GET(request: NextRequest) {
       product_name: it.product_name,
       product_description: productMeta?.description ?? "",
       image_url: productMeta?.image_url ?? it.image_url ?? null,
+      product_stock: productMeta?.stock ?? null,
+      product_ordered_qty: productMeta?.ordered_qty ?? null,
+      order_accept_status: productMeta?.order_accept_status ?? null,
       total_qty: 0,
       order_count: 0,
       item_ids: [],

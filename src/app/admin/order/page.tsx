@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import OrderDetailsModal from "./OrderDetailsModal";
 import { getActorHeaders } from "@/lib/actorHeaders";
 import { Modal } from "@/components/ui/modal";
-import { Eye, Tag } from "lucide-react";
+import { Eye, Tag, Trash2, Plus } from "lucide-react";
 
 type Order = {
   id: number;
@@ -16,6 +16,8 @@ type Order = {
   created_at: string;
   total: number;
   payment_status?: string | null;
+  payment_provider?: string | null;
+  payment_method_name?: string | null;
   qpay_qr_image?: string | null;
   qpay_qr_text?: string | null;
   qpay_short_url?: string | null;
@@ -27,6 +29,9 @@ type ProductSummary = {
   product_name: string;
   product_description: string;
   image_url: string | null;
+  product_stock: number | null;
+  product_ordered_qty: number | null;
+  order_accept_status: string | null;
   total_qty: number;
   order_count: number;
   item_ids: number[];
@@ -46,6 +51,13 @@ type AdminProductOption = {
   price: number;
   discount_price: number | null;
   images?: { image_url: string }[];
+};
+
+type VariantOption = {
+  id: number;
+  sku: string | null;
+  attribute: Record<string, unknown> | null;
+  price: number | null;
 };
 
 export default function AdminOrdersTable() {
@@ -70,10 +82,11 @@ export default function AdminOrdersTable() {
   const [createName, setCreateName] = useState("");
   const [createEmail, setCreateEmail] = useState("");
   const [createUserId, setCreateUserId] = useState<string | null>(null);
-  const [createItems, setCreateItems] = useState<{ product_id: number | ""; qty: number }[]>([
-    { product_id: "", qty: 1 },
+  const [createItems, setCreateItems] = useState<{ product_id: number | ""; product_query?: string; qty: number; variant_id?: number | "" }[]>([
+    { product_id: "", product_query: "", qty: 1, variant_id: "" },
   ]);
   const [productOptions, setProductOptions] = useState<AdminProductOption[]>([]);
+  const [variantOptions, setVariantOptions] = useState<Record<number, VariantOption[]>>({});
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [paymentMethodId, setPaymentMethodId] = useState<number | "">("");
   const searchParams = useSearchParams();
@@ -98,6 +111,23 @@ export default function AdminOrdersTable() {
     if (key === "cancelled" || key === "canceled") return "Цуцлагдсан";
     return statusFilter;
   })();
+
+  const getVariantLabel = (variant: VariantOption) => {
+    const attr = variant.attribute && typeof variant.attribute === "object" ? variant.attribute : null;
+    const typeValue = typeof attr?.type === "string" ? attr.type.trim() : "";
+    const colorValue = typeof attr?.color === "string" ? attr.color.trim() : "";
+    const sizeValue = typeof attr?.size === "string" ? attr.size.trim() : "";
+    const parts = [typeValue, colorValue, sizeValue].filter(Boolean);
+    if (parts.length > 0) return parts.join(" / ");
+    if (variant.sku && variant.sku.trim()) return variant.sku.trim();
+    return `Төрөл-${variant.id}`;
+  };
+
+  useEffect(() => {
+    if (isPending) {
+      setViewMode("product");
+    }
+  }, [isPending]);
 
   const fetchOrders = async (p = page) => {
     setLoading(true);
@@ -156,6 +186,25 @@ export default function AdminOrdersTable() {
         .catch(() => setPaymentMethods([]));
     }
   }, [createOpen, paymentMethods.length, productOptions.length]);
+
+  useEffect(() => {
+    if (!createOpen) return;
+    const ids = Array.from(
+      new Set(createItems.map((it) => Number(it.product_id)).filter((id) => Number.isFinite(id)))
+    ) as number[];
+    ids.forEach((id) => {
+      if (variantOptions[id]) return;
+      fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/productvar/${id}`)
+        .then((r) => r.json())
+        .then((data) => {
+          const list = Array.isArray(data) ? (data as VariantOption[]) : [];
+          setVariantOptions((prev) => ({ ...prev, [id]: list }));
+        })
+        .catch(() => {
+          setVariantOptions((prev) => ({ ...prev, [id]: [] }));
+        });
+    });
+  }, [createOpen, createItems, variantOptions]);
 
   useEffect(() => {
     if (!createOpen) return;
@@ -292,7 +341,9 @@ export default function AdminOrdersTable() {
                 <th className="p-3 text-left">Зураг</th>
                 <th className="p-3 text-left">Барааны нэр</th>
                 <th className="p-3 text-left">Тайлбар</th>
-                <th className="p-3 text-left">Захиалсан тоо</th>
+                <th className="p-3 text-left">Захиалсан</th>
+                <th className="p-3 text-left">Захиалга авах тоо</th>
+                <th className="p-3 text-left">Үлдэгдэл</th>
                 <th className="p-3 text-left">
                   <Tag size={14} className="text-gray-600" />
                 </th>
@@ -301,9 +352,9 @@ export default function AdminOrdersTable() {
             </thead>
             <tbody>
               {productLoading ? (
-                <tr><td colSpan={6} className="p-4 text-center">Уншиж байна...</td></tr>
+                <tr><td colSpan={8} className="p-4 text-center">Уншиж байна...</td></tr>
               ) : productItems.length === 0 ? (
-                <tr><td colSpan={6} className="p-4 text-center">Мэдээлэл алга</td></tr>
+                <tr><td colSpan={8} className="p-4 text-center">Мэдээлэл алга</td></tr>
               ) : (
                 productItems.map((p) => (
                   <tr key={`${p.product_id ?? "x"}-${p.product_name}`} className="border-t">
@@ -324,6 +375,12 @@ export default function AdminOrdersTable() {
                       <span className="line-clamp-2">{p.product_description || "-"}</span>
                     </td>
                     <td className="p-3">{p.total_qty}</td>
+                    <td className="p-3">{p.product_stock ?? "-"}</td>
+                    <td className="p-3">
+                      {p.product_stock != null && p.product_ordered_qty != null
+                        ? Math.max(0, p.product_stock - p.product_ordered_qty)
+                        : "-"}
+                    </td>
                     <td className="p-3">
                       <span className="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700">
                         {titleLabel}
@@ -381,6 +438,7 @@ export default function AdminOrdersTable() {
                 { key: "name", label: "Захиалагч" },
                 { key: "phone1", label: "Утас" },
                 { key: "total", label: "Нийт" },
+                { key: "payment_method_name", label: "Төлбөрийн төрөл" },
                 { key: "payment_status", label: "Төлбөр" },
                 { key: "created_at", label: "Огноо" },
               ].map((col) => (
@@ -398,9 +456,9 @@ export default function AdminOrdersTable() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} className="p-4 text-center">Уншиж байна...</td></tr>
+              <tr><td colSpan={8} className="p-4 text-center">Уншиж байна...</td></tr>
             ) : orders.length === 0 ? (
-              <tr><td colSpan={7} className="p-4 text-center">Захиалга хоосон байна</td></tr>
+              <tr><td colSpan={8} className="p-4 text-center">Захиалга хоосон байна</td></tr>
             ) : (
               sortedOrders.map(o => (
                 <tr key={o.id} className="border-t hover:bg-gray-50">
@@ -411,6 +469,13 @@ export default function AdminOrdersTable() {
                   </td>
                   <td className="p-3">{o.phone1}</td>
                   <td className="p-3">{Number(o.total || 0).toLocaleString()}₮</td>
+                  <td className="p-3">
+                    {o.payment_method_name
+                      ? o.payment_method_name
+                      : o.payment_provider
+                      ? o.payment_provider.toUpperCase()
+                      : "—"}
+                  </td>
                   <td className="p-3">
                     <div className="flex items-center gap-2">
                       <span
@@ -637,49 +702,96 @@ export default function AdminOrdersTable() {
             <div className="flex items-center justify-between">
               <h3 className="font-medium">Захиалгын бараа</h3>
               <button
-                onClick={() => setCreateItems((prev) => [...prev, { product_id: "", qty: 1 }])}
-                className="text-sm px-2 py-1 border rounded"
+                onClick={() => setCreateItems((prev) => [...prev, { product_id: "", qty: 1, variant_id: "" }])}
+                className="text-sm px-3 py-1.5 border rounded-lg hover:bg-gray-50 inline-flex items-center gap-2"
               >
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white">
+                  <Plus className="h-3 w-3" />
+                </span>
                 Бараа нэмэх
               </button>
             </div>
             {createItems.map((it, idx) => (
-              <div key={idx} className="grid grid-cols-1 md:grid-cols-4 gap-3 items-center">
-                <select
-                  value={it.product_id === "" ? "" : String(it.product_id)}
-                  onChange={(e) =>
-                    setCreateItems((prev) =>
-                      prev.map((row, i) =>
-                        i === idx ? { ...row, product_id: e.target.value ? Number(e.target.value) : "" } : row
+              <div key={idx} className="rounded-xl border bg-white p-3 md:p-4 shadow-sm">
+                <div className="grid grid-cols-1 md:grid-cols-[2fr_1.2fr_160px] gap-3 items-center">
+                  <div>
+                    <input
+                      list={`product-list-${idx}`}
+                      value={it.product_query ?? ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setCreateItems((prev) =>
+                          prev.map((row, i) =>
+                            i === idx ? { ...row, product_query: val, product_id: "", variant_id: "" } : row
+                          )
+                        );
+                        const hit = productOptions.find((p) => p.name === val);
+                        if (hit) {
+                          setCreateItems((prev) =>
+                            prev.map((row, i) =>
+                              i === idx ? { ...row, product_id: hit.id, product_query: hit.name, variant_id: "" } : row
+                            )
+                          );
+                        }
+                      }}
+                      className="border rounded-lg px-3 py-2 w-full"
+                      placeholder="Бараа хайж сонгох..."
+                    />
+                    <datalist id={`product-list-${idx}`}>
+                      {productOptions
+                        .filter((p) =>
+                          (it.product_query ?? "").trim()
+                            ? p.name.toLowerCase().includes((it.product_query ?? "").trim().toLowerCase())
+                            : true
+                        )
+                        .slice(0, 10)
+                        .map((p) => (
+                          <option key={p.id} value={p.name} />
+                        ))}
+                    </datalist>
+                  </div>
+                  <select
+                    value={it.variant_id === "" || it.variant_id == null ? "" : String(it.variant_id)}
+                    onChange={(e) =>
+                      setCreateItems((prev) =>
+                        prev.map((row, i) =>
+                          i === idx ? { ...row, variant_id: e.target.value ? Number(e.target.value) : "" } : row
+                        )
                       )
-                    )
-                  }
-                  className="border rounded px-3 py-2 md:col-span-2"
-                >
-                  <option value="">Бараа сонгох</option>
-                  {productOptions.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  min={1}
-                  value={it.qty}
-                  onChange={(e) =>
-                    setCreateItems((prev) =>
-                      prev.map((row, i) => (i === idx ? { ...row, qty: Number(e.target.value) } : row))
-                    )
-                  }
-                  className="border rounded px-3 py-2"
-                />
-                <button
-                  onClick={() => setCreateItems((prev) => prev.filter((_, i) => i !== idx))}
-                  className="text-sm px-2 py-1 border rounded"
-                >
-                  Устгах
-                </button>
+                    }
+                    className="border rounded-lg px-3 py-2"
+                    disabled={!it.product_id}
+                  >
+                    <option value="">Төрөл сонгох</option>
+                    {it.product_id &&
+                      (variantOptions[Number(it.product_id)] || []).map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {getVariantLabel(v)}
+                        </option>
+                      ))}
+                  </select>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      value={it.qty}
+                      onChange={(e) =>
+                        setCreateItems((prev) =>
+                          prev.map((row, i) => (i === idx ? { ...row, qty: Number(e.target.value) } : row))
+                        )
+                      }
+                      className="border rounded-lg px-3 py-2 w-full"
+                    />
+                    <button
+                      onClick={() => setCreateItems((prev) => prev.filter((_, i) => i !== idx))}
+                      className="h-10 w-10 rounded-full border text-red-600 hover:bg-red-50 flex items-center justify-center"
+                      aria-label="Устгах"
+                      title="Устгах"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
@@ -717,7 +829,7 @@ export default function AdminOrdersTable() {
                   alert("Утас оруулна уу");
                   return;
                 }
-                const filteredItems = createItems.filter((it) => it.product_id);
+                  const filteredItems = createItems.filter((it) => it.product_id);
                 if (filteredItems.length === 0) {
                   alert("Бараа сонгоно уу");
                   return;
@@ -736,7 +848,11 @@ export default function AdminOrdersTable() {
                       email: createEmail.trim(),
                       user_id: createUserId,
                       payment_method_id: paymentMethodId || null,
-                      items: filteredItems.map((it) => ({ product_id: it.product_id, qty: it.qty })),
+                      items: filteredItems.map((it) => ({
+                        product_id: it.product_id,
+                        variant_id: it.variant_id || null,
+                        qty: it.qty,
+                      })),
                     }),
                   });
                   if (!res.ok) {
@@ -744,7 +860,7 @@ export default function AdminOrdersTable() {
                     throw new Error(err?.message || "Алдаа гарлаа");
                   }
                   setCreateOpen(false);
-                  setCreateItems([{ product_id: "", qty: 1 }]);
+                  setCreateItems([{ product_id: "", product_query: "", qty: 1, variant_id: "" }]);
                   setCreatePhone("");
                   setCreateName("");
                   setCreateEmail("");

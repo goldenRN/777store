@@ -26,6 +26,7 @@ type ProductDetail = {
     stock: number | null;
   }[];
   category_id: number | null;
+  subcategory_id?: number | null;
   category_name: string | null;
   subcategory_name: string | null;
   type_name: string | null;
@@ -110,6 +111,7 @@ const fetchProduct = async (id: string): Promise<ProductDetail | null> => {
         stock: v.stock ?? null,
       })) ?? [],
     category_id: product.category_id ?? null,
+    subcategory_id: (product as any).subcategory_id ?? null,
     category_name: product.category?.category_name ?? null,
     subcategory_name: product.subcategory?.name ?? null,
     type_name: product.type?.name ?? null,
@@ -171,10 +173,19 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     );
   }
 
-  const relatedRaw =
-    product?.category_id
+  const relatedRaw = product?.category_id
+    ? await prisma.adminProduct.findMany({
+        where: { category_id: product.category_id, NOT: { id: product.id } },
+        orderBy: { created_at: "desc" },
+        take: 4,
+        include: {
+          type: true,
+          images: { where: { product_variant_id: null }, orderBy: { id: "asc" } },
+        },
+      })
+    : product?.subcategory_id
       ? await prisma.adminProduct.findMany({
-          where: { category_id: product.category_id, NOT: { id: product.id } },
+          where: { subcategory_id: product.subcategory_id, NOT: { id: product.id } },
           orderBy: { created_at: "desc" },
           take: 4,
           include: {
@@ -182,7 +193,15 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             images: { where: { product_variant_id: null }, orderBy: { id: "asc" } },
           },
         })
-      : [];
+      : await prisma.adminProduct.findMany({
+          where: { NOT: { id: product.id } },
+          orderBy: { created_at: "desc" },
+          take: 4,
+          include: {
+            type: true,
+            images: { where: { product_variant_id: null }, orderBy: { id: "asc" } },
+          },
+        });
 
   const related: RelatedProduct[] = relatedRaw.map((p) => ({
     id: p.id,

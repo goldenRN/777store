@@ -4,6 +4,7 @@ import BannerSlider from "@/components/BannerSlider";
 import ProductCard from "@/components/ProductCard";
 import OrderProductsSlider from "@/components/OrderProductsSlider";
 import HomeAllProducts from "@/components/HomeAllProducts";
+import { headers } from "next/headers";
 
 type PublicProduct = {
   id: number;
@@ -39,35 +40,43 @@ type Category = {
   category_image: string | null;
 };
 
-const getBaseUrl = () => {
-  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+const getBaseUrl = async () => {
+  const raw = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (raw) {
+    const normalized = raw.replace(/^https?:https?:\/\//, "https://");
+    if (normalized.startsWith("http://") || normalized.startsWith("https://")) return normalized;
+  }
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  const h = (await headers()) as unknown as Headers;
+  const host = h?.get?.("x-forwarded-host") ?? h?.get?.("host");
+  const proto = h?.get?.("x-forwarded-proto") ?? (process.env.NODE_ENV === "development" ? "http" : "https");
+  if (host) return `${proto}://${host}`;
   return "http://localhost:3000";
 };
 
 const fetchBanners = async () => {
-  const base = getBaseUrl();
+  const base = await getBaseUrl();
   const res = await fetch(`${base}/api/banner`, { cache: "no-store" });
   if (!res.ok) return [];
   return (await res.json()) as Banner[];
 };
 
 const fetchCategories = async () => {
-  const base = getBaseUrl();
+  const base = await getBaseUrl();
   const res = await fetch(`${base}/api/category`, { cache: "no-store" });
   if (!res.ok) return [];
   return (await res.json()) as Category[];
 };
 
 const fetchPromo = async () => {
-  const base = getBaseUrl();
+  const base = await getBaseUrl();
   const res = await fetch(`${base}/api/promo`, { cache: "no-store" });
   if (!res.ok) return null;
   return (await res.json()) as Promo;
 };
 
 const fetchProducts = async (params: Record<string, string | number | boolean | undefined>) => {
-  const base = getBaseUrl();
+  const base = await getBaseUrl();
   const searchParams = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== "") {
@@ -102,10 +111,14 @@ export default async function Home() {
   ]);
 
   const readyProducts = readyRes.items;
+  const readyTotal = readyRes.total;
   const preorderProducts = preorderRes.items.slice(0, 8);
+  const preorderTotal = preorderRes.total;
   const liveProducts = liveRes.items.slice(0, 8);
+  const liveTotal = liveRes.total;
   const discountProducts = discountRes.items;
-  const allProducts = allRes.items;
+  const discountTotal = discountRes.total;
+  const allProducts = allRes.items.length > 0 ? allRes.items : readyRes.items;
   const orderItems = Array.from(
     new Map([...preorderRes.items, ...liveRes.items].map((p) => [p.id, p])).values()
   )
@@ -128,7 +141,7 @@ export default async function Home() {
               <div className="flex items-center gap-3">
                 <h2 className="text-xl font-bold">Онцгой хямдрал</h2>
                 <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-[var(--accent)]">
-                  🔥 {discountProducts.length}
+                  🔥 {discountTotal}
                 </span>
               </div>
               <a href="/products?discount=true" className="text-xs font-semibold text-[var(--accent-2)]">
@@ -163,7 +176,7 @@ export default async function Home() {
               <div className="flex items-center gap-3">
                 <h2 className="text-xl font-bold">Бэлэн бараа</h2>
                 <span className="rounded-full bg-[var(--sky-100)] px-3 py-1 text-xs font-semibold text-[var(--navy-800)]">
-                  Нийт: {readyProducts.length}
+                  Нийт: {readyTotal}
                 </span>
               </div>
               <a href="/products?type=ready" className="text-xs font-semibold text-[var(--accent-2)]">
@@ -205,11 +218,11 @@ export default async function Home() {
             <section className="py-6">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <h2 className="text-xl font-bold">Захиалгын бараа</h2>
-                  <span className="rounded-full bg-[var(--sky-100)] px-3 py-1 text-xs font-semibold text-[var(--navy-800)]">
-                    Нийт: {preorderProducts.length}
-                  </span>
-                </div>
+                <h2 className="text-xl font-bold">Захиалгын бараа</h2>
+                <span className="rounded-full bg-[var(--sky-100)] px-3 py-1 text-xs font-semibold text-[var(--navy-800)]">
+                  Нийт: {preorderTotal}
+                </span>
+              </div>
                 <a
                   href="/products?type=preorder"
                   className="text-xs font-semibold text-[var(--accent-2)]"
@@ -246,7 +259,7 @@ export default async function Home() {
               <div className="flex items-center gap-3">
                 <h2 className="text-xl font-bold">Live бараа</h2>
                 <span className="rounded-full bg-[var(--sky-100)] px-3 py-1 text-xs font-semibold text-[var(--navy-800)]">
-                  Нийт: {liveProducts.length}
+                  Нийт: {liveTotal}
                 </span>
               </div>
               <a href="/live" className="text-xs font-semibold text-[var(--accent-2)]">
