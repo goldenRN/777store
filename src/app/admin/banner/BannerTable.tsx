@@ -9,7 +9,7 @@ import {
   TableRow,
   TableCaption,
 } from '@/components/ui/table';
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Pencil, Trash } from 'lucide-react';
 import { Banner } from './EditBannerModal'
 
@@ -38,7 +38,7 @@ const BannerTable = ({ banner, onDelete, onEdit }: BannerTableProps) => {
 
         <TableBody>
           {banner.map((b) => (
-            <>
+            <React.Fragment key={b.id}>
               {/* ✅ Category Row */}
               <TableRow key={b.id}>
                 <TableCell>{b.description || '-'}</TableCell>
@@ -77,7 +77,7 @@ const BannerTable = ({ banner, onDelete, onEdit }: BannerTableProps) => {
                 </TableCell>
 
               </TableRow>
-            </>
+            </React.Fragment>
           ))}
         </TableBody>
       </Table>

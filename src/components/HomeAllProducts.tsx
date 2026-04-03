@@ -36,6 +36,11 @@ export default function HomeAllProducts({
   const [items, setItems] = useState<Product[]>(products);
   const [total, setTotal] = useState<number>(products.length);
   const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,7 +86,7 @@ export default function HomeAllProducts({
     return base;
   }, [items, activeCategory]);
 
-  const showItems = displayItems.slice(0, 8);
+  const showItems = mounted ? displayItems.slice(0, 8) : [];
 
   const resolveImageUrl = (url?: string | null) => {
     if (!url) return "";

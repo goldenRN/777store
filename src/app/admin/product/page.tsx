@@ -23,6 +23,7 @@ interface Product {
   price: number;
   discount_price?: number | null;
   stock: number;
+  type_has_duration?: boolean;
   arrival_status?: string | null;
   cargo_fee?: number | null;
   ordered_qty?: number | null;
@@ -114,7 +115,18 @@ const ProductPage = () => {
     const closedFilter = searchParams.get("closed") === "true";
 
     if (typeFilter) {
-      data = data.filter((p) => matchesType(p.type_name || "", typeFilter));
+      data = data.filter((p) => {
+        const typeName = (p.type_name || "").toLowerCase();
+        const isLive = typeName.includes("лайв") || typeName.includes("live");
+        const hasDuration = Boolean(p.type_has_duration || p.duration_hours);
+        const isPreorder = matchesType(typeName, "preorder") || hasDuration;
+        const isReady = matchesType(typeName, "ready") || (!isLive && !isPreorder);
+
+        if (typeFilter === "ready") return isReady;
+        if (typeFilter === "preorder") return !isLive && isPreorder;
+        if (typeFilter === "live") return isLive;
+        return matchesType(typeName, typeFilter);
+      });
     }
     if (discountFilter) {
       data = data.filter((p) => (p.discount_price ?? 0) > 0);

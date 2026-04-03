@@ -11,7 +11,7 @@ import {
   TableRow,
   TableCaption,
 } from '@/components/ui/table';
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { ChevronDown, ChevronUp, Pencil, Trash } from 'lucide-react';
 
 interface SubCategory {
@@ -64,7 +64,7 @@ const CategoryTable = ({ categories, onDelete, onEdit }: CategoryTableProps) => 
 
         <TableBody>
           {categories.map((cat) => (
-            <>
+            <React.Fragment key={cat.category_id}>
               {/* ✅ Category Row */}
               <TableRow key={cat.category_id}>
                 <TableCell>{cat.category_name}</TableCell>
@@ -121,7 +121,7 @@ const CategoryTable = ({ categories, onDelete, onEdit }: CategoryTableProps) => 
 
               {/* 🔽 Subcategories Row (хэрэв нээгдсэн бол) */}
               {expanded === cat.category_id && cat.subcategories?.length > 0 && (
-                <TableRow>
+                <TableRow key={`sub-${cat.category_id}`}>
                   <TableCell colSpan={5} className="bg-gray-50">
                     <div className="p-3">
                       <h4 className=" mb-2">Дэд ангиллууд:</h4>
@@ -142,13 +142,13 @@ const CategoryTable = ({ categories, onDelete, onEdit }: CategoryTableProps) => 
 
               {/* Хэрвээ дэд ангилал байхгүй бол */}
               {expanded === cat.category_id && cat.subcategories?.length === 0 && (
-                <TableRow>
+                <TableRow key={`sub-empty-${cat.category_id}`}>
                   <TableCell colSpan={5} className="bg-gray-50 text-gray-500 italic text-center">
                     Дэд ангилал алга байна
                   </TableCell>
                 </TableRow>
               )}
-            </>
+            </React.Fragment>
           ))}
         </TableBody>
       </Table>

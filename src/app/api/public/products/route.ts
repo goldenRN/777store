@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const [items] = await Promise.all([
+  const [items, countRows] = await Promise.all([
     prisma.adminProduct.findMany({
       where,
       orderBy: { created_at: "desc" },
@@ -81,6 +81,17 @@ export async function GET(request: NextRequest) {
           where: { product_variant_id: null },
           orderBy: { id: "asc" },
         },
+      },
+    }),
+    prisma.adminProduct.findMany({
+      where,
+      select: {
+        id: true,
+        created_at: true,
+        duration_hours: true,
+        stock: true,
+        ordered_qty: true,
+        order_accept_status: true,
       },
     }),
   ]);
@@ -118,5 +129,16 @@ export async function GET(request: NextRequest) {
     })
     .filter(Boolean);
 
-  return NextResponse.json({ items: mapped, total: mapped.length, page, limit: take });
+  const total = countRows.reduce((acc, p) => {
+    const endMs =
+      p.created_at && p.duration_hours
+        ? p.created_at.getTime() + p.duration_hours * 60 * 60 * 1000
+        : null;
+    const expired = endMs ? endMs <= now.getTime() : false;
+    const remaining = Math.max(0, Number(p.stock || 0) - Number(p.ordered_qty || 0));
+    const closed = p.order_accept_status === "CLOSED" || expired || remaining <= 0;
+    return closed ? acc : acc + 1;
+  }, 0);
+
+  return NextResponse.json({ items: mapped, total, page, limit: take });
 }

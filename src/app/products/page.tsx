@@ -2,6 +2,14 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ProductCard from "@/components/ProductCard";
 import AllProductsSection from "@/components/AllProductsSection";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
 type PublicProduct = {
   id: number;
@@ -44,9 +52,9 @@ const fetchProducts = async (params: Record<string, string | number | boolean | 
   const res = await fetch(`${base}/api/public/products${qs ? `?${qs}` : ""}`, {
     cache: "no-store",
   });
-  if (!res.ok) return [];
+  if (!res.ok) return { items: [] as PublicProduct[], total: 0 };
   const json = await res.json();
-  return (json.items || []) as PublicProduct[];
+  return { items: (json.items || []) as PublicProduct[], total: Number(json.total ?? 0) };
 };
 
 const fetchCategories = async () => {
@@ -59,7 +67,14 @@ const fetchCategories = async () => {
 export default async function ProductsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; type?: string; discount?: string; category?: string; subcategory?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    type?: string;
+    discount?: string;
+    category?: string;
+    subcategory?: string;
+    page?: string;
+  }>;
 }) {
   const params = await searchParams;
   const q = params.q ?? "";
@@ -67,18 +82,24 @@ export default async function ProductsPage({
   const discount = params.discount ?? "";
   const category = params.category ?? "";
   const subcategory = params.subcategory ?? "";
+  const page = Math.max(Number(params.page ?? 1), 1);
+  const limit = 20;
 
-  const [items, categories] = await Promise.all([
+  const [productsRes, categories] = await Promise.all([
     fetchProducts({
       q: q || undefined,
       type: type || undefined,
       discount: discount === "true" ? true : undefined,
       category: category || undefined,
       subcategory: subcategory || undefined,
-      limit: 40,
+      limit,
+      page,
     }),
     fetchCategories(),
   ]);
+  const items = productsRes.items;
+  const total = productsRes.total;
+  const totalPages = Math.max(Math.ceil(total / limit), 1);
 
   const title =
     type === "ready"
@@ -100,7 +121,7 @@ export default async function ProductsPage({
             <h1 className="text-2xl font-bold">{title}</h1>
             {q && <div className="mt-1 text-xs text-[var(--gray-500)]">Хайлт: “{q}”</div>}
           </div>
-          <div className="text-xs text-[var(--gray-500)]">Нийт: {items.length}</div>
+          <div className="text-xs text-[var(--gray-500)]">Нийт: {total}</div>
         </div>
 
         {items.length === 0 ? (
@@ -114,6 +135,58 @@ export default async function ProductsPage({
             initialCategoryId={category || "all"}
             initialSubcategoryId={subcategory || "all"}
           />
+        )}
+        {totalPages > 1 && (
+          <div className="mt-8">
+            <Pagination>
+              <PaginationContent>
+                {page > 1 && (
+                  <PaginationItem>
+                    <PaginationPrevious href={`/products?${new URLSearchParams({
+                      q,
+                      type,
+                      discount,
+                      category,
+                      subcategory,
+                      page: String(page - 1),
+                    }).toString()}`} />
+                  </PaginationItem>
+                )}
+                {Array.from({ length: totalPages }).slice(0, 5).map((_, idx) => {
+                  const p = idx + 1;
+                  return (
+                    <PaginationItem key={p}>
+                      <PaginationLink
+                        href={`/products?${new URLSearchParams({
+                          q,
+                          type,
+                          discount,
+                          category,
+                          subcategory,
+                          page: String(p),
+                        }).toString()}`}
+                        isActive={p === page}
+                      >
+                        {p}
+                      </PaginationLink>
+                    </PaginationItem>
+                  );
+                })}
+                {page < totalPages && (
+                  <PaginationItem>
+                    <PaginationNext href={`/products?${new URLSearchParams({
+                      q,
+                      type,
+                      discount,
+                      category,
+                      subcategory,
+                      page: String(page + 1),
+                    }).toString()}`} />
+                  </PaginationItem>
+                )}
+              </PaginationContent>
+            </Pagination>
+          </div>
         )}
       </main>
       <Footer />
