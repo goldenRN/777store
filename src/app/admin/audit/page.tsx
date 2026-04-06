@@ -26,8 +26,9 @@ export default function AuditPage() {
 
   useEffect(() => {
     const raw = localStorage.getItem("user");
-    const role = raw ? JSON.parse(raw).role : null;
-    if (role !== "SUPER_ADMIN") {
+    const role = raw ? String(JSON.parse(raw)?.role ?? "") : "";
+    const norm = role.toUpperCase().replace(/\s+/g, "_");
+    if (norm !== "SUPER_ADMIN") {
       setForbidden(true);
     }
   }, []);

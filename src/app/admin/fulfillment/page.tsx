@@ -42,7 +42,8 @@ export default function FulfillmentPage() {
     try {
       const raw = localStorage.getItem("user");
       const role = raw ? String(JSON.parse(raw)?.role ?? "") : "";
-      setIsSuperAdmin(role.toUpperCase() === "SUPER_ADMIN");
+      const norm = role.toUpperCase().replace(/\s+/g, "_");
+      setIsSuperAdmin(norm === "SUPER_ADMIN");
     } catch {
       setIsSuperAdmin(false);
     }

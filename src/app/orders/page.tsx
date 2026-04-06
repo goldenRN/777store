@@ -60,7 +60,8 @@ function OrdersPageContent() {
       if (!raw) return null;
       const parsed = JSON.parse(raw) as { id?: string };
       const role = String((parsed as any)?.role ?? "");
-      setIsSuperAdmin(role.toUpperCase() === "SUPER_ADMIN");
+      const norm = role.toUpperCase().replace(/\s+/g, "_");
+      setIsSuperAdmin(norm === "SUPER_ADMIN");
       return parsed?.id ?? null;
     } catch {
       return null;

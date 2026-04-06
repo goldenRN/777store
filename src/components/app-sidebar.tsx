@@ -115,8 +115,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   useEffect(() => {
     try {
       const raw = localStorage.getItem("user");
-      const role = raw ? JSON.parse(raw).role : null;
-      setIsSuperAdmin(role === "SUPER_ADMIN");
+      const role = raw ? String(JSON.parse(raw)?.role ?? "") : "";
+      const norm = role.toUpperCase().replace(/\s+/g, "_");
+      setIsSuperAdmin(norm === "SUPER_ADMIN");
     } catch {
       setIsSuperAdmin(false);
     }
