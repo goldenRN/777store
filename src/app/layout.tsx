@@ -20,7 +20,12 @@ export const metadata: Metadata = {
   title: "777 Family Store",
   description: "777 Family Store онлайн дэлгүүр",
   icons: {
-    icon: '/logo.png',
+    icon: [
+      { url: "/logo-777.png", sizes: "32x32", type: "image/png" },
+      { url: "/logo-777.png", sizes: "192x192", type: "image/png" },
+    ],
+    shortcut: "/logo-777.png",
+    apple: "/logo-777.png",
   },
 };
 

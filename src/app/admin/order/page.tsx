@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import OrderDetailsModal from "./OrderDetailsModal";
 import { getActorHeaders } from "@/lib/actorHeaders";
 import { Modal } from "@/components/ui/modal";
-import { Eye, Tag, Trash2, Plus, MoreVertical, CheckCircle } from "lucide-react";
+import { Eye, Tag, Trash2, Plus, MoreVertical, CheckCircle, ChevronDown, ChevronUp } from "lucide-react";
 
 type Order = {
   id: number;
@@ -36,6 +36,7 @@ type ProductSummary = {
   order_count: number;
   item_ids: number[];
   buyers: { order_id: number; name: string; phone: string; qty: number; unit_price: number; total_price: number }[];
+  variants: { variant_id: number; label: string; stock: number | null; ordered_qty: number; remaining_qty: number | null }[];
 };
 
 type PaymentMethod = {
@@ -89,6 +90,7 @@ export default function AdminOrdersTable() {
   const [variantOptions, setVariantOptions] = useState<Record<number, VariantOption[]>>({});
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [paymentMethodId, setPaymentMethodId] = useState<number | "">("");
+  const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
   const searchParams = useSearchParams();
   const statusFilter = searchParams.get("status") ?? "";
   const isPending = statusFilter.toLowerCase() === "pending";
@@ -369,7 +371,8 @@ export default function AdminOrdersTable() {
                 <tr><td colSpan={8} className="p-4 text-center">Мэдээлэл алга</td></tr>
               ) : (
                 productItems.map((p) => (
-                  <tr key={`${p.product_id ?? "x"}-${p.product_name}`} className="border-t">
+                  <React.Fragment key={`${p.product_id ?? "x"}-${p.product_name}`}>
+                  <tr className="border-t">
                     <td className="p-3">
                       <div className="h-12 w-12 rounded overflow-hidden border bg-gray-100">
                         <img
@@ -401,6 +404,23 @@ export default function AdminOrdersTable() {
                     <td className="p-3">
                       <div className="flex items-center gap-2">
                         <button
+                          onClick={() =>
+                            setExpandedProducts((prev) => ({
+                              ...prev,
+                              [`${p.product_id ?? "x"}-${p.product_name}`]:
+                                !prev[`${p.product_id ?? "x"}-${p.product_name}`],
+                            }))
+                          }
+                          className="h-9 w-9 rounded border bg-white flex items-center justify-center"
+                          title="Төрлүүд"
+                        >
+                          {expandedProducts[`${p.product_id ?? "x"}-${p.product_name}`] ? (
+                            <ChevronUp size={16} />
+                          ) : (
+                            <ChevronDown size={16} />
+                          )}
+                        </button>
+                        <button
                           onClick={() => setProductDetail(p)}
                           className="h-9 w-9 rounded border bg-white flex items-center justify-center"
                           title="Дэлгэрэнгүй"
@@ -410,6 +430,39 @@ export default function AdminOrdersTable() {
                       </div>
                     </td>
                   </tr>
+                  {expandedProducts[`${p.product_id ?? "x"}-${p.product_name}`] && (
+                    <tr className="border-t bg-gray-50">
+                      <td colSpan={8} className="p-3">
+                        {p.variants && p.variants.length > 0 ? (
+                          <div className="overflow-auto rounded border bg-white">
+                            <table className="min-w-full text-xs">
+                              <thead className="bg-gray-100">
+                                <tr>
+                                  <th className="px-3 py-2 text-left">Төрөл</th>
+                                  <th className="px-3 py-2 text-left">Захиалсан</th>
+                                  <th className="px-3 py-2 text-left">Захиалга авах тоо</th>
+                                  <th className="px-3 py-2 text-left">Үлдэгдэл</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {p.variants.map((v) => (
+                                  <tr key={v.variant_id} className="border-t">
+                                    <td className="px-3 py-2">{v.label}</td>
+                                    <td className="px-3 py-2">{v.ordered_qty}</td>
+                                    <td className="px-3 py-2">{v.stock != null ? v.stock : "-"}</td>
+                                    <td className="px-3 py-2">{v.remaining_qty != null ? v.remaining_qty : "-"}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div className="text-xs text-gray-500">Төрөл мэдээлэл алга.</div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 ))
               )}
             </tbody>

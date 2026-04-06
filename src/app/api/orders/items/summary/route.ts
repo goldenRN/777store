@@ -47,9 +47,27 @@ export async function GET(request: NextRequest) {
   const productIds = Array.from(
     new Set(items.map((it) => it.product_id).filter((id) => id != null))
   ) as number[];
+  const nameCandidates = Array.from(
+    new Set(
+      items
+        .filter((it) => !it.product_id && it.product_name)
+        .map((it) => it.product_name.trim())
+        .filter(Boolean)
+    )
+  );
+
+  const productNameOr: { name: { equals: string; mode: "insensitive" } }[] = nameCandidates.map((n) => ({
+    name: { equals: n, mode: "insensitive" },
+  }));
+
   const products = await prisma.adminProduct.findMany({
-    where: { id: { in: productIds } },
-    include: { images: true },
+    where: {
+      OR: [
+        ...(productIds.length > 0 ? [{ id: { in: productIds } }] : []),
+        ...productNameOr,
+      ],
+    },
+    include: { images: true, variants: { include: { images: true } } },
   });
   const productMap = new Map(
     products.map((p) => [
@@ -60,9 +78,72 @@ export async function GET(request: NextRequest) {
         stock: p.stock ?? null,
         ordered_qty: p.ordered_qty ?? null,
         order_accept_status: p.order_accept_status ?? null,
+        variants: p.variants ?? [],
       },
     ])
   );
+  const productByName = new Map(
+    products.map((p) => [String(p.name || "").trim().toLowerCase(), p])
+  );
+
+  const normalizeImage = (url?: string | null) => {
+    const raw = String(url || "").trim();
+    if (!raw) return "";
+    let cleaned = raw.split("#")[0].split("?")[0];
+    if (cleaned.startsWith("http://") || cleaned.startsWith("https://")) {
+      try {
+        const parsed = new URL(cleaned);
+        if (parsed.pathname && parsed.pathname.includes("/uploads/")) {
+          return parsed.pathname;
+        }
+        return cleaned;
+      } catch {
+        return cleaned;
+      }
+    }
+    if (cleaned.startsWith("uploads/")) return `/${cleaned}`;
+    if (cleaned.startsWith("/uploads/")) return cleaned;
+    if (cleaned.startsWith("/")) return cleaned;
+    return `/uploads/${cleaned}`;
+  };
+
+  const getVariantLabel = (variant: { sku: string | null; attribute: Record<string, unknown> | null; id: number }) => {
+    const attr = (variant.attribute || {}) as Record<string, unknown>;
+    const type = typeof attr.type === "string" ? attr.type : "";
+    const color = typeof attr.color === "string" ? attr.color : "";
+    const size = typeof attr.size === "string" ? attr.size : "";
+    const merged = [type, color, size].filter(Boolean).join(" / ");
+    return merged || variant.sku || `Төрөл-${variant.id}`;
+  };
+
+  const variantByProduct = new Map<number, Map<number, any>>();
+  const variantImageIndex = new Map<number, Map<string, number[]>>();
+  const variantPriceIndex = new Map<number, Map<number, number[]>>();
+  for (const p of products) {
+    const byId = new Map<number, any>();
+    const byImage = new Map<string, number[]>();
+    const byPrice = new Map<number, number[]>();
+    for (const v of p.variants || []) {
+      byId.set(v.id, v);
+      if (v.price != null) {
+        const price = Number(v.price);
+        if (!byPrice.has(price)) byPrice.set(price, []);
+        byPrice.get(price)!.push(v.id);
+      }
+      (v.images || []).forEach((img: any) => {
+        const norm = normalizeImage(img.image_url);
+        if (!norm) return;
+        if (!byImage.has(norm)) byImage.set(norm, []);
+        byImage.get(norm)!.push(v.id);
+      });
+    }
+    variantByProduct.set(p.id, byId);
+    variantImageIndex.set(p.id, byImage);
+    variantPriceIndex.set(p.id, byPrice);
+  }
+
+  const confirmedMap = new Map<string, number>();
+  const inferredMap = new Map<string, number>();
 
   const map = new Map<
     string,
@@ -78,12 +159,25 @@ export async function GET(request: NextRequest) {
       order_count: number;
       item_ids: number[];
       buyers: { order_id: number; name: string; phone: string; qty: number; unit_price: number; total_price: number }[];
+      variants: {
+        variant_id: number;
+        label: string;
+        stock: number | null;
+        ordered_qty: number;
+        remaining_qty: number | null;
+      }[];
     }
   >();
 
   for (const it of items) {
     const key = it.product_id ? `p:${it.product_id}` : `n:${it.product_name}`;
-    const productMeta = it.product_id ? productMap.get(it.product_id) : null;
+    const nameKey = String(it.product_name || "").trim().toLowerCase();
+    const fallbackProduct = !it.product_id && nameKey ? productByName.get(nameKey) : null;
+    const productMeta = it.product_id
+      ? productMap.get(it.product_id)
+      : fallbackProduct
+      ? productMap.get(fallbackProduct.id)
+      : null;
     const existing = map.get(key) ?? {
       product_id: it.product_id ?? null,
       product_name: it.product_name,
@@ -96,6 +190,7 @@ export async function GET(request: NextRequest) {
       order_count: 0,
       item_ids: [],
       buyers: [],
+      variants: [],
     };
 
     existing.total_qty += it.quantity;
@@ -110,12 +205,60 @@ export async function GET(request: NextRequest) {
     });
 
     map.set(key, existing);
+
+    const calcProductId = it.product_id ?? fallbackProduct?.id ?? null;
+    if (calcProductId) {
+      const productId = calcProductId;
+      const qty = it.quantity;
+      const confirmedVariantId = (it as any)?.variant_id ? Number((it as any).variant_id) : null;
+      if (confirmedVariantId) {
+        const k = `${productId}|${confirmedVariantId}`;
+        confirmedMap.set(k, (confirmedMap.get(k) ?? 0) + qty);
+      } else {
+        let inferredVariantId: number | null = null;
+        const normImage = normalizeImage(it.image_url ?? null);
+        if (normImage) {
+          const candidates = variantImageIndex.get(productId)?.get(normImage) ?? [];
+          if (candidates.length === 1) {
+            inferredVariantId = candidates[0];
+          }
+        }
+        if (!inferredVariantId && it.price != null) {
+          const candidates = variantPriceIndex.get(productId)?.get(Number(it.price)) ?? [];
+          if (candidates.length === 1) {
+            inferredVariantId = candidates[0];
+          }
+        }
+        if (inferredVariantId) {
+          const k = `${productId}|${inferredVariantId}`;
+          inferredMap.set(k, (inferredMap.get(k) ?? 0) + qty);
+        }
+      }
+    }
   }
 
-  const result = Array.from(map.values()).map((g) => ({
-    ...g,
-    order_count: g.buyers.length,
-  }));
+  const result = Array.from(map.values()).map((g) => {
+    const productId = g.product_id ?? productByName.get(String(g.product_name || "").trim().toLowerCase())?.id ?? null;
+    if (!productId) {
+      return { ...g, order_count: g.buyers.length, variants: [] };
+    }
+    const variants = productMap.get(productId)?.variants ?? [];
+    const list = variants.map((v: any) => {
+      const confirmed = confirmedMap.get(`${productId}|${v.id}`) ?? 0;
+      const inferred = inferredMap.get(`${productId}|${v.id}`) ?? 0;
+      const ordered = confirmed + inferred;
+      const stock = v.stock != null ? Number(v.stock) : null;
+      const remaining = stock != null ? Math.max(0, stock - ordered) : null;
+      return {
+        variant_id: v.id,
+        label: getVariantLabel(v),
+        stock,
+        ordered_qty: ordered,
+        remaining_qty: remaining,
+      };
+    }).filter((v) => v.ordered_qty > 0);
+    return { ...g, order_count: g.buyers.length, variants: list };
+  });
 
   return NextResponse.json({ items: result });
 }
