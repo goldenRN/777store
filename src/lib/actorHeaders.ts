@@ -13,6 +13,8 @@ export const getActorHeaders = (): Record<string, string> => {
     return {
       "x-actor-id": safe(user.id),
       "x-actor-phone": safe(user.phone),
+      "x-actor-name": safe(user.name),
+      "x-actor-role": safe(user.role),
     };
   } catch {
     return {};
