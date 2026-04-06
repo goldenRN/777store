@@ -629,13 +629,13 @@ export default function AdminOrdersTable() {
       {productDetail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50" onClick={() => setProductDetail(null)}></div>
-          <div className="relative z-10 w-full max-w-2xl rounded-lg bg-white p-6">
+          <div className="relative z-10 w-full max-w-2xl rounded-lg bg-white p-6 max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold">{productDetail.product_name}</h3>
               <button onClick={() => setProductDetail(null)} className="text-sm">Хаах</button>
             </div>
             <div className="mt-3 text-sm">Нийт: {productDetail.total_qty}</div>
-            <div className="mt-4 overflow-auto rounded border">
+            <div className="mt-4 max-h-[60vh] overflow-y-auto rounded border">
               <table className="min-w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>

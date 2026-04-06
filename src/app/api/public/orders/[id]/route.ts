@@ -23,6 +23,71 @@ export async function GET(
     return NextResponse.json({ message: "Not found" }, { status: 404 });
   }
 
+  const items = order.items;
+  const productIds = Array.from(
+    new Set(items.map((it) => it.product_id).filter((pid) => pid != null))
+  ) as number[];
+  const products = await prisma.adminProduct.findMany({
+    where: { id: { in: productIds } },
+    include: { variants: { include: { images: true } } },
+  });
+
+  const normalizeImage = (url?: string | null) => {
+    const raw = String(url || "").trim();
+    if (!raw) return "";
+    let cleaned = raw.split("#")[0].split("?")[0];
+    if (cleaned.startsWith("http://") || cleaned.startsWith("https://")) {
+      try {
+        const parsed = new URL(cleaned);
+        if (parsed.pathname && parsed.pathname.includes("/uploads/")) {
+          return parsed.pathname;
+        }
+        return cleaned;
+      } catch {
+        return cleaned;
+      }
+    }
+    if (cleaned.startsWith("uploads/")) return `/${cleaned}`;
+    if (cleaned.startsWith("/uploads/")) return cleaned;
+    if (cleaned.startsWith("/")) return cleaned;
+    return `/uploads/${cleaned}`;
+  };
+
+  const getVariantLabel = (variant: { sku: string | null; attribute: Record<string, unknown> | null; id: number }) => {
+    const attr = (variant.attribute || {}) as Record<string, unknown>;
+    const type = typeof attr.type === "string" ? attr.type : "";
+    const color = typeof attr.color === "string" ? attr.color : "";
+    const size = typeof attr.size === "string" ? attr.size : "";
+    const merged = [type, color, size].filter(Boolean).join(" / ");
+    return merged || variant.sku || `Төрөл-${variant.id}`;
+  };
+
+  const variantByProduct = new Map<number, Map<number, any>>();
+  const variantImageIndex = new Map<number, Map<string, number[]>>();
+  const variantPriceIndex = new Map<number, Map<number, number[]>>();
+  for (const p of products) {
+    const byId = new Map<number, any>();
+    const byImage = new Map<string, number[]>();
+    const byPrice = new Map<number, number[]>();
+    for (const v of p.variants || []) {
+      byId.set(v.id, v);
+      if (v.price != null) {
+        const price = Number(v.price);
+        if (!byPrice.has(price)) byPrice.set(price, []);
+        byPrice.get(price)!.push(v.id);
+      }
+      (v.images || []).forEach((img: any) => {
+        const norm = normalizeImage(img.image_url);
+        if (!norm) return;
+        if (!byImage.has(norm)) byImage.set(norm, []);
+        byImage.get(norm)!.push(v.id);
+      });
+    }
+    variantByProduct.set(p.id, byId);
+    variantImageIndex.set(p.id, byImage);
+    variantPriceIndex.set(p.id, byPrice);
+  }
+
   return NextResponse.json({
     id: order.id,
     status: order.status,
@@ -34,6 +99,29 @@ export async function GET(
       unitPrice: it.price,
       productName: it.product_name,
       productImage: it.image_url ?? null,
+      variantLabel: (() => {
+        const productId = it.product_id ?? null;
+        if (!productId) return null;
+        const byId = variantByProduct.get(productId) ?? new Map();
+        const confirmedId = (it as any)?.variant_id ? Number((it as any).variant_id) : null;
+        if (confirmedId && byId.has(confirmedId)) {
+          return { label: getVariantLabel(byId.get(confirmedId)), inferredBy: null, confirmed: true };
+        }
+        const normImage = normalizeImage(it.image_url ?? null);
+        if (normImage) {
+          const candidates = variantImageIndex.get(productId)?.get(normImage) ?? [];
+          if (candidates.length === 1 && byId.has(candidates[0])) {
+            return { label: getVariantLabel(byId.get(candidates[0])), inferredBy: "image", confirmed: false };
+          }
+        }
+        if (it.price != null) {
+          const candidates = variantPriceIndex.get(productId)?.get(Number(it.price)) ?? [];
+          if (candidates.length === 1 && byId.has(candidates[0])) {
+            return { label: getVariantLabel(byId.get(candidates[0])), inferredBy: "price", confirmed: false };
+          }
+        }
+        return null;
+      })(),
       status: it.status ?? null,
     })),
   });

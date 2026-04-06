@@ -13,6 +13,7 @@ type OrderItem = {
   productId: string;
   productName: string;
   productImage: string | null;
+  variantLabel?: { label: string; inferredBy: "image" | "price" | null; confirmed: boolean } | null;
   status?: string | null;
 };
 
@@ -38,6 +39,7 @@ function OrdersPageContent() {
   const [selected, setSelected] = useState<Order | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [statusOptions, setStatusOptions] = useState<{ id: number; name: string }[]>([]);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const resolveImageUrl = (url?: string | null) => {
     if (!url) return "";
     if (url.startsWith("http://") || url.startsWith("https://")) return url;
@@ -57,6 +59,8 @@ function OrdersPageContent() {
       const raw = localStorage.getItem("user");
       if (!raw) return null;
       const parsed = JSON.parse(raw) as { id?: string };
+      const role = String((parsed as any)?.role ?? "");
+      setIsSuperAdmin(role.toUpperCase() === "SUPER_ADMIN");
       return parsed?.id ?? null;
     } catch {
       return null;
@@ -154,6 +158,16 @@ function OrdersPageContent() {
                           <div className="text-xs text-[var(--gray-500)]">
                             {it.qty}ш × {Number(it.unitPrice).toLocaleString()}₮
                           </div>
+                          {isSuperAdmin && it.variantLabel && (
+                            <div className="mt-1 text-[10px] text-[var(--gray-500)]">
+                              Төрөл: {it.variantLabel.label}
+                              {!it.variantLabel.confirmed && it.variantLabel.inferredBy && (
+                                <span className="ml-1 text-[10px] text-amber-600">
+                                  ({it.variantLabel.inferredBy === "image" ? "зураг" : "үнэ"}‑ээр таамагласан)
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
                         <div className="text-sm font-semibold sm:text-right">
                           {(it.qty * it.unitPrice).toLocaleString()}₮
@@ -213,6 +227,16 @@ function OrdersPageContent() {
                         <div className="text-xs text-[var(--gray-500)]">
                           {it.qty}ш × {Number(it.unitPrice).toLocaleString()}₮
                         </div>
+                        {isSuperAdmin && it.variantLabel && (
+                          <div className="mt-1 text-[10px] text-[var(--gray-500)]">
+                            Төрөл: {it.variantLabel.label}
+                            {!it.variantLabel.confirmed && it.variantLabel.inferredBy && (
+                              <span className="ml-1 text-[10px] text-amber-600">
+                                ({it.variantLabel.inferredBy === "image" ? "зураг" : "үнэ"}‑ээр таамагласан)
+                              </span>
+                            )}
+                          </div>
+                        )}
                         {it.status && (
                           <div className="mt-1 text-[10px] text-[var(--gray-500)]">
                             Төлөв: {getStatusLabel(it.status, statusOptions)}
