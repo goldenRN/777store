@@ -75,7 +75,10 @@ export default function ProductCard({
   const t = String(type_name || "").toLowerCase();
   const isPreorderLive =
     t.includes("захиал") || t.includes("preorder") || t.includes("урьдчил") || t.includes("лайв") || t.includes("live");
-  const remaining = Math.max(0, Number(stock || 0) - Number(ordered_qty || 0));
+  const stockNumber = Number(stock || 0);
+  const remaining = Math.max(0, stockNumber - Number(ordered_qty || 0));
+  const hasDuration = Number(duration_hours || 0) > 0;
+  const canAddToCart = hasDuration ? true : stockNumber > 0 ? remaining > 0 : false;
 
   const variantLabel = (v: Variant) => getVariantLabel(v.attribute, v.sku, v.id);
 
@@ -201,8 +204,14 @@ export default function ProductCard({
           </div>
 
           <button
-            onClick={loadVariants}
-            className="flex h-10 w-10 mt-2 items-center justify-center rounded-xl bg-[#f6f6f6] text-[var(--navy-900)]"
+            onClick={() => {
+              if (!canAddToCart) return;
+              loadVariants();
+            }}
+            disabled={!canAddToCart}
+            className={`flex h-10 w-10 mt-2 items-center justify-center rounded-xl bg-[#f6f6f6] text-[var(--navy-900)] ${
+              !canAddToCart ? "cursor-not-allowed opacity-50" : ""
+            }`}
             aria-label="Сагсанд нэмэх"
           >
             {variantLoading ? (

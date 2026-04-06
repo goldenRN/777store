@@ -13,6 +13,7 @@ type AddToCartButtonProps = {
   variant_sku?: string | null;
   variant_label?: string | null;
   qty?: number;
+  disabled?: boolean;
   className?: string;
   children?: ReactNode;
   onAdded?: () => void;
@@ -28,6 +29,7 @@ export default function AddToCartButton({
   variant_sku,
   variant_label,
   qty,
+  disabled,
   className,
   children,
   onAdded,
@@ -37,10 +39,15 @@ export default function AddToCartButton({
   return (
     <button
       onClick={() => {
+        if (disabled) return;
         addItem({ id, name, price, image_url, type_name, variant_id, variant_sku, variant_label }, qty);
         onAdded?.();
       }}
-      className={className || "rounded-full bg-black py-2 text-sm font-semibold text-white"}
+      disabled={disabled}
+      className={
+        className ||
+        "rounded-full bg-black py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+      }
     >
       {children ?? "Сагсанд хийх"}
     </button>

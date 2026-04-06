@@ -86,7 +86,10 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
     );
   }, [product.type_name]);
 
-  const remainingQty = Math.max(0, Number(product.stock || 0) - Number(product.ordered_qty || 0));
+  const stockNumber = Number(displayStock || 0);
+  const remainingQty = Math.max(0, stockNumber - Number(product.ordered_qty || 0));
+  const hasDuration = Number(product.duration_hours || 0) > 0;
+  const canAddToCart = hasDuration ? true : stockNumber > 0 ? remainingQty > 0 : false;
 
   const normalizeImage = (url?: string | null) => {
     const raw = String(url || "").trim();
@@ -620,6 +623,7 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
             variant_sku={selectedVariant?.sku ?? null}
             variant_label={selectedVariantLabel}
             qty={qty}
+            disabled={!canAddToCart}
             onAdded={() => router.push("/cart")}
             className="rounded-full bg-black px-6 py-3 text-sm font-semibold text-white"
           >

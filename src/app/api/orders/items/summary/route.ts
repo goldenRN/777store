@@ -255,6 +255,7 @@ export async function GET(request: NextRequest) {
         stock,
         ordered_qty: ordered,
         remaining_qty: remaining,
+        closed: stock != null && remaining != null ? remaining <= 0 : false,
       };
     }).filter((v) => v.ordered_qty > 0);
     return { ...g, order_count: g.buyers.length, variants: list };

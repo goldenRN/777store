@@ -36,7 +36,7 @@ type ProductSummary = {
   order_count: number;
   item_ids: number[];
   buyers: { order_id: number; name: string; phone: string; qty: number; unit_price: number; total_price: number }[];
-  variants: { variant_id: number; label: string; stock: number | null; ordered_qty: number; remaining_qty: number | null }[];
+  variants: { variant_id: number; label: string; stock: number | null; ordered_qty: number; remaining_qty: number | null; closed: boolean }[];
 };
 
 type PaymentMethod = {
@@ -442,6 +442,7 @@ export default function AdminOrdersTable() {
                                   <th className="px-3 py-2 text-left">Захиалсан</th>
                                   <th className="px-3 py-2 text-left">Захиалга авах тоо</th>
                                   <th className="px-3 py-2 text-left">Үлдэгдэл</th>
+                                  <th className="px-3 py-2 text-left">Төлөв</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -451,6 +452,15 @@ export default function AdminOrdersTable() {
                                     <td className="px-3 py-2">{v.ordered_qty}</td>
                                     <td className="px-3 py-2">{v.stock != null ? v.stock : "-"}</td>
                                     <td className="px-3 py-2">{v.remaining_qty != null ? v.remaining_qty : "-"}</td>
+                                    <td className="px-3 py-2">
+                                      <span
+                                        className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                          v.closed ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"
+                                        }`}
+                                      >
+                                        {v.closed ? "Дууссан" : "Нээлттэй"}
+                                      </span>
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>
