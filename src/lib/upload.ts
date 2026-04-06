@@ -7,7 +7,15 @@ export type SavedFile = {
   publicId: string;
 };
 
-const uploadDir = path.join(process.cwd(), "public", "uploads");
+const uploadDir =
+  process.env.UPLOAD_DIR && process.env.UPLOAD_DIR.trim()
+    ? process.env.UPLOAD_DIR.trim()
+    : path.join(process.cwd(), "public", "uploads");
+
+const publicBase =
+  process.env.UPLOAD_PUBLIC_URL && process.env.UPLOAD_PUBLIC_URL.trim()
+    ? process.env.UPLOAD_PUBLIC_URL.trim().replace(/\/+$/, "")
+    : "/uploads";
 
 export async function saveFile(file: File, folder = "uploads"): Promise<SavedFile> {
   await mkdir(uploadDir, { recursive: true });
@@ -26,7 +34,7 @@ export async function saveFile(file: File, folder = "uploads"): Promise<SavedFil
   }
 
   return {
-    url: `/${folder}/${safeName}`,
+    url: `${publicBase}/${safeName}`,
     publicId: safeName,
   };
 }
@@ -60,7 +68,7 @@ export async function saveBannerFile(file: File, folder = "uploads"): Promise<Sa
       const filePath = path.join(uploadDir, safeName);
       await writeFile(filePath, outputBuffer);
       return {
-        url: `/${folder}/${safeName}`,
+        url: `${publicBase}/${safeName}`,
         publicId: safeName,
       };
     }
@@ -73,7 +81,7 @@ export async function saveBannerFile(file: File, folder = "uploads"): Promise<Sa
   const filePath = path.join(uploadDir, safeName);
   await writeFile(filePath, buffer);
   return {
-    url: `/${folder}/${safeName}`,
+    url: `${publicBase}/${safeName}`,
     publicId: safeName,
   };
 }
