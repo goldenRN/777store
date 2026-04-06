@@ -35,7 +35,7 @@ type ProductSummary = {
   total_qty: number;
   order_count: number;
   item_ids: number[];
-  buyers: { order_id: number; name: string; phone: string; qty: number }[];
+  buyers: { order_id: number; name: string; phone: string; qty: number; unit_price: number; total_price: number }[];
 };
 
 type PaymentMethod = {
@@ -318,7 +318,19 @@ export default function AdminOrdersTable() {
           )}
           {/* <button onClick={exportCSV} className="bg-gray-700 text-white px-3 py-1 rounded">Export CSV</button> */}
           <button
-            onClick={() => window.open(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/orders/export/excel`, "_blank")}
+            onClick={() => {
+              const base = process.env.NEXT_PUBLIC_API_URL || "";
+              if (viewMode === "product") {
+                const url = new URL(`${base}/api/orders/export/excel`, window.location.origin);
+                url.searchParams.set("mode", "product");
+                if (statusFilter) url.searchParams.set("status", statusFilter);
+                url.searchParams.set("payment", "PAID");
+                if (isPending) url.searchParams.set("excludeArrived", "true");
+                window.open(url.toString(), "_blank");
+                return;
+              }
+              window.open(`${base}/api/orders/export/excel`, "_blank");
+            }}
             className="bg-green-700 text-white px-3 py-1 rounded"
           >
             Excel татах
@@ -390,35 +402,10 @@ export default function AdminOrdersTable() {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => setProductDetail(p)}
-                          className="text-sm px-2 py-1 bg-blue-600 text-white rounded"
+                          className="h-9 w-9 rounded border bg-white flex items-center justify-center"
+                          title="Дэлгэрэнгүй"
                         >
-                          Дэлгэрэнгүй
-                        </button>
-                        <button
-                          onClick={async () => {
-                            await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/orders/items/bulk-status`, {
-                              method: "PATCH",
-                              headers: { "Content-Type": "application/json", ...getActorHeaders() },
-                              body: JSON.stringify({ itemIds: p.item_ids, status: "Бараа ирсэн" })
-                            });
-                            fetchProductSummary();
-                          }}
-                          className="text-sm px-2 py-1 bg-green-600 text-white rounded"
-                        >
-                          Бараа ирсэн
-                        </button>
-                        <button
-                          onClick={async () => {
-                            await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/orders/items/bulk-status`, {
-                              method: "PATCH",
-                              headers: { "Content-Type": "application/json", ...getActorHeaders() },
-                              body: JSON.stringify({ itemIds: p.item_ids, status: "Буцаагдсан" })
-                            });
-                            fetchProductSummary();
-                          }}
-                          className="text-sm px-2 py-1 bg-red-600 text-white rounded"
-                        >
-                          Буцаагдсан
+                          <MoreVertical size={16} />
                         </button>
                       </div>
                     </td>
@@ -643,6 +630,8 @@ export default function AdminOrdersTable() {
                     <th className="px-3 py-2 text-left">Хэрэглэгч</th>
                     <th className="px-3 py-2 text-left">Утас</th>
                     <th className="px-3 py-2 text-left">Тоо</th>
+                    <th className="px-3 py-2 text-left">Нэгж үнэ</th>
+                    <th className="px-3 py-2 text-left">Нийт үнэ</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -652,6 +641,8 @@ export default function AdminOrdersTable() {
                       <td className="px-3 py-2">{b.name}</td>
                       <td className="px-3 py-2">{b.phone}</td>
                       <td className="px-3 py-2">{b.qty}</td>
+                      <td className="px-3 py-2">{Number(b.unit_price).toLocaleString()}₮</td>
+                      <td className="px-3 py-2">{Number(b.total_price).toLocaleString()}₮</td>
                     </tr>
                   ))}
                 </tbody>
@@ -833,6 +824,17 @@ export default function AdminOrdersTable() {
                 }
                 setCreateLoading(true);
                 try {
+                  const productMap = new Map(productOptions.map((p) => [p.id, p]));
+                  for (const it of filteredItems) {
+                    const pid = Number(it.product_id);
+                    const variants = variantOptions[pid] || [];
+                    if (variants.length > 0 && !it.variant_id) {
+                      const name = productMap.get(pid)?.name || "Бараа";
+                      alert(`Төрөлтэй бараанд төрөл заавал сонгоно уу: ${name}`);
+                      setCreateLoading(false);
+                      return;
+                    }
+                  }
                   const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/orders/admin-create`, {
                     method: "POST",
                     headers: {

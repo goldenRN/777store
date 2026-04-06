@@ -36,18 +36,7 @@ export default function FulfillmentPage() {
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-
-  React.useEffect(() => {
-    try {
-      const raw = localStorage.getItem("user");
-      const role = raw ? String(JSON.parse(raw)?.role ?? "") : "";
-      const norm = role.toUpperCase().replace(/\s+/g, "_");
-      setIsSuperAdmin(norm === "SUPER_ADMIN");
-    } catch {
-      setIsSuperAdmin(false);
-    }
-  }, []);
+  const [canViewVariants, setCanViewVariants] = useState(false);
 
   const fetchOrders = async () => {
     const q = phone.trim();
@@ -58,9 +47,10 @@ export default function FulfillmentPage() {
       const url = new URL(`${base}/api/orders/items/by-phone`, window.location.origin);
       url.searchParams.set("phone", q);
       url.searchParams.set("payment", "PAID");
-      const res = await fetch(url.toString());
+      const res = await fetch(url.toString(), { headers: { ...getActorHeaders() } });
       const json = await res.json();
       setItems(json.items || []);
+      setCanViewVariants(Boolean(json?.can_view_variants));
     } catch (err) {
       console.error(err);
     } finally {
@@ -143,7 +133,7 @@ export default function FulfillmentPage() {
                       <td className="p-3">{p.total_qty}</td>
                       <td className="p-3">
                         <div className="flex flex-wrap items-center gap-2">
-                          {isSuperAdmin && (
+                          {canViewVariants && (
                             <button
                               onClick={() => setExpanded((prev) => ({ ...prev, [rowKey]: !prev[rowKey] }))}
                               className="h-9 w-9 rounded border bg-white flex items-center justify-center"
@@ -181,7 +171,7 @@ export default function FulfillmentPage() {
                         </div>
                       </td>
                     </tr>
-                    {isSuperAdmin && isOpen && (
+                    {canViewVariants && isOpen && (
                       <tr className="border-t bg-gray-50">
                         <td colSpan={5} className="p-3">
                           <div className="grid gap-4">

@@ -5,6 +5,8 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const phone = (searchParams.get("phone") ?? "").trim();
   const payment = (searchParams.get("payment") ?? "PAID").trim().toUpperCase();
+  const roleHeader = String(request.headers.get("x-actor-role") ?? "");
+  const canViewVariants = roleHeader.toUpperCase().replace(/\s+/g, "_") === "SUPER_ADMIN";
 
   if (!phone) {
     return NextResponse.json({ items: [] });
@@ -197,7 +199,11 @@ export async function GET(request: NextRequest) {
 
   const result = Array.from(map.values()).map((row) => {
     const productId = row.product_id;
-    if (!productId) return row;
+    if (!productId) {
+      return canViewVariants
+        ? row
+        : { ...row, variants_confirmed: [], variants_inferred: [] };
+    }
     const variants = productMap.get(productId)?.variants ?? [];
     const byId = variantByProduct.get(productId) ?? new Map();
 
@@ -241,8 +247,9 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return { ...row, variants_confirmed: confirmedList, variants_inferred: inferredList };
+    const payload = { ...row, variants_confirmed: confirmedList, variants_inferred: inferredList };
+    return canViewVariants ? payload : { ...payload, variants_confirmed: [], variants_inferred: [] };
   });
 
-  return NextResponse.json({ items: result });
+  return NextResponse.json({ items: result, can_view_variants: canViewVariants });
 }

@@ -7,9 +7,20 @@ export async function GET(request: NextRequest) {
   const payment = (searchParams.get("payment") ?? "PAID").trim().toUpperCase();
   const excludeArrived = searchParams.get("excludeArrived") === "true";
 
-  if (status && status.toLowerCase() === "pending") {
-    const first = await prisma.adminStatus.findFirst({ orderBy: { id: "asc" } });
-    if (first?.name) status = first.name;
+  if (status) {
+    const key = status.toLowerCase();
+    if (key === "pending") {
+      const first = await prisma.adminStatus.findFirst({ orderBy: { id: "asc" } });
+      if (first?.name) status = first.name;
+    } else if (key === "confirmed") {
+      status = "Бараа ирсэн";
+    } else if (key === "shipping" || key === "shipped") {
+      status = "Хүргэлтэнд бүртгэгдсэн";
+    } else if (key === "delivered" || key === "completed") {
+      status = "Хүргэгдсэн";
+    } else if (key === "cancelled" || key === "canceled") {
+      status = "Цуцлагдсан";
+    }
   }
 
   const whereOrder: Record<string, unknown> = {};
@@ -66,7 +77,7 @@ export async function GET(request: NextRequest) {
       total_qty: number;
       order_count: number;
       item_ids: number[];
-      buyers: { order_id: number; name: string; phone: string; qty: number }[];
+      buyers: { order_id: number; name: string; phone: string; qty: number; unit_price: number; total_price: number }[];
     }
   >();
 
@@ -94,6 +105,8 @@ export async function GET(request: NextRequest) {
       name: it.order?.name ?? "",
       phone: it.order?.phone1 ?? "",
       qty: it.quantity,
+      unit_price: it.price,
+      total_price: it.price * it.quantity,
     });
 
     map.set(key, existing);

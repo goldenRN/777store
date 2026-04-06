@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
   const [products, variants] = await Promise.all([
     prisma.adminProduct.findMany({
       where: { id: { in: productIds } },
-      include: { images: true },
+      include: { images: true, variants: true },
     }),
     variantIds.length > 0
       ? prisma.adminProductVariant.findMany({
@@ -53,6 +53,9 @@ export async function POST(request: NextRequest) {
     const variantId = it.variant_id ? Number(it.variant_id) : null;
     const qty = Math.max(1, Number(it.qty ?? 1));
     const product = productMap.get(productId)!;
+    if (product?.variants?.length > 0 && !variantId) {
+      throw new Error(`Төрөлтэй бараанд төрөл заавал сонгоно уу: ${product?.name ?? "Бараа"}`);
+    }
     const variant = variantId ? variantMap.get(variantId) : null;
     const unitPrice =
       variant && variant.price != null

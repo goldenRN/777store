@@ -29,9 +29,20 @@ export async function GET(request: NextRequest) {
         }
       : {};
 
-  if (status && status.toLowerCase() === "pending") {
-    const first = await prisma.adminStatus.findFirst({ orderBy: { id: "asc" } });
-    if (first?.name) status = first.name;
+  if (status) {
+    const key = status.toLowerCase();
+    if (key === "pending") {
+      const first = await prisma.adminStatus.findFirst({ orderBy: { id: "asc" } });
+      if (first?.name) status = first.name;
+    } else if (key === "confirmed") {
+      status = "Бараа ирсэн";
+    } else if (key === "shipping" || key === "shipped") {
+      status = "Хүргэлтэнд бүртгэгдсэн";
+    } else if (key === "delivered" || key === "completed") {
+      status = "Хүргэгдсэн";
+    } else if (key === "cancelled" || key === "canceled") {
+      status = "Цуцлагдсан";
+    }
   }
 
   if (payment === "UNPAID") {
