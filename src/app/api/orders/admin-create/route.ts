@@ -110,6 +110,31 @@ export async function POST(request: NextRequest) {
     },
   });
 
+  // increment ordered quantities immediately for admin-created paid preorder
+  if (created.order_kind === "preorder") {
+    const items = await prisma.adminOrderItem.findMany({
+      where: { order_id: created.id, product_id: { not: null } },
+      select: { product_id: true, variant_id: true, quantity: true },
+    });
+    if (items.length > 0) {
+      const productUpdates = items.map((it) =>
+        prisma.adminProduct.update({
+          where: { id: it.product_id as number },
+          data: { ordered_qty: { increment: it.quantity } },
+        })
+      );
+      const variantUpdates = items
+        .filter((it) => it.variant_id != null)
+        .map((it) =>
+          prisma.adminProductVariant.update({
+            where: { id: it.variant_id as number },
+            data: { ordered_qty: { increment: it.quantity } },
+          })
+        );
+      await prisma.$transaction([...productUpdates, ...variantUpdates]);
+    }
+  }
+
   await logAdminAction({
     request,
     action: "create",

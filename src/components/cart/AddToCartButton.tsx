@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useCart } from "@/components/cart/CartProvider";
+import { toast } from "@/components/ui/use-toast";
 
 type AddToCartButtonProps = {
   id: number;
@@ -39,14 +40,19 @@ export default function AddToCartButton({
   return (
     <button
       onClick={() => {
-        if (disabled) return;
+        if (disabled) {
+          toast({ title: "Захиалах тоо дууссан байна" });
+          return;
+        }
         addItem({ id, name, price, image_url, type_name, variant_id, variant_sku, variant_label }, qty);
         onAdded?.();
       }}
-      disabled={disabled}
+      aria-disabled={disabled}
       className={
         className ||
-        "rounded-full bg-black py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+        `rounded-full bg-black py-2 text-sm font-semibold text-white ${
+          disabled ? "cursor-not-allowed opacity-50" : ""
+        }`
       }
     >
       {children ?? "Сагсанд хийх"}

@@ -6,7 +6,8 @@ export async function GET(request: NextRequest) {
   const phone = (searchParams.get("phone") ?? "").trim();
   const payment = (searchParams.get("payment") ?? "PAID").trim().toUpperCase();
   const roleHeader = String(request.headers.get("x-actor-role") ?? "");
-  const canViewVariants = roleHeader.toUpperCase().replace(/\s+/g, "_") === "SUPER_ADMIN";
+  const roleNorm = roleHeader.toUpperCase().replace(/\s+/g, "_");
+  const canViewVariants = roleNorm === "SUPER_ADMIN" || roleNorm === "ADMIN";
 
   if (!phone) {
     return NextResponse.json({ items: [] });

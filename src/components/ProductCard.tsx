@@ -6,6 +6,7 @@ import { ShoppingBagIcon, X } from "lucide-react";
 import { useCart } from "@/components/cart/CartProvider";
 import { getVariantLabel } from "@/lib/variantLabel";
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "@/components/ui/use-toast";
 
 type ProductCardProps = {
   id: number;
@@ -28,6 +29,7 @@ type Variant = {
   attribute?: Record<string, unknown> | null;
   price?: number | null;
   stock?: number | null;
+  ordered_qty?: number | null;
   images?: { image_url: string }[];
 };
 
@@ -77,8 +79,7 @@ export default function ProductCard({
     t.includes("захиал") || t.includes("preorder") || t.includes("урьдчил") || t.includes("лайв") || t.includes("live");
   const stockNumber = Number(stock || 0);
   const remaining = Math.max(0, stockNumber - Number(ordered_qty || 0));
-  const hasDuration = Number(duration_hours || 0) > 0;
-  const canAddToCart = hasDuration ? true : stockNumber > 0 ? remaining > 0 : false;
+  const canAddToCart = stockNumber > 0 ? remaining > 0 : true;
 
   const variantLabel = (v: Variant) => getVariantLabel(v.attribute, v.sku, v.id);
 
@@ -205,7 +206,10 @@ export default function ProductCard({
 
           <button
             onClick={() => {
-              if (!canAddToCart) return;
+              if (!canAddToCart) {
+                toast({ title: "Захиалах тоо дууссан байна" });
+                return;
+              }
               loadVariants();
             }}
             disabled={!canAddToCart}
@@ -274,11 +278,22 @@ export default function ProductCard({
                 variants.map((v) => {
                   const vImage = v.images?.[0]?.image_url || image_url;
                   const vPrice = v.price != null ? Number(v.price) : finalPrice;
+                  const vStock = Number(v.stock || 0);
+                  const vRemaining = vStock > 0 ? Math.max(0, vStock - Number(v.ordered_qty || 0)) : null;
+                  const vClosed = vStock > 0 && vRemaining != null && vRemaining <= 0;
                   return (
                     <button
                       key={v.id}
-                      onClick={() => handleSelectVariant(v)}
-                      className="w-full rounded-xl border p-3 text-left hover:border-[var(--accent-2)]"
+                      onClick={() => {
+                        if (vClosed) {
+                          toast({ title: "Захиалах тоо дууссан байна" });
+                          return;
+                        }
+                        handleSelectVariant(v);
+                      }}
+                      className={`w-full rounded-xl border p-3 text-left hover:border-[var(--accent-2)] ${
+                        vClosed ? "cursor-not-allowed opacity-60" : ""
+                      }`}
                     >
                       <div className="flex items-center gap-3">
                         <div className="h-12 w-12 rounded-lg border bg-[var(--sky-100)] overflow-hidden">
@@ -299,6 +314,11 @@ export default function ProductCard({
                           <div className="mt-1 text-xs font-semibold text-red-500">
                             {Number(vPrice).toLocaleString()}₮
                           </div>
+                          {vClosed && (
+                            <div className="mt-1 text-[10px] font-semibold text-red-600">
+                              Захиалга хаагдсан
+                            </div>
+                          )}
                         </div>
                       </div>
                     </button>

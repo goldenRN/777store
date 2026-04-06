@@ -13,12 +13,35 @@ export async function GET(
 
   const order = await prisma.adminOrder.findFirst({
     where: { id, payment_status: "PAID" },
-    include: { items: true },
+    include: {
+      items: {
+        include: {
+          product: { select: { images: { select: { image_url: true }, take: 1 } } },
+          variant: {
+            select: {
+              id: true,
+              sku: true,
+              attribute: true,
+              images: { select: { image_url: true }, take: 1 },
+            },
+          },
+        },
+      },
+    },
   });
 
   if (!order) {
     return NextResponse.json({ message: "Not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ order, items: order.items });
+  const items = order.items.map((it) => ({
+    ...it,
+    image_url:
+      it.image_url ||
+      it.variant?.images?.[0]?.image_url ||
+      it.product?.images?.[0]?.image_url ||
+      null,
+  }));
+
+  return NextResponse.json({ order, items });
 }

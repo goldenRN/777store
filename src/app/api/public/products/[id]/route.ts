@@ -20,6 +20,11 @@ export async function GET(
         where: { product_variant_id: null },
         orderBy: { id: "asc" },
       },
+      variants: {
+        include: {
+          images: { orderBy: { id: "asc" } },
+        },
+      },
     },
   });
 
@@ -41,8 +46,14 @@ export async function GET(
     type_has_duration: product.type?.has_duration ?? false,
     category_id: product.category_id,
     category_name: product.category?.category_name ?? "",
-    image_url: product.images?.[0]?.image_url ?? null,
-    images: product.images?.map((img) => img.image_url) ?? [],
+    image_url:
+      product.images?.[0]?.image_url ??
+      product.variants?.find((v) => v.images?.[0]?.image_url)?.images?.[0]?.image_url ??
+      null,
+    images: [
+      ...(product.images?.map((img) => img.image_url) ?? []),
+      ...(product.variants?.flatMap((v) => v.images?.map((img) => img.image_url) ?? []) ?? []),
+    ],
     created_at: product.created_at,
   });
 }

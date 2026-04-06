@@ -25,6 +25,7 @@ type ProductDetail = {
     images: string[];
     price: number | null;
     stock: number | null;
+    ordered_qty?: number | null;
   }[];
   category_name: string | null;
   subcategory_name: string | null;
@@ -86,10 +87,16 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
     );
   }, [product.type_name]);
 
-  const stockNumber = Number(displayStock || 0);
-  const remainingQty = Math.max(0, stockNumber - Number(product.ordered_qty || 0));
+  const variantStockNumber = selectedVariant?.stock != null ? Number(selectedVariant.stock) : null;
+  const stockNumber = variantStockNumber != null ? variantStockNumber : Number(displayStock || 0);
+  const orderedNumber = selectedVariant
+    ? Number(selectedVariant.ordered_qty || 0)
+    : Number(product.ordered_qty || 0);
+  const remainingQty = stockNumber > 0 ? Math.max(0, stockNumber - orderedNumber) : null;
+  const remainingLabel = remainingQty != null ? remainingQty : null;
   const hasDuration = Number(product.duration_hours || 0) > 0;
-  const canAddToCart = hasDuration ? true : stockNumber > 0 ? remainingQty > 0 : false;
+  const isClosed = stockNumber > 0 && remainingQty != null && remainingQty <= 0;
+  const canAddToCart = stockNumber > 0 ? !isClosed : true;
 
   const normalizeImage = (url?: string | null) => {
     const raw = String(url || "").trim();
@@ -362,6 +369,8 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
   // keep simple: use normal https link so mobile can open FB app via universal link
 
   const selectedVariantLabel = selectedVariant ? variantLabel(selectedVariant) : null;
+  const selectedVariantImage = selectedVariant?.images?.[0] || null;
+  const cartImageUrl = selectedVariantImage || product.image_url || null;
 
   return (
     <div className="grid gap-8 lg:grid-cols-2">
@@ -477,15 +486,30 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
               </span>
             </div>
           ) : null}
-          <div>
-            Үлдэгдэл: <span className="font-semibold text-[var(--navy-900)]">{displayStock}</span>
-          </div>
-          {isPreorderLive && (!product.duration_hours || product.duration_hours === 0) && Number(product.stock || 0) > 0 && (
-            remainingQty > 0 ? (
-              <div>
-                Захиалга авах тоо:{" "}
-                <span className="font-semibold text-[var(--navy-900)]">{remainingQty}</span>
-              </div>
+          {(!isPreorderLive || stockNumber <= 0) && (
+            <div>
+              Үлдэгдэл:{" "}
+              <span className="font-semibold text-[var(--navy-900)]">
+                {remainingLabel != null ? remainingLabel : "-"}
+              </span>
+            </div>
+          )}
+          {isPreorderLive && stockNumber > 0 && (
+            remainingQty && remainingQty > 0 ? (
+              <>
+                <div>
+                  Захиалга авах тоо:{" "}
+                  <span className="font-semibold text-[var(--navy-900)]">{stockNumber}</span>
+                </div>
+                <div>
+                  Захиалсан:{" "}
+                  <span className="font-semibold text-[var(--navy-900)]">{orderedNumber}</span>
+                </div>
+                <div>
+                  Үлдэгдэл:{" "}
+                  <span className="font-semibold text-[var(--navy-900)]">{remainingQty}</span>
+                </div>
+              </>
             ) : (
               <div className="font-semibold text-red-600">Захиалга хаагдсан</div>
             )
@@ -617,7 +641,7 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
             id={product.id}
             name={product.name}
             price={finalPrice}
-            image_url={product.image_url}
+            image_url={cartImageUrl}
             type_name={product.type_name}
             variant_id={selectedVariant?.id ?? null}
             variant_sku={selectedVariant?.sku ?? null}

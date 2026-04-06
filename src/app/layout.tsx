@@ -4,6 +4,7 @@ import "./globals.css";
 import { cn } from "@/lib/utils";
 import { CartProvider } from "@/components/cart/CartProvider";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/toaster";
 
 const geist = Geist({
   subsets: ["latin"],
@@ -38,7 +39,10 @@ export default function RootLayout({
     <html lang="mn" className={cn("font-sans", geist.variable)}>
       <body className={`${sora.variable} antialiased`}>
         <TooltipProvider>
-          <CartProvider>{children}</CartProvider>
+          <CartProvider>
+            {children}
+            <Toaster />
+          </CartProvider>
         </TooltipProvider>
       </body>
     </html>

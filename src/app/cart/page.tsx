@@ -5,6 +5,7 @@ import Footer from "@/components/Footer";
 import { useCart } from "@/components/cart/CartProvider";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Trash2 } from "lucide-react";
 
 type QPayInfo = {
   orderId: number;
@@ -33,6 +34,7 @@ export default function CartPage() {
   const [deliveryName, setDeliveryName] = useState("");
   const [deliveryPhone, setDeliveryPhone] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [resolvedImages, setResolvedImages] = useState<Record<string, string>>({});
   const activeExpiry = invoiceEnableExpiry ? invoiceExpiry || qpay?.expires_at || null : null;
 
   const resolveImageUrl = (url?: string | null) => {
@@ -68,6 +70,43 @@ export default function CartPage() {
     }, 1000);
     return () => clearInterval(interval);
   }, [activeExpiry, invoiceEnableExpiry]);
+
+  useEffect(() => {
+    const missing = items.filter((it) => !it.image_url);
+    if (missing.length === 0) return;
+    missing.forEach((item) => {
+      const key = `${item.id}-${item.variant_id ?? "base"}`;
+      if (resolvedImages[key]) return;
+      if (item.variant_id) {
+        fetch(`/api/productvar/${item.id}`)
+          .then((r) => r.json())
+          .then((list) => {
+            const variants = Array.isArray(list) ? list : [];
+            const v = variants.find((x: any) => Number(x.id) === Number(item.variant_id)) || null;
+            const vImg = v?.images?.[0]?.image_url ?? null;
+            if (vImg) {
+              setResolvedImages((prev) => ({ ...prev, [key]: vImg }));
+              return;
+            }
+            return fetch(`/api/public/products/${item.id}`)
+              .then((r) => r.json())
+              .then((p) => {
+                const img = p?.image_url ?? null;
+                if (img) setResolvedImages((prev) => ({ ...prev, [key]: img }));
+              });
+          })
+          .catch(() => null);
+      } else {
+        fetch(`/api/public/products/${item.id}`)
+          .then((r) => r.json())
+          .then((p) => {
+            const img = p?.image_url ?? null;
+            if (img) setResolvedImages((prev) => ({ ...prev, [key]: img }));
+          })
+          .catch(() => null);
+      }
+    });
+  }, [items, resolvedImages]);
 
   useEffect(() => {
     if (!qpay?.orderId) return;
@@ -258,14 +297,21 @@ export default function CartPage() {
                   className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-xl border p-3"
                 >
                   <div className="relative h-16 w-16 overflow-hidden rounded-lg bg-[var(--sky-100)]">
-                    {item.image_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={resolveImageUrl(item.image_url)}
-                        alt={item.name}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : null}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={
+                        item.image_url
+                          ? resolveImageUrl(item.image_url)
+                          : resolvedImages[`${item.id}-${item.variant_id ?? "base"}`]
+                          ? resolveImageUrl(resolvedImages[`${item.id}-${item.variant_id ?? "base"}`])
+                          : "/logo.png"
+                      }
+                      alt={item.name}
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src = "/logo.png";
+                      }}
+                    />
                   </div>
                   <div className="flex-1">
                     <div className="text-sm font-semibold">{item.name}</div>
@@ -304,9 +350,11 @@ export default function CartPage() {
                   </div>
                   <button
                     onClick={() => removeItem(item.id, item.variant_id ?? null)}
-                    className="text-xs text-red-600"
+                    className="flex h-8 w-8 items-center justify-center rounded-full border text-red-600 hover:bg-red-50"
+                    aria-label="Устгах"
+                    title="Устгах"
                   >
-                    Устгах
+                    <Trash2 size={16} />
                   </button>
                 </div>
               ))}

@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import { getActorHeaders } from "@/lib/actorHeaders";
+import { getVariantLabel } from "@/lib/variantLabel";
 
 export default function OrderDetailsModal({ id, onClose }: { id: number, onClose: () => void }) {
   const [order, setOrder] = useState<any>(null);
@@ -8,6 +9,11 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
   const [loading, setLoading] = useState(false);
   const [statusOptions, setStatusOptions] = useState<{ id: number; name: string }[]>([]);
   const [invoiceInfo, setInvoiceInfo] = useState<any>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<number | null>(null);
+  const [savingItemId, setSavingItemId] = useState<number | null>(null);
+  const [variantOptionsByProduct, setVariantOptionsByProduct] = useState<Record<number, any[]>>({});
+  const [selectedVariantByItem, setSelectedVariantByItem] = useState<Record<number, number | "">>({});
 
   const fetchDetail = async () => {
     setLoading(true);
@@ -34,6 +40,16 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
       .then((r) => r.json())
       .then((data) => setStatusOptions(Array.isArray(data) ? data : []))
       .catch(() => setStatusOptions([]));
+  }, []);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("user");
+      const role = raw ? String(JSON.parse(raw)?.role ?? "") : "";
+      const norm = role.toUpperCase().replace(/\s+/g, "_");
+      setIsSuperAdmin(norm === "SUPER_ADMIN");
+    } catch {
+      setIsSuperAdmin(false);
+    }
   }, []);
 
   const markStatus = async (status: string) => {
@@ -84,6 +100,59 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
     { value: "Захиалга авч байгаа", label: "Захиалга авч байгаа" },
     { value: "Захиалга хаагдсан", label: "Захиалга хаагдсан" },
   ];
+
+  const resolveImageUrl = (url?: string | null) => {
+    if (!url) return "/logo-777.png";
+    if (url.startsWith("http")) return url;
+    if (url.startsWith("/")) return url;
+    return `/${url}`;
+  };
+
+  const variantsForProduct = (productId?: number | null) =>
+    productId ? variantOptionsByProduct[productId] || [] : [];
+
+  const openVariantEditor = async (item: any) => {
+    if (!item?.product_id) return;
+    setEditingItemId(item.id);
+    setSelectedVariantByItem((prev) => ({
+      ...prev,
+      [item.id]: item.variant_id ?? "",
+    }));
+    if (!variantOptionsByProduct[item.product_id]) {
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || ""}/api/productvar/${item.product_id}`
+        );
+        const json = await res.json();
+        setVariantOptionsByProduct((prev) => ({
+          ...prev,
+          [item.product_id]: Array.isArray(json) ? json : [],
+        }));
+      } catch {
+        setVariantOptionsByProduct((prev) => ({ ...prev, [item.product_id]: [] }));
+      }
+    }
+  };
+
+  const saveVariant = async (item: any) => {
+    if (!item?.id) return;
+    setSavingItemId(item.id);
+    const variant_id = selectedVariantByItem[item.id] || null;
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/orders/items/${item.id}/variant`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...getActorHeaders() },
+        body: JSON.stringify({ variant_id }),
+      });
+      await fetchDetail();
+      setEditingItemId(null);
+    } finally {
+      setSavingItemId(null);
+    }
+  };
+
+  const variantLabel = (variant: any) =>
+    getVariantLabel(variant?.attribute, variant?.sku, variant?.id) || "";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -198,7 +267,83 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
                     {items.map((it, i) => (
                       <tr key={it.id} className="border-b">
                         <td className="py-2">{i + 1}</td>
-                        <td className="py-2">{it.product_name}</td>
+                        <td className="py-2">
+                          <div className="flex items-start gap-2">
+                            <img
+                              src={resolveImageUrl(it.image_url)}
+                              alt={it.product_name || "Бараа"}
+                              className="h-10 w-10 rounded border object-cover"
+                              loading="lazy"
+                            />
+                            <div className="leading-snug">
+                              <div className="flex items-center gap-2">
+                                <div className="font-medium">{it.product_name}</div>
+                                {isSuperAdmin && it.product_id ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => openVariantEditor(it)}
+                                    className="inline-flex h-7 w-7 items-center justify-center rounded border text-gray-600 hover:bg-gray-50"
+                                    title="Төрөл засах"
+                                  >
+                                    <svg
+                                      viewBox="0 0 24 24"
+                                      className="h-4 w-4"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    >
+                                      <path d="M12 20h9" />
+                                      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                                    </svg>
+                                  </button>
+                                ) : null}
+                              </div>
+                              {it.variant ? (
+                                <div className="text-xs text-gray-500">
+                                  {variantLabel(it.variant)}
+                                </div>
+                              ) : null}
+                              {editingItemId === it.id && (
+                                <div className="mt-2 flex items-center gap-2">
+                                  <select
+                                    className="h-9 rounded border px-2 text-xs"
+                                    value={selectedVariantByItem[it.id] ?? ""}
+                                    onChange={(e) =>
+                                      setSelectedVariantByItem((prev) => ({
+                                        ...prev,
+                                        [it.id]: e.target.value ? Number(e.target.value) : "",
+                                      }))
+                                    }
+                                  >
+                                    <option value="">Төрөл сонгох...</option>
+                                    {variantsForProduct(it.product_id).map((v: any) => (
+                                      <option key={v.id} value={v.id}>
+                                        {variantLabel(v)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    type="button"
+                                    onClick={() => saveVariant(it)}
+                                    className="h-9 rounded bg-black px-3 text-xs text-white"
+                                    disabled={savingItemId === it.id}
+                                  >
+                                    {savingItemId === it.id ? "Хадгалж байна" : "Хадгалах"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingItemId(null)}
+                                    className="h-9 rounded border px-3 text-xs text-gray-700"
+                                  >
+                                    Болих
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
                         <td className="py-2">{it.quantity}</td>
                         <td className="py-2">{Number(it.price).toLocaleString()}₮</td>
                         <td className="py-2">{(it.quantity * Number(it.price)).toLocaleString()}₮</td>

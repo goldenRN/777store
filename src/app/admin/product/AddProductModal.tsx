@@ -367,10 +367,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
         }
 
         if ((productMode === "preorder" || productMode === "live") && !forceReadyEdit) {
-            if (stockNumber <= 0 && durationNumber <= 0) {
-                alert("Захиалгын бараанд захиалах тоо эсвэл захиалах хугацааны аль нэгийг нь оруулна уу.");
-                return;
-            }
+            // allow saving without base stock/duration (variants can carry stock later)
         }
 
         setLoading(true);

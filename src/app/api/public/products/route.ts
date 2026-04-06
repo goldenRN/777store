@@ -81,6 +81,11 @@ export async function GET(request: NextRequest) {
           where: { product_variant_id: null },
           orderBy: { id: "asc" },
         },
+        variants: {
+          include: {
+            images: { orderBy: { id: "asc" } },
+          },
+        },
       },
     }),
     prisma.adminProduct.findMany({
@@ -96,17 +101,44 @@ export async function GET(request: NextRequest) {
     }),
   ]);
 
+  const pendingStatus = await prisma.adminStatus.findFirst({ orderBy: { id: "asc" } });
+  const productIdsAll = Array.from(new Set(countRows.map((p) => p.id)));
+  const orderItems = productIdsAll.length
+    ? await prisma.adminOrderItem.findMany({
+        where: {
+          product_id: { in: productIdsAll },
+          order: {
+            payment_status: "PAID",
+            ...(pendingStatus?.name ? { status: pendingStatus.name } : {}),
+          },
+        },
+        select: {
+          product_id: true,
+          quantity: true,
+        },
+      })
+    : [];
+  const orderedQtyMap = new Map<number, number>();
+  for (const it of orderItems) {
+    if (!it.product_id) continue;
+    const qty = Number(it.quantity || 0);
+    orderedQtyMap.set(it.product_id, (orderedQtyMap.get(it.product_id) ?? 0) + qty);
+  }
+
   const mapped = items
     .map((p) => {
       const hasDuration = Number(p.duration_hours || 0) > 0;
       const durationHours = Number(p.duration_hours || 0);
+      const variantStockSum = (p.variants || []).reduce((sum, v) => sum + (Number(v.stock || 0) || 0), 0);
+      const effectiveStock = Number(p.stock || 0) > 0 ? Number(p.stock || 0) : variantStockSum;
+      const orderedQty = orderedQtyMap.get(p.id) ?? Number(p.ordered_qty || 0);
       const endMs =
         p.created_at && hasDuration
           ? p.created_at.getTime() + durationHours * 60 * 60 * 1000
           : null;
       const expired = endMs ? endMs <= now.getTime() : false;
-      const remaining = Math.max(0, Number(p.stock || 0) - Number(p.ordered_qty || 0));
-      const stockLimitEnabled = Number(p.stock || 0) > 0;
+      const remaining = Math.max(0, effectiveStock - orderedQty);
+      const stockLimitEnabled = effectiveStock > 0;
       const closedByStock = hasDuration ? stockLimitEnabled && remaining <= 0 : remaining <= 0;
       const closed = p.order_accept_status === "CLOSED" || expired || closedByStock;
       if (closed) return null;
@@ -116,8 +148,8 @@ export async function GET(request: NextRequest) {
         description: p.description,
         price: p.price,
         discount_price: p.discount_price,
-        stock: p.stock,
-        ordered_qty: p.ordered_qty,
+        stock: effectiveStock,
+        ordered_qty: orderedQty,
         material: p.material,
         duration_hours: p.duration_hours,
         type_id: p.type_id,
@@ -127,7 +159,10 @@ export async function GET(request: NextRequest) {
     category_name: p.category?.category_name ?? "",
     subcategory_id: p.subcategory_id,
     subcategory_name: p.subcategory?.name ?? "",
-        image_url: p.images?.[0]?.image_url ?? null,
+        image_url:
+          p.images?.[0]?.image_url ??
+          p.variants?.find((v) => v.images?.[0]?.image_url)?.images?.[0]?.image_url ??
+          null,
         created_at: p.created_at,
       };
     })
@@ -141,7 +176,8 @@ export async function GET(request: NextRequest) {
         ? p.created_at.getTime() + durationHours * 60 * 60 * 1000
         : null;
     const expired = endMs ? endMs <= now.getTime() : false;
-    const remaining = Math.max(0, Number(p.stock || 0) - Number(p.ordered_qty || 0));
+    const orderedQty = orderedQtyMap.get(p.id) ?? Number(p.ordered_qty || 0);
+    const remaining = Math.max(0, Number(p.stock || 0) - orderedQty);
     const stockLimitEnabled = Number(p.stock || 0) > 0;
     const closedByStock = hasDuration ? stockLimitEnabled && remaining <= 0 : remaining <= 0;
     const closed = p.order_accept_status === "CLOSED" || expired || closedByStock;

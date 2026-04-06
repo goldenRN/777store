@@ -51,17 +51,24 @@ export async function GET(request: NextRequest) {
     if (order.payment_status !== "PAID" && order.order_kind === "preorder") {
       const items = await prisma.adminOrderItem.findMany({
         where: { order_id: order.id, product_id: { not: null } },
-        select: { product_id: true, quantity: true },
+        select: { product_id: true, variant_id: true, quantity: true },
       });
       if (items.length > 0) {
-        await prisma.$transaction(
-          items.map((it) =>
-            prisma.adminProduct.update({
-              where: { id: it.product_id as number },
+        const productUpdates = items.map((it) =>
+          prisma.adminProduct.update({
+            where: { id: it.product_id as number },
+            data: { ordered_qty: { increment: it.quantity } },
+          })
+        );
+        const variantUpdates = items
+          .filter((it) => it.variant_id != null)
+          .map((it) =>
+            prisma.adminProductVariant.update({
+              where: { id: it.variant_id as number },
               data: { ordered_qty: { increment: it.quantity } },
             })
-          )
-        );
+          );
+        await prisma.$transaction([...productUpdates, ...variantUpdates]);
       }
     }
     await prisma.adminOrder.update({

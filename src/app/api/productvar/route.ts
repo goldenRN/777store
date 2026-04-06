@@ -27,5 +27,22 @@ export async function POST(request: Request) {
     },
   });
 
+  // Auto-sum variant stock into product stock when base stock is 0
+  const product = await prisma.adminProduct.findUnique({
+    where: { id: product_id },
+    select: { stock: true },
+  });
+  if (product && product.stock === 0) {
+    const variants = await prisma.adminProductVariant.findMany({
+      where: { product_id },
+      select: { stock: true },
+    });
+    const totalStock = variants.reduce((sum, v) => sum + (v.stock ?? 0), 0);
+    await prisma.adminProduct.update({
+      where: { id: product_id },
+      data: { stock: totalStock },
+    });
+  }
+
   return NextResponse.json({ data: created });
 }

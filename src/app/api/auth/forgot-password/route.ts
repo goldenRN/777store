@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
   const baseUrl =
     process.env.NEXT_PUBLIC_SITE_URL ||
     process.env.NEXT_PUBLIC_API_URL ||
+    process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}` ||
     `${request.nextUrl.protocol}//${request.nextUrl.host}`;
 
   const resetUrl = `${baseUrl}/reset-password?token=${token}`;
