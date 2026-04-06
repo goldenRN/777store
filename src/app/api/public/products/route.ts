@@ -98,13 +98,17 @@ export async function GET(request: NextRequest) {
 
   const mapped = items
     .map((p) => {
+      const hasDuration = Number(p.duration_hours || 0) > 0;
+      const durationHours = Number(p.duration_hours || 0);
       const endMs =
-        p.created_at && p.duration_hours
-          ? p.created_at.getTime() + p.duration_hours * 60 * 60 * 1000
+        p.created_at && hasDuration
+          ? p.created_at.getTime() + durationHours * 60 * 60 * 1000
           : null;
       const expired = endMs ? endMs <= now.getTime() : false;
       const remaining = Math.max(0, Number(p.stock || 0) - Number(p.ordered_qty || 0));
-      const closed = p.order_accept_status === "CLOSED" || expired || remaining <= 0;
+      const stockLimitEnabled = Number(p.stock || 0) > 0;
+      const closedByStock = hasDuration ? stockLimitEnabled && remaining <= 0 : remaining <= 0;
+      const closed = p.order_accept_status === "CLOSED" || expired || closedByStock;
       if (closed) return null;
       return {
         id: p.id,
@@ -130,13 +134,17 @@ export async function GET(request: NextRequest) {
     .filter(Boolean);
 
   const total = countRows.reduce((acc, p) => {
+    const hasDuration = Number(p.duration_hours || 0) > 0;
+    const durationHours = Number(p.duration_hours || 0);
     const endMs =
-      p.created_at && p.duration_hours
-        ? p.created_at.getTime() + p.duration_hours * 60 * 60 * 1000
+      p.created_at && hasDuration
+        ? p.created_at.getTime() + durationHours * 60 * 60 * 1000
         : null;
     const expired = endMs ? endMs <= now.getTime() : false;
     const remaining = Math.max(0, Number(p.stock || 0) - Number(p.ordered_qty || 0));
-    const closed = p.order_accept_status === "CLOSED" || expired || remaining <= 0;
+    const stockLimitEnabled = Number(p.stock || 0) > 0;
+    const closedByStock = hasDuration ? stockLimitEnabled && remaining <= 0 : remaining <= 0;
+    const closed = p.order_accept_status === "CLOSED" || expired || closedByStock;
     return closed ? acc : acc + 1;
   }, 0);
 

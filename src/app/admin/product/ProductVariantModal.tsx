@@ -173,44 +173,68 @@ export default function ProductVariantModal({ open, onClose, productId, productN
 
         setSaving(true);
         try {
+            const existingImages = form.images
+                .filter((img) => img.uploadedUrl)
+                .map((img) => ({
+                    image_url: img.uploadedUrl as string,
+                    public_id: img.public_id ?? null,
+                }));
+
+            const newImages = form.images.filter((img) => !img.uploadedUrl && img.file);
+
+            let uploadedImages: { image_url: string; public_id: string }[] = [];
+            for (const img of newImages) {
+                const formData = new FormData();
+                formData.append("images", img.file);
+                const uploadRes = await axios.post(
+                    `${process.env.NEXT_PUBLIC_API_URL || ""}/api/productimg/upload-multiple`,
+                    formData,
+                    {
+                        headers: { "Content-Type": "multipart/form-data" },
+                        onUploadProgress: (e) => {
+                            const progress = Math.round((e.loaded * 100) / (e.total || 1));
+                            setForm((prev) => {
+                                const images = [...prev.images];
+                                const index = images.findIndex((f) => f.preview === img.preview);
+                                if (index >= 0) images[index].progress = progress;
+                                return { ...prev, images };
+                            });
+                        },
+                    }
+                );
+                const uploadedBatch = uploadRes.data.images.map((imgObj: any) => ({
+                    image_url: imgObj.imageUrl,
+                    public_id: imgObj.public_id,
+                }));
+                uploadedImages = [...uploadedImages, ...uploadedBatch];
+            }
+
+            const allImages = [...existingImages, ...uploadedImages];
+
             if (editingId) {
                 const res = await axios.put(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/productvar/${editingId}`, {
                     sku: form.typeName || null,
                     attribute: finalAttr,
                     price: form.price ? Number(form.price) : null,
                     stock: form.stock ? Number(form.stock) : null,
+                    images: allImages,
                 });
                 const updated = res.data?.data;
-                setVariants(prev => prev.map(v => (v.id === editingId ? { ...v, ...updated } : v)));
+                const updatedImages = allImages.map((img, idx) => ({
+                    id: Date.now() + idx,
+                    product_id: productId,
+                    product_variant_id: editingId,
+                    image_url: img.image_url,
+                    public_id: img.public_id,
+                }));
+                setVariants((prev) =>
+                    prev.map((v) => (v.id === editingId ? { ...v, ...updated, images: updatedImages } : v))
+                );
                 resetForm();
                 onRefresh && onRefresh();
                 return;
             }
 
-            let uploadedImages: { image_url: string; public_id: string }[] = [];
-            // 2️⃣ Зураг upload API
-            for (const img of form.images) {
-                const formData = new FormData();
-                formData.append("images", img.file);
-                const uploadRes = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/productimg/upload-multiple`, formData, {
-                    headers: { "Content-Type": "multipart/form-data" },
-                    onUploadProgress: (e) => {
-                        const progress = Math.round((e.loaded * 100) / (e.total || 1));
-                        setForm(prev => {
-                            const images = [...prev.images];
-                            const index = images.findIndex(f => f.preview === img.preview);
-                            if (index >= 0) images[index].progress = progress;
-                            return { ...prev, images };
-                        });
-                    },
-                });
-                const uploadedBatch = uploadRes.data.images.map((imgObj: any) => ({
-                    image_url: imgObj.imageUrl,
-                    public_id: imgObj.public_id,
-                }));
-                uploadedImages = [...uploadedImages, ...uploadedBatch];
-
-            }
             // 1️⃣ Variant create
             const variantRes = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/productvar`, {
                 product_id: productId,
@@ -218,12 +242,12 @@ export default function ProductVariantModal({ open, onClose, productId, productN
                 attribute: finalAttr,
                 price: form.price ? Number(form.price) : null,
                 stock: form.stock ? Number(form.stock) : null,
-                images: uploadedImages, // түр хадгалалт, дараа upload хийнэ
+                images: allImages, // түр хадгалалт, дараа upload хийнэ
             });
 
             const variant = {
                 ...variantRes.data.data,
-                images: uploadedImages.map((img, idx) => ({
+                images: allImages.map((img, idx) => ({
                     id: Date.now() + idx,
                     product_id: productId,
                     product_variant_id: variantRes.data.data.id,
@@ -328,6 +352,13 @@ export default function ProductVariantModal({ open, onClose, productId, productN
                                                     onClick={() => {
                                                         const attr = (v.attribute || {}) as Record<string, unknown>;
                                                         const typeFromAttr = typeof attr.type === "string" ? attr.type : "";
+                                                        const existingImages = (v.images || []).map((img) => ({
+                                                            file: null as unknown as File,
+                                                            preview: img.image_url,
+                                                            progress: 100,
+                                                            uploadedUrl: img.image_url,
+                                                            public_id: img.public_id,
+                                                        }));
                                                         setEditingId(v.id);
                                                         setForm({
                                                             sku: v.sku || "",
@@ -337,7 +368,7 @@ export default function ProductVariantModal({ open, onClose, productId, productN
                                                             price: v.price != null ? String(v.price) : "",
                                                             stock: v.stock != null ? String(v.stock) : "",
                                                             attributeJson: "",
-                                                            images: [],
+                                                            images: existingImages,
                                                         });
                                                     }}
                                                     className="h-9 w-9"

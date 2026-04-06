@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ShoppingBagIcon, X } from "lucide-react";
 import { useCart } from "@/components/cart/CartProvider";
+import { getVariantLabel } from "@/lib/variantLabel";
 import { useEffect, useMemo, useState } from "react";
 
 type ProductCardProps = {
@@ -76,14 +77,7 @@ export default function ProductCard({
     t.includes("захиал") || t.includes("preorder") || t.includes("урьдчил") || t.includes("лайв") || t.includes("live");
   const remaining = Math.max(0, Number(stock || 0) - Number(ordered_qty || 0));
 
-  const variantLabel = (v: Variant) => {
-    const attr = (v.attribute || {}) as Record<string, unknown>;
-    const type = typeof attr.type === "string" ? attr.type : "";
-    const color = typeof attr.color === "string" ? attr.color : "";
-    const size = typeof attr.size === "string" ? attr.size : "";
-    const merged = [type, color, size].filter(Boolean).join(" / ");
-    return merged || v.sku || `Төрөл-${v.id}`;
-  };
+  const variantLabel = (v: Variant) => getVariantLabel(v.attribute, v.sku, v.id);
 
   const loadVariants = async () => {
     setVariantLoading(true);

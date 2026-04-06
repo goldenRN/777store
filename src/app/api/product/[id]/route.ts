@@ -4,11 +4,15 @@ import { logAdminAction } from "@/lib/audit";
 import { unlink } from "fs/promises";
 import path from "path";
 
-const tryDeleteFile = async (imageUrl: string | null) => {
+const tryDeleteFileIfUnused = async (imageUrl: string | null) => {
   if (!imageUrl) return;
   if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) return;
   const clean = imageUrl.startsWith("/") ? imageUrl : `/${imageUrl}`;
   if (!clean.startsWith("/uploads/")) return;
+  const remaining = await prisma.adminProductImage.count({
+    where: { image_url: imageUrl },
+  });
+  if (remaining > 0) return;
   const filePath = path.join(process.cwd(), "public", clean);
   try {
     await unlink(filePath);
@@ -200,7 +204,7 @@ export async function DELETE(
 
   await prisma.adminProduct.delete({ where: { id } });
 
-  await Promise.all(images.map((img) => tryDeleteFile(img.image_url ?? null)));
+  await Promise.all(images.map((img) => tryDeleteFileIfUnused(img.image_url ?? null)));
 
   await logAdminAction({
     request,

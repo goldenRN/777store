@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import OrderDetailsModal from "./OrderDetailsModal";
 import { getActorHeaders } from "@/lib/actorHeaders";
 import { Modal } from "@/components/ui/modal";
-import { Eye, Tag, Trash2, Plus } from "lucide-react";
+import { Eye, Tag, Trash2, Plus, MoreVertical, CheckCircle } from "lucide-react";
 
 type Order = {
   id: number;
@@ -504,13 +504,16 @@ export default function AdminOrdersTable() {
                       <button
                         onClick={() => setSelected(o)}
                         className="h-9 w-9 rounded border bg-white flex items-center justify-center"
-                        title="Харах"
+                        title="Дэлгэрэнгүй"
                       >
-                        <Eye size={16} />
+                        <MoreVertical size={16} />
                       </button>
                       {isPending ? (
-                        <button className="relative text-sm px-2 py-1 border rounded bg-white">
-                          Төлөв солих
+                        <button
+                          className="relative h-9 w-9 rounded border bg-white flex items-center justify-center"
+                          title="Төлөв солих"
+                        >
+                          <CheckCircle size={16} />
                           <select
                             value={o.status}
                             onChange={(e) => {
@@ -522,15 +525,8 @@ export default function AdminOrdersTable() {
                             }}
                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                           >
-                            {statusOptions.length > 0 ? (
-                              statusOptions.map((s) => (
-                                <option key={s.id} value={s.name}>
-                                  {s.name}
-                                </option>
-                              ))
-                            ) : (
-                              <option value={o.status}>{o.status}</option>
-                            )}
+                            <option value="Бараа ирсэн">Бараа ирсэн</option>
+                            <option value="Захиалга цуцлагдсан">Захиалга цуцлагдсан</option>
                           </select>
                         </button>
                       ) : null}
@@ -720,12 +716,13 @@ export default function AdminOrdersTable() {
                       value={it.product_query ?? ""}
                       onChange={(e) => {
                         const val = e.target.value;
+                        const needle = val.trim().toLowerCase();
                         setCreateItems((prev) =>
                           prev.map((row, i) =>
                             i === idx ? { ...row, product_query: val, product_id: "", variant_id: "" } : row
                           )
                         );
-                        const hit = productOptions.find((p) => p.name === val);
+                        const hit = productOptions.find((p) => p.name.toLowerCase() === needle);
                         if (hit) {
                           setCreateItems((prev) =>
                             prev.map((row, i) =>

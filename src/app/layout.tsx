@@ -19,6 +19,9 @@ const sora = Sora({
 export const metadata: Metadata = {
   title: "777 Family Store",
   description: "777 Family Store онлайн дэлгүүр",
+  icons: {
+    icon: '/logo.png',
+  },
 };
 
 export default function RootLayout({

@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { getActorHeaders } from "@/lib/actorHeaders";
-import { Eye } from "lucide-react";
+import { ChevronDown, ChevronUp, Eye } from "lucide-react";
 import OrderDetailsModal from "../order/OrderDetailsModal";
 
 type ProductSummary = {
@@ -13,6 +13,21 @@ type ProductSummary = {
   total_qty: number;
   order_ids: number[];
   buyers: { order_id: number; name: string; phone: string; qty: number; order_status: string }[];
+  variants_confirmed: {
+    variant_id: number;
+    label: string;
+    stock: number | null;
+    ordered_qty: number;
+    remaining_qty: number | null;
+  }[];
+  variants_inferred: {
+    variant_id: number;
+    label: string;
+    stock: number | null;
+    inferred_qty: number;
+    remaining_after_inferred: number | null;
+    inferred_by: "image" | "price";
+  }[];
 };
 
 export default function FulfillmentPage() {
@@ -20,6 +35,7 @@ export default function FulfillmentPage() {
   const [items, setItems] = useState<ProductSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const fetchOrders = async () => {
     const q = phone.trim();
@@ -90,57 +106,142 @@ export default function FulfillmentPage() {
             ) : items.length === 0 ? (
               <tr><td colSpan={5} className="p-4 text-center">Мэдээлэл алга</td></tr>
             ) : (
-              items.map((p) => (
-                <tr key={`${p.product_id ?? "x"}-${p.product_name}`} className="border-t">
-                  <td className="p-3">
-                    <div className="h-12 w-12 rounded overflow-hidden border bg-gray-100">
-                      <img
-                        src={p.image_url || "/logo.png"}
-                        alt={p.product_name}
-                        className="h-full w-full object-cover"
-                        onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).src = "/logo.png";
-                        }}
-                      />
-                    </div>
-                  </td>
-                  <td className="p-3 font-medium">{p.product_name}</td>
-                  <td className="p-3 text-sm text-gray-600">
-                    <span className="line-clamp-2">{p.product_description || "-"}</span>
-                  </td>
-                  <td className="p-3">{p.total_qty}</td>
-                  <td className="p-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        onClick={() => setSelected(p.order_ids[0] ?? null)}
-                        className="h-9 w-9 rounded border bg-white flex items-center justify-center"
-                        title="Харах"
-                        style={{ display: "none" }}
-                      >
-                        <Eye size={16} />
-                      </button>
-                      <button
-                        onClick={() => updateStatus(p.order_ids, "Хүргэлтэнд бүртгэгдсэн")}
-                        className="px-2 py-1 text-xs rounded bg-blue-600 text-white"
-                      >
-                        Хүргэлтэнд
-                      </button>
-                      <button
-                        onClick={() => updateStatus(p.order_ids, "Бараа олгосон")}
-                        className="px-2 py-1 text-xs rounded bg-green-600 text-white"
-                      >
-                        Олгосон
-                      </button>
-                      <button
-                        onClick={() => updateStatus(p.order_ids, "Буцаагдсан")}
-                        className="px-2 py-1 text-xs rounded bg-gray-600 text-white"
-                      >
-                        Буцаах
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+              items.map((p) => {
+                const rowKey = `${p.product_id ?? "x"}-${p.product_name}`;
+                const isOpen = !!expanded[rowKey];
+                return (
+                  <React.Fragment key={rowKey}>
+                    <tr className="border-t">
+                      <td className="p-3">
+                        <div className="h-12 w-12 rounded overflow-hidden border bg-gray-100">
+                          <img
+                            src={p.image_url || "/logo.png"}
+                            alt={p.product_name}
+                            className="h-full w-full object-cover"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src = "/logo.png";
+                            }}
+                          />
+                        </div>
+                      </td>
+                      <td className="p-3 font-medium">{p.product_name}</td>
+                      <td className="p-3 text-sm text-gray-600">
+                        <span className="line-clamp-2">{p.product_description || "-"}</span>
+                      </td>
+                      <td className="p-3">{p.total_qty}</td>
+                      <td className="p-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            onClick={() => setExpanded((prev) => ({ ...prev, [rowKey]: !prev[rowKey] }))}
+                            className="h-9 w-9 rounded border bg-white flex items-center justify-center"
+                            title="Төрлүүд"
+                          >
+                            {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                          </button>
+                          <button
+                            onClick={() => setSelected(p.order_ids[0] ?? null)}
+                            className="h-9 w-9 rounded border bg-white flex items-center justify-center"
+                            title="Харах"
+                            style={{ display: "none" }}
+                          >
+                            <Eye size={16} />
+                          </button>
+                          <button
+                            onClick={() => updateStatus(p.order_ids, "Хүргэлтэнд бүртгэгдсэн")}
+                            className="px-2 py-1 text-xs rounded bg-blue-600 text-white"
+                          >
+                            Хүргэлтэнд
+                          </button>
+                          <button
+                            onClick={() => updateStatus(p.order_ids, "Бараа олгосон")}
+                            className="px-2 py-1 text-xs rounded bg-green-600 text-white"
+                          >
+                            Олгосон
+                          </button>
+                          <button
+                            onClick={() => updateStatus(p.order_ids, "Буцаагдсан")}
+                            className="px-2 py-1 text-xs rounded bg-gray-600 text-white"
+                          >
+                            Буцаах
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {isOpen && (
+                      <tr className="border-t bg-gray-50">
+                        <td colSpan={5} className="p-3">
+                          <div className="grid gap-4">
+                            <div>
+                              <div className="text-xs font-semibold mb-2">Баталгаатай (variant_id)</div>
+                              {p.variants_confirmed && p.variants_confirmed.length > 0 ? (
+                                <div className="overflow-auto rounded border bg-white">
+                                  <table className="min-w-full text-xs">
+                                    <thead className="bg-gray-100">
+                                      <tr>
+                                        <th className="px-3 py-2 text-left">Төрөл</th>
+                                        <th className="px-3 py-2 text-left">Захиалга авах тоо</th>
+                                        <th className="px-3 py-2 text-left">Захиалсан</th>
+                                        <th className="px-3 py-2 text-left">Үлдэгдэл</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {p.variants_confirmed.map((v) => (
+                                        <tr key={`c-${v.variant_id}`} className="border-t">
+                                          <td className="px-3 py-2">{v.label}</td>
+                                          <td className="px-3 py-2">{v.stock != null ? v.stock : "-"}</td>
+                                          <td className="px-3 py-2">{v.ordered_qty}</td>
+                                          <td className="px-3 py-2">
+                                            {v.remaining_qty != null ? v.remaining_qty : "-"}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              ) : (
+                                <div className="text-xs text-gray-500">Төрөл мэдээлэл алга.</div>
+                              )}
+                            </div>
+                            <div>
+                              <div className="text-xs font-semibold mb-2">Таамагласан</div>
+                              {p.variants_inferred && p.variants_inferred.length > 0 ? (
+                                <div className="overflow-auto rounded border bg-white">
+                                  <table className="min-w-full text-xs">
+                                    <thead className="bg-gray-100">
+                                      <tr>
+                                        <th className="px-3 py-2 text-left">Төрөл</th>
+                                        <th className="px-3 py-2 text-left">Таамагласан захиалсан</th>
+                                        <th className="px-3 py-2 text-left">Боломжит үлдэгдэл</th>
+                                        <th className="px-3 py-2 text-left">Таамаглал</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {p.variants_inferred.map((v) => (
+                                        <tr key={`i-${v.variant_id}-${v.inferred_by}`} className="border-t">
+                                          <td className="px-3 py-2">{v.label}</td>
+                                          <td className="px-3 py-2">{v.inferred_qty}</td>
+                                          <td className="px-3 py-2">
+                                            {v.remaining_after_inferred != null ? v.remaining_after_inferred : "-"}
+                                          </td>
+                                          <td className="px-3 py-2">
+                                            {v.inferred_by === "image" ? "Зураг" : "Үнэ"}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              ) : (
+                                <div className="text-xs text-gray-500">Таамагласан өгөгдөл алга.</div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })
             )}
           </tbody>
         </table>

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import AddToCartButton from "@/components/cart/AddToCartButton";
+import { getVariantLabel } from "@/lib/variantLabel";
 import { useRouter } from "next/navigation";
 
 type ProductDetail = {
@@ -46,7 +47,7 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
   };
 
   const [qty, setQty] = useState(1);
-  const [activeImage, setActiveImage] = useState<string | null>(product.image_url || product.images[0] || null);
+  const [activeImage, setActiveImage] = useState<string | null>(null);
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
@@ -87,19 +88,50 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
 
   const remainingQty = Math.max(0, Number(product.stock || 0) - Number(product.ordered_qty || 0));
 
+  const normalizeImage = (url?: string | null) => {
+    const raw = String(url || "").trim();
+    if (!raw) return "";
+    let cleaned = raw.split("#")[0].split("?")[0];
+    if (cleaned.startsWith("http://") || cleaned.startsWith("https://")) {
+      try {
+        const parsed = new URL(cleaned);
+        if (parsed.pathname && parsed.pathname.includes("/uploads/")) {
+          cleaned = parsed.pathname;
+        } else {
+          return cleaned;
+        }
+      } catch {
+        return cleaned;
+      }
+    }
+    if (cleaned.startsWith("uploads/")) return `/${cleaned}`;
+    if (cleaned.startsWith("/")) return cleaned;
+    if (cleaned.startsWith("/uploads/")) return cleaned;
+    return `/uploads/${cleaned}`;
+  };
+
   const baseImages = useMemo(() => {
-    const list = [product.image_url, ...product.images].filter(Boolean) as string[];
+    const list = [product.image_url, ...product.images]
+      .map((url) => normalizeImage(url))
+      .filter(Boolean);
     return Array.from(new Set(list));
   }, [product.image_url, product.images]);
+
+  useEffect(() => {
+    if (!activeImage) {
+      setActiveImage(baseImages[0] || null);
+    }
+  }, [activeImage, baseImages]);
 
   const gallery = useMemo(() => {
     const all: { url: string; variantId: number | null }[] = [];
     baseImages.forEach((url) => {
-      all.push({ url, variantId: null });
+      if (url) all.push({ url, variantId: null });
     });
     product.variants.forEach((v) => {
       (v.images || []).forEach((url) => {
-        if (url) all.push({ url, variantId: v.id });
+        const normalized = normalizeImage(url);
+        if (normalized) all.push({ url: normalized, variantId: v.id });
       });
     });
     // de-dup by url, prefer variant mapping if exists
@@ -114,13 +146,8 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
 
   const images = gallery;
 
-  const variantLabel = (v: ProductDetail["variants"][number]) => {
-    const attr = (v.attribute || {}) as Record<string, unknown>;
-    const size = typeof attr.size === "string" ? attr.size : "";
-    const base = size ? size : "";
-    const merged = [base].filter(Boolean).join(" • ");
-    return merged || v.sku || "";
-  };
+  const variantLabel = (v: ProductDetail["variants"][number]) =>
+    getVariantLabel(v.attribute, v.sku, v.id);
 
   const getVariantColor = (v: ProductDetail["variants"][number]) => {
     const attr = (v.attribute || {}) as Record<string, unknown>;
@@ -309,7 +336,9 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
     if (!selectedVariant) return;
     const prevId = prevVariantIdRef.current;
     if (prevId !== selectedVariant.id) {
-      const imgs = (selectedVariant.images || []).filter(Boolean) as string[];
+      const imgs = (selectedVariant.images || [])
+        .map((url) => normalizeImage(url))
+        .filter(Boolean);
       if (imgs.length > 0) {
         setActiveImage(imgs[0]);
       } else if (baseImages[0]) {
@@ -521,10 +550,10 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
                     <div className="flex flex-wrap gap-2">
                       {Array.from(
                         new Map(
-                          filteredOptions.map((v) => [variantLabel(v) || `#${v.id}`, v])
+                          filteredOptions.map((v) => [getVariantSize(v) || v.sku || `Төрөл-${v.id}`, v])
                         ).values()
                       ).map((v) => {
-                        const optionLabel = variantLabel(v) || `#${v.id}`;
+                        const optionLabel = getVariantSize(v) || v.sku || `Төрөл-${v.id}`;
                         return (
                           <button
                             key={v.id}
@@ -554,19 +583,10 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
 
               {selectedVariant && (
                 <div className="mt-4 text-xs text-[var(--gray-700)]">
-                  {(() => {
-                    const color = getVariantColor(selectedVariant);
-                    const size = getVariantSize(selectedVariant);
-                    const parts = [selectedTypeGroup || "", color || "", size || ""]
-                      .filter(Boolean)
-                      .filter((p) => p.trim().length > 0);
-                    return (
-                      <div>
-                        Сонгосон:{" "}
-                        <span className="font-semibold text-[var(--navy-900)]">{parts.join("/")}</span>
-                      </div>
-                    );
-                  })()}
+                  <div>
+                    Сонгосон:{" "}
+                    <span className="font-semibold text-[var(--navy-900)]">{variantLabel(selectedVariant)}</span>
+                  </div>
                 </div>
               )}
             </div>

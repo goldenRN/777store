@@ -50,8 +50,22 @@ model User {
   address     String?
   avatarUrl   String?
   orders      Order[]
+  resetTokens PasswordResetToken[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+model PasswordResetToken {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenHash  String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
 }
 
 model Category {
@@ -326,6 +340,7 @@ model AdminOrderItem {
   id           Int        @id @default(autoincrement())
   order_id     Int
   product_id   Int?
+  variant_id   Int?
   product_name String
   quantity     Int
   price        Int
@@ -333,6 +348,7 @@ model AdminOrderItem {
   status       String     @default("pending")
   order        AdminOrder @relation(fields: [order_id], references: [id], onDelete: Cascade)
   product      AdminProduct? @relation(fields: [product_id], references: [id], onDelete: SetNull)
+  variant      AdminProductVariant? @relation(fields: [variant_id], references: [id], onDelete: SetNull)
 }
 
 model AdminAuditLog {

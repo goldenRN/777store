@@ -358,6 +358,21 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
             return;
         }
 
+        const stockNumber = Number(form.stock) || 0;
+        const durationNumber = form.type_has_duration ? Number(form.duration_hours) || 0 : 0;
+
+        if ((productMode === "ready" || forceReadyEdit) && stockNumber <= 0) {
+            alert("Бэлэн бараанд үлдэгдэл заавал оруулна уу.");
+            return;
+        }
+
+        if ((productMode === "preorder" || productMode === "live") && !forceReadyEdit) {
+            if (stockNumber <= 0 && durationNumber <= 0) {
+                alert("Захиалгын бараанд захиалах тоо эсвэл захиалах хугацааны аль нэгийг нь оруулна уу.");
+                return;
+            }
+        }
+
         setLoading(true);
 
         try {
@@ -415,9 +430,9 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                     (productMode === "ready" || forceReadyEdit) && computedDiscountPrice !== null && computedDiscountPrice > 0
                         ? Number(computedDiscountPrice.toFixed(2))
                         : null,
-                stock: Number(form.stock) || 0,
+                stock: stockNumber,
                 material: form.material,
-                duration_hours: form.type_has_duration ? Number(form.duration_hours) || 0 : null,
+                duration_hours: form.type_has_duration ? durationNumber : null,
                 images: allImages, // [{ image_url, public_id }]
             };
 

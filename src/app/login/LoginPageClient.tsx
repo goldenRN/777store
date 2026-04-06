@@ -123,6 +123,12 @@ export default function LoginPageClient() {
               Бүртгүүлэх
             </Link>
           </p>
+          <p className="mt-2 text-center text-xs text-[var(--gray-700)]">
+            Нууц үгээ мартсан уу?{" "}
+            <Link href="/forgot-password" className="font-semibold text-black">
+              Сэргээх
+            </Link>
+          </p>
         </div>
       </main>
       <Footer />

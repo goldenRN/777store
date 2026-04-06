@@ -1,4 +1,5 @@
-import { mkdir, writeFile } from "fs/promises";
+import { mkdir, writeFile, access } from "fs/promises";
+import { createHash } from "crypto";
 import path from "path";
 
 export type SavedFile = {
@@ -13,10 +14,16 @@ export async function saveFile(file: File, folder = "uploads"): Promise<SavedFil
 
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
-  const safeName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${file.name}`;
+  const hash = createHash("sha256").update(buffer).digest("hex");
+  const ext = path.extname(file.name || "") || ".bin";
+  const safeName = `${hash}${ext}`;
   const filePath = path.join(uploadDir, safeName);
 
-  await writeFile(filePath, buffer);
+  try {
+    await access(filePath);
+  } catch {
+    await writeFile(filePath, buffer);
+  }
 
   return {
     url: `/${folder}/${safeName}`,

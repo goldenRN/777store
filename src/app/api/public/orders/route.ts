@@ -107,6 +107,7 @@ export async function POST(request: NextRequest) {
       items: {
         create: items.map((it: any) => ({
           product_id: it.product_id ? Number(it.product_id) : null,
+          variant_id: it.variant_id ? Number(it.variant_id) : null,
           product_name: String(it.name ?? "Бараа"),
           quantity: Math.max(1, Number(it.qty ?? 1)),
           price: Math.max(0, Number(it.price ?? 0)),

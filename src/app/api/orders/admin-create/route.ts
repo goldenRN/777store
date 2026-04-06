@@ -66,6 +66,7 @@ export async function POST(request: NextRequest) {
       null;
     return {
       product_id: productId,
+      variant_id: variantId,
       product_name: product.name,
       quantity: qty,
       price: unitPrice,

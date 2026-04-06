@@ -45,15 +45,43 @@ export async function PUT(
   }
 
   const body = await request.json();
-  const updated = await prisma.adminProductVariant.update({
-    where: { id },
-    data: {
-      sku: body?.sku ?? null,
-      attribute: body?.attribute ?? null,
-      price: body?.price != null ? Math.round(Number(body.price)) : null,
-      stock: body?.stock != null ? Math.round(Number(body.stock)) : null,
-    },
+  const updated = await prisma.$transaction(async (tx) => {
+    const exists = await tx.adminProductVariant.findUnique({ where: { id } });
+    if (!exists) {
+      return null;
+    }
+    const next = await tx.adminProductVariant.update({
+      where: { id },
+      data: {
+        sku: body?.sku ?? null,
+        attribute: body?.attribute ?? null,
+        price: body?.price != null ? Math.round(Number(body.price)) : null,
+        stock: body?.stock != null ? Math.round(Number(body.stock)) : null,
+      },
+    });
+
+    if (Array.isArray(body?.images)) {
+      await tx.adminProductImage.deleteMany({
+        where: { product_variant_id: id },
+      });
+
+      if (body.images.length > 0) {
+        await tx.adminProductImage.createMany({
+          data: body.images.map((img: { image_url: string; public_id?: string | null }) => ({
+            image_url: img.image_url,
+            public_id: img.public_id ?? null,
+            product_id: next.product_id,
+            product_variant_id: id,
+          })),
+        });
+      }
+    }
+
+    return next;
   });
 
+  if (!updated) {
+    return NextResponse.json({ message: "Variant олдсонгүй" }, { status: 404 });
+  }
   return NextResponse.json({ data: updated });
 }
