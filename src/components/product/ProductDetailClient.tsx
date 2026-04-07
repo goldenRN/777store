@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import AddToCartButton from "@/components/cart/AddToCartButton";
 import { getVariantLabel } from "@/lib/variantLabel";
@@ -47,13 +47,30 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
     return `/uploads/${url}`;
   };
 
+  const getTypeName = (v: ProductDetail["variants"][number]) => {
+    const attr = (v.attribute || {}) as Record<string, unknown>;
+    const type = typeof attr.type === "string" ? attr.type.trim() : "";
+    return type;
+  };
+
   const [qty, setQty] = useState(1);
   const [activeImage, setActiveImage] = useState<string | null>(null);
-  const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
+  const [selectedVariantId, setSelectedVariantId] = useState<number | null>(() => {
+    if (!product.variants.length) return null;
+    const first = product.variants[0];
+    const t = getTypeName(first);
+    const v = product.variants.find((it) => getTypeName(it) === t) || first;
+    return v.id;
+  });
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [zoomOpen, setZoomOpen] = useState(false);
-  const [selectedTypeGroup, setSelectedTypeGroup] = useState<string | null>(null);
+  const [selectedTypeGroup, setSelectedTypeGroup] = useState<string | null>(() => {
+    if (!product.variants.length) return null;
+    const first = product.variants[0];
+    const t = getTypeName(first);
+    return t || null;
+  });
   const prevVariantIdRef = useRef<number | null>(null);
   const endDate = useMemo(() => {
     if (!product.created_at || !product.duration_hours) return null;
@@ -65,6 +82,11 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
     () => product.variants.find((v) => v.id === selectedVariantId) || null,
     [product.variants, selectedVariantId]
   );
+  const variantById = useMemo(() => {
+    const map = new Map<number, ProductDetail["variants"][number]>();
+    product.variants.forEach((v) => map.set(v.id, v));
+    return map;
+  }, [product.variants]);
 
   const finalPrice = useMemo(() => {
     if (selectedVariant && selectedVariant.price != null) return selectedVariant.price;
@@ -133,6 +155,20 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
     }
   }, [activeImage, baseImages]);
 
+  const variantImageOwners = useMemo(() => {
+    const map = new Map<string, Set<number>>();
+    product.variants.forEach((v) => {
+      (v.images || []).forEach((url) => {
+        const normalized = normalizeImage(url);
+        if (!normalized) return;
+        const set = map.get(normalized) ?? new Set<number>();
+        set.add(v.id);
+        map.set(normalized, set);
+      });
+    });
+    return map;
+  }, [product.variants]);
+
   const gallery = useMemo(() => {
     const all: { url: string; variantId: number | null }[] = [];
     baseImages.forEach((url) => {
@@ -195,11 +231,7 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
     return "";
   }, [selectedVariant]);
 
-  const getVariantTypeName = (v: ProductDetail["variants"][number]) => {
-    const attr = (v.attribute || {}) as Record<string, unknown>;
-    const type = typeof attr.type === "string" ? attr.type.trim() : "";
-    return type;
-  };
+  const getVariantTypeName = (v: ProductDetail["variants"][number]) => getTypeName(v);
 
   const typeGroups = useMemo(() => {
     const map = new Map<string, ProductDetail["variants"]>();
@@ -213,6 +245,19 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
 
   const typeGroupList = useMemo(() => Array.from(typeGroups.keys()), [typeGroups]);
 
+  const handleTypeClick = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      const t = e.currentTarget.dataset.value || "";
+      startTransition(() => {
+        setSelectedTypeGroup(t);
+        const v = typeGroups.get(t)?.[0] || null;
+        setSelectedVariantId(v ? v.id : null);
+        if (enableColorSize) setSelectedColor(null);
+      });
+    },
+    [typeGroups, enableColorSize]
+  );
+
   useEffect(() => {
     if (typeGroupList.length === 0) return;
     if (!selectedTypeGroup || !typeGroups.has(selectedTypeGroup)) {
@@ -220,18 +265,14 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
     }
   }, [typeGroupList, typeGroups, selectedTypeGroup]);
 
-  useEffect(() => {
-    if (!selectedTypeGroup) return;
-    // reset selections when type changes
-    setSelectedVariantId(null);
-    setSelectedColor(null);
-  }, [selectedTypeGroup]);
+  // no separate reset effect; selection is updated in the click handler to reduce rerenders
 
   const typeVariants = useMemo(() => {
     return typeGroups.get(selectedTypeGroup || "") || [];
   }, [typeGroups, selectedTypeGroup]);
 
   const filteredOptions = useMemo(() => {
+    if (!enableColorSize) return typeVariants;
     return typeVariants
       .filter((v) => (selectedColor ? getVariantColor(v) === selectedColor : true))
       .filter((v) => {
@@ -240,10 +281,11 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
         const colorOnly = selectedColor.trim().toLowerCase();
         return optionLabel !== colorOnly;
       });
-  }, [typeVariants, selectedColor]);
+  }, [typeVariants, selectedColor, enableColorSize]);
 
 
   const colorOptionsForType = useMemo(() => {
+    if (!enableColorSize) return [];
     const seen = new Set<string>();
     const list: string[] = [];
     typeVariants.forEach((v) => {
@@ -257,6 +299,7 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
   }, [typeVariants]);
 
   useEffect(() => {
+    if (!enableColorSize) return;
     if (colorOptionsForType.length === 0) {
       setSelectedColor(null);
       return;
@@ -264,7 +307,12 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
     if (!selectedColor || !colorOptionsForType.includes(selectedColor)) {
       setSelectedColor(colorOptionsForType[0]);
     }
-  }, [colorOptionsForType, selectedColor]);
+  }, [colorOptionsForType, selectedColor, enableColorSize]);
+
+  const handleColorClick = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    const c = e.currentTarget.dataset.value || "";
+    startTransition(() => setSelectedColor(c));
+  }, []);
 
   useEffect(() => {
     if (filteredOptions.length === 0) return;
@@ -406,13 +454,18 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
                 onClick={() => {
                   setActiveImage(img.url);
                   if (img.variantId) {
-                    setSelectedVariantId(img.variantId);
-                    const v = product.variants.find((pv) => pv.id === img.variantId) || null;
-                    if (v) {
-                      const t = getVariantTypeName(v);
-                      if (t) setSelectedTypeGroup(t);
-                      const c = getVariantColor(v);
-                      setSelectedColor(c || null);
+                    const owners = variantImageOwners.get(img.url);
+                    if (owners && owners.size === 1 && owners.has(img.variantId)) {
+                      startTransition(() => {
+                        setSelectedVariantId(img.variantId);
+                        const v = product.variants.find((pv) => pv.id === img.variantId) || null;
+                        if (v) {
+                          const t = getVariantTypeName(v);
+                          if (t) setSelectedTypeGroup(t);
+                          const c = getVariantColor(v);
+                          setSelectedColor(c || null);
+                        }
+                      });
                     }
                   }
                 }}
@@ -535,7 +588,8 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
                         <button
                           key={t}
                           type="button"
-                          onClick={() => setSelectedTypeGroup(t)}
+                          data-value={t}
+                          onClick={handleTypeClick}
                           className={`rounded-full border px-3 py-1 text-xs transition ${
                             selectedTypeGroup === t
                               ? "border-red-500 bg-red-50 text-red-600"
@@ -557,7 +611,8 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
                       <button
                         key={c}
                         type="button"
-                        onClick={() => setSelectedColor(c)}
+                        data-value={c}
+                        onClick={handleColorClick}
                         className={`rounded-full border px-3 py-1 text-xs transition ${
                           selectedColor === c
                             ? "border-red-500 bg-red-50 text-red-600"
@@ -585,13 +640,17 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
                           <button
                             key={v.id}
                             type="button"
-                            onClick={() => {
-                              setSelectedVariantId(v.id);
+                            data-id={v.id}
+                            onClick={(e) => {
+                              const id = Number((e.currentTarget as HTMLButtonElement).dataset.id || 0);
+                              const next = variantById.get(id);
+                              if (!next) return;
                               const nextImages =
-                                v.images && v.images.length > 0
-                                  ? Array.from(new Set(v.images.filter(Boolean) as string[]))
+                                next.images && next.images.length > 0
+                                  ? Array.from(new Set(next.images.filter(Boolean) as string[]))
                                   : baseImages;
                               setActiveImage(nextImages[0] || null);
+                              startTransition(() => setSelectedVariantId(id));
                             }}
                             className={`rounded-full border px-3 py-1 text-xs transition ${
                               selectedVariantId === v.id
