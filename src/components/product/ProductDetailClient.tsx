@@ -60,6 +60,7 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
 
   const [qty, setQty] = useState(1);
   const [activeImage, setActiveImage] = useState<string | null>(null);
+  const [mainImageError, setMainImageError] = useState(false);
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(() => {
     if (!product.variants.length) return null;
     const first = product.variants[0];
@@ -159,6 +160,10 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
       setActiveImage(baseImages[0] || null);
     }
   }, [activeImage, baseImages]);
+
+  useEffect(() => {
+    setMainImageError(false);
+  }, [activeImage]);
 
   const imageKey = (url: string) => {
     const clean = url.split("?")[0].split("#")[0];
@@ -434,7 +439,7 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
     <div className="grid gap-8 lg:grid-cols-2">
         <div className="rounded-2xl bg-white p-4 shadow">
         <div className="relative h-[420px] w-full overflow-hidden rounded-xl bg-[var(--sky-100)]">
-          {activeImage ? (
+          {activeImage && !mainImageError ? (
             <Image
               src={resolveImageUrl(activeImage)}
               alt={product.name}
@@ -444,6 +449,15 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
               quality={70}
               className="object-cover"
               unoptimized={isExternalUrl(activeImage)}
+              onError={() => setMainImageError(true)}
+            />
+          ) : activeImage ? (
+            // fallback to plain img if Next/Image fails
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={resolveImageUrl(activeImage)}
+              alt={product.name}
+              className="h-full w-full object-cover"
             />
           ) : (
             <div className="grid h-full w-full place-items-center">
