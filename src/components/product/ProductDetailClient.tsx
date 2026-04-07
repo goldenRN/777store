@@ -485,16 +485,13 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
                   activeImage === img.url ? "ring-2 ring-red-500" : ""
                 }`}
               >
-                <Image
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
                   src={resolveImageUrl(thumbFallback[img.url] ? img.url : getThumbUrl(img.url))}
                   alt={`${product.name}-${idx}`}
-                  fill
-                  className="object-cover"
-                  sizes="80px"
-                  priority={idx === 0}
+                  className="h-full w-full object-cover"
                   loading={idx === 0 ? "eager" : "lazy"}
-                  quality={60}
-                  unoptimized={isExternalUrl(img.url)}
+                  decoding="async"
                   onError={() => {
                     if (!thumbFallback[img.url]) {
                       setThumbFallback((prev) => ({ ...prev, [img.url]: true }));
