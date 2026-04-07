@@ -24,6 +24,7 @@ export async function saveFile(file: File, folder = "uploads"): Promise<SavedFil
   const buffer = Buffer.from(arrayBuffer);
   const hash = createHash("sha256").update(buffer).digest("hex");
   const ext = path.extname(file.name || "") || ".bin";
+  const extLower = ext.toLowerCase();
   const safeName = `${hash}${ext}`;
   const filePath = path.join(uploadDir, safeName);
 
@@ -31,6 +32,30 @@ export async function saveFile(file: File, folder = "uploads"): Promise<SavedFil
     await access(filePath);
   } catch {
     await writeFile(filePath, buffer);
+  }
+
+  const isImage = [".jpg", ".jpeg", ".png", ".webp"].includes(extLower);
+  if (isImage) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const sharp = require("sharp") as any;
+      if (sharp) {
+        const thumbName = `${hash}_sm.jpg`;
+        const thumbPath = path.join(uploadDir, thumbName);
+        try {
+          await access(thumbPath);
+        } catch {
+          const outputBuffer = await sharp(buffer)
+            .rotate()
+            .resize({ width: 600, withoutEnlargement: true })
+            .jpeg({ quality: 70 })
+            .toBuffer();
+          await writeFile(thumbPath, outputBuffer);
+        }
+      }
+    } catch {
+      // ignore thumb failures
+    }
   }
 
   return {

@@ -40,12 +40,17 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
   const actionLabel = (() => {
     return "Сагсанд нэмэх";
   })();
+  const isExternalUrl = (url?: string | null) => {
+    if (!url) return false;
+    return url.startsWith("http://") || url.startsWith("https://");
+  };
   const resolveImageUrl = (url?: string | null) => {
     if (!url) return "";
     if (url.startsWith("http://") || url.startsWith("https://")) return url;
     if (url.startsWith("/")) return url;
     return `/uploads/${url}`;
   };
+  const [thumbFallback, setThumbFallback] = useState<Record<string, boolean>>({});
 
   const getTypeName = (v: ProductDetail["variants"][number]) => {
     const attr = (v.attribute || {}) as Record<string, unknown>;
@@ -155,19 +160,23 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
     }
   }, [activeImage, baseImages]);
 
-  const variantImageOwners = useMemo(() => {
-    const map = new Map<string, Set<number>>();
-    product.variants.forEach((v) => {
-      (v.images || []).forEach((url) => {
-        const normalized = normalizeImage(url);
-        if (!normalized) return;
-        const set = map.get(normalized) ?? new Set<number>();
-        set.add(v.id);
-        map.set(normalized, set);
-      });
-    });
-    return map;
-  }, [product.variants]);
+  const imageKey = (url: string) => {
+    const clean = url.split("?")[0].split("#")[0];
+    const parts = clean.split("/");
+    return parts[parts.length - 1] || clean;
+  };
+  const getThumbUrl = (url: string) => {
+    if (!url || isExternalUrl(url)) return url;
+    const clean = url.split("?")[0].split("#")[0];
+    const parts = clean.split("/");
+    const filename = parts[parts.length - 1] || "";
+    if (!filename) return url;
+    const dot = filename.lastIndexOf(".");
+    const base = dot >= 0 ? filename.slice(0, dot) : filename;
+    if (!/^[a-f0-9]{64}$/i.test(base)) return url;
+    const thumbName = `${base}_sm.jpg`;
+    return `${parts.slice(0, -1).join("/")}/${thumbName}`;
+  };
 
   const gallery = useMemo(() => {
     const all: { url: string; variantId: number | null }[] = [];
@@ -180,11 +189,12 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
         if (normalized) all.push({ url: normalized, variantId: v.id });
       });
     });
-    // de-dup by url, prefer variant mapping if exists
+    // de-dup by filename (same named image => show once)
     const map = new Map<string, { url: string; variantId: number | null }>();
     all.forEach((item) => {
-      if (!map.has(item.url) || item.variantId) {
-        map.set(item.url, item);
+      const key = imageKey(item.url);
+      if (!map.has(key)) {
+        map.set(key, item);
       }
     });
     return Array.from(map.values());
@@ -429,8 +439,11 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
               src={resolveImageUrl(activeImage)}
               alt={product.name}
               fill
+              priority
+              sizes="(min-width: 1024px) 50vw, 100vw"
+              quality={70}
               className="object-cover"
-              unoptimized
+              unoptimized={isExternalUrl(activeImage)}
             />
           ) : (
             <div className="grid h-full w-full place-items-center">
@@ -453,32 +466,26 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
                 key={`${img.url}-${idx}`}
                 onClick={() => {
                   setActiveImage(img.url);
-                  if (img.variantId) {
-                    const owners = variantImageOwners.get(img.url);
-                    if (owners && owners.size === 1 && owners.has(img.variantId)) {
-                      startTransition(() => {
-                        setSelectedVariantId(img.variantId);
-                        const v = product.variants.find((pv) => pv.id === img.variantId) || null;
-                        if (v) {
-                          const t = getVariantTypeName(v);
-                          if (t) setSelectedTypeGroup(t);
-                          const c = getVariantColor(v);
-                          setSelectedColor(c || null);
-                        }
-                      });
-                    }
-                  }
                 }}
                 className={`relative h-20 w-full overflow-hidden rounded-lg bg-[var(--sky-100)] ${
                   activeImage === img.url ? "ring-2 ring-red-500" : ""
                 }`}
               >
                 <Image
-                  src={resolveImageUrl(img.url)}
+                  src={resolveImageUrl(thumbFallback[img.url] ? img.url : getThumbUrl(img.url))}
                   alt={`${product.name}-${idx}`}
                   fill
                   className="object-cover"
-                  unoptimized
+                  sizes="80px"
+                  priority={idx === 0}
+                  loading={idx === 0 ? "eager" : "lazy"}
+                  quality={60}
+                  unoptimized={isExternalUrl(img.url)}
+                  onError={() => {
+                    if (!thumbFallback[img.url]) {
+                      setThumbFallback((prev) => ({ ...prev, [img.url]: true }));
+                    }
+                  }}
                 />
               </button>
             ))}
