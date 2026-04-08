@@ -25,11 +25,11 @@ export async function POST(request: NextRequest) {
   const email = emailInput || user?.email || null;
 
   const productIds = items
-    .map((it: any) => Number(it.product_id))
-    .filter((id: number) => Number.isFinite(id));
+    .map((it: any) => (it?.product_id ? Number(it.product_id) : null))
+    .filter((id: number | null): id is number => id != null && Number.isFinite(id));
   const variantIds = items
-    .map((it: any) => Number(it.variant_id))
-    .filter((id: number) => Number.isFinite(id));
+    .map((it: any) => (it?.variant_id ? Number(it.variant_id) : null))
+    .filter((id: number | null): id is number => id != null && Number.isFinite(id));
   const [products, variants] = await Promise.all([
     prisma.adminProduct.findMany({
       where: { id: { in: productIds } },
@@ -57,9 +57,10 @@ export async function POST(request: NextRequest) {
       throw new Error(`Төрөлтэй бараанд төрөл заавал сонгоно уу: ${product?.name ?? "Бараа"}`);
     }
     const variant = variantId ? variantMap.get(variantId) : null;
+    const variantPrice = variant?.price != null ? Number(variant.price) : null;
     const unitPrice =
-      variant && variant.price != null
-        ? variant.price
+      variantPrice != null && variantPrice > 0
+        ? variantPrice
         : product.discount_price != null && product.discount_price > 0
         ? product.discount_price
         : product.price;

@@ -8,12 +8,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "product_id шаардлагатай" }, { status: 400 });
   }
 
+  const baseProduct = await prisma.adminProduct.findUnique({
+    where: { id: product_id },
+    select: { price: true, discount_price: true },
+  });
+  if (!baseProduct) {
+    return NextResponse.json({ message: "Бараа олдсонгүй" }, { status: 404 });
+  }
+
+  const baseUnitPrice =
+    baseProduct.discount_price != null && baseProduct.discount_price > 0
+      ? baseProduct.discount_price
+      : baseProduct.price;
+  const rawPrice = body?.price;
+  const parsedPrice = rawPrice === "" || rawPrice == null ? null : Math.round(Number(rawPrice));
+  const nextPrice = parsedPrice != null && Number.isFinite(parsedPrice) && parsedPrice > 0 ? parsedPrice : baseUnitPrice;
+
   const created = await prisma.adminProductVariant.create({
     data: {
       product_id,
       sku: body?.sku ?? null,
       attribute: body?.attribute ?? null,
-      price: body?.price != null ? Math.round(Number(body.price)) : null,
+      // If variant price is missing/0, fall back to the product's base unit price.
+      price: nextPrice,
       stock: body?.stock != null ? Math.round(Number(body.stock)) : null,
       images: body?.images?.length
         ? {
@@ -28,11 +45,11 @@ export async function POST(request: Request) {
   });
 
   // Auto-sum variant stock into product stock when base stock is 0
-  const product = await prisma.adminProduct.findUnique({
+  const productStock = await prisma.adminProduct.findUnique({
     where: { id: product_id },
     select: { stock: true },
   });
-  if (product && product.stock === 0) {
+  if (productStock && productStock.stock === 0) {
     const variants = await prisma.adminProductVariant.findMany({
       where: { product_id },
       select: { stock: true },

@@ -139,12 +139,28 @@ export async function PUT(
     if (!exists) {
       return null;
     }
+    const baseProduct = await tx.adminProduct.findUnique({
+      where: { id: exists.product_id },
+      select: { price: true, discount_price: true },
+    });
+    const baseUnitPrice =
+      baseProduct && baseProduct.discount_price != null && baseProduct.discount_price > 0
+        ? baseProduct.discount_price
+        : baseProduct?.price;
+    const rawPrice = body?.price;
+    const parsedPrice = rawPrice === "" || rawPrice == null ? null : Math.round(Number(rawPrice));
+    const nextPrice =
+      parsedPrice != null && Number.isFinite(parsedPrice) && parsedPrice > 0
+        ? parsedPrice
+        : baseUnitPrice ?? null;
+
     const next = await tx.adminProductVariant.update({
       where: { id },
       data: {
         sku: body?.sku ?? null,
         attribute: body?.attribute ?? null,
-        price: body?.price != null ? Math.round(Number(body.price)) : null,
+        // If variant price is missing/0, fall back to the product's base unit price.
+        price: nextPrice,
         stock: body?.stock != null ? Math.round(Number(body.stock)) : null,
       },
     });
@@ -166,11 +182,11 @@ export async function PUT(
       }
     }
 
-    const product = await tx.adminProduct.findUnique({
+    const productStock = await tx.adminProduct.findUnique({
       where: { id: next.product_id },
       select: { stock: true },
     });
-    if (product && product.stock === 0) {
+    if (productStock && productStock.stock === 0) {
       const variants = await tx.adminProductVariant.findMany({
         where: { product_id: next.product_id },
         select: { stock: true },

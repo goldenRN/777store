@@ -5,6 +5,7 @@ import Image from "next/image";
 import { memo, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AddToCartButton from "@/components/cart/AddToCartButton";
+import { toast } from "@/components/ui/use-toast";
 import { getVariantLabel } from "@/lib/variantLabel";
 
 type Variant = {
@@ -502,7 +503,7 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
           </div>
         )}
 
-        <div className="mt-6 flex items-center gap-3">
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="flex items-center gap-2 rounded-full border px-3 py-2">
             <button
               type="button"
@@ -530,22 +531,40 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
             </button>
           </div>
 
-          <AddToCartButton
-            id={product.id}
-            name={product.name}
-            price={finalPrice}
-            image_url={cartImageUrl}
-            type_name={product.type_name}
-            variant_id={selectedVariant?.id ?? null}
-            variant_sku={selectedVariant?.sku ?? null}
-            variant_label={selectedVariantLabel}
-            qty={qty}
-            disabled={!canAddToCart}
-            onAdded={() => router.push("/cart")}
-            className="rounded-full bg-black px-6 py-3 text-sm font-semibold text-white"
-          >
-            {ACTION_LABEL}
-          </AddToCartButton>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <AddToCartButton
+              id={product.id}
+              name={product.name}
+              price={finalPrice}
+              image_url={cartImageUrl}
+              type_name={product.type_name}
+              variant_id={selectedVariant?.id ?? null}
+              variant_sku={selectedVariant?.sku ?? null}
+              variant_label={selectedVariantLabel}
+              qty={qty}
+              disabled={!canAddToCart}
+              onAdded={() => toast({ title: "Сагсанд нэмэгдлээ" })}
+              className="w-full rounded-full border border-black bg-white px-6 py-3 text-sm font-semibold text-black sm:w-auto"
+            >
+              {ACTION_LABEL}
+            </AddToCartButton>
+            <AddToCartButton
+              id={product.id}
+              name={product.name}
+              price={finalPrice}
+              image_url={cartImageUrl}
+              type_name={product.type_name}
+              variant_id={selectedVariant?.id ?? null}
+              variant_sku={selectedVariant?.sku ?? null}
+              variant_label={selectedVariantLabel}
+              qty={qty}
+              disabled={!canAddToCart}
+              onAdded={() => router.push("/cart")}
+              className="w-full rounded-full bg-black px-6 py-3 text-sm font-semibold text-white sm:w-auto"
+            >
+              Худалдаж авах
+            </AddToCartButton>
+          </div>
         </div>
       </div>
 

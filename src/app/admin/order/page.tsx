@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import OrderDetailsModal from "./OrderDetailsModal";
 import { getActorHeaders } from "@/lib/actorHeaders";
@@ -67,7 +67,8 @@ export default function AdminOrdersTable() {
   const [limit] = useState(20);
   const [pages, setPages] = useState(1);
   const [total, setTotal] = useState(0);
-  const [q, setQ] = useState("");
+  const [qInput, setQInput] = useState("");
+  const [qDebounced, setQDebounced] = useState("");
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Order | null>(null);
   const [statusOptions, setStatusOptions] = useState<{ id: number; name: string }[]>([]);
@@ -131,14 +132,21 @@ export default function AdminOrdersTable() {
     }
   }, [isPending]);
 
-  const fetchOrders = async (p = page) => {
+  // Pending бараа дээр хайлтыг API руу дахин дахин цохихгүйгээр (debounce) шүүнэ.
+  useEffect(() => {
+    const t = setTimeout(() => setQDebounced(qInput), 3000);
+    return () => clearTimeout(t);
+  }, [qInput]);
+
+  const fetchOrders = async (p = page, query = qDebounced) => {
     setLoading(true);
     try {
+      const trimmed = query.trim();
       const base = process.env.NEXT_PUBLIC_API_URL || "";
       const url = new URL(`${base}/api/orders`, window.location.origin);
       url.searchParams.set("page", String(p));
       url.searchParams.set("limit", String(limit));
-      if (q) url.searchParams.set("q", q);
+      if (trimmed) url.searchParams.set("q", trimmed);
       if (statusFilter) url.searchParams.set("status", statusFilter);
 
       const res = await fetch(url.toString());
@@ -236,18 +244,50 @@ export default function AdminOrdersTable() {
     return () => clearTimeout(t);
   }, [createOpen, createPhone]);
 
+  const productOptionMap = useMemo(() => new Map(productOptions.map((p) => [p.id, p])), [productOptions]);
+
+  const getBaseUnitPrice = useCallback(
+    (productId: number) => {
+    const product = productOptionMap.get(productId);
+    if (!product) return 0;
+    return product.discount_price && product.discount_price > 0 ? product.discount_price : product.price;
+    },
+    [productOptionMap]
+  );
+
+  const getUnitPriceForVariant = useCallback(
+    (productId: number, variantId: number | null) => {
+    const baseUnit = getBaseUnitPrice(productId);
+    if (!variantId) return baseUnit;
+    const variant = (variantOptions[productId] || []).find((v) => v.id === variantId) || null;
+    const variantPrice = variant?.price != null ? Number(variant.price) : null;
+    return variantPrice != null && variantPrice > 0 ? variantPrice : baseUnit;
+    },
+    [getBaseUnitPrice, variantOptions]
+  );
+
   const orderItemTotal = useMemo(() => {
-    const map = new Map(productOptions.map((p) => [p.id, p]));
     return createItems.reduce((sum, it) => {
       if (!it.product_id) return sum;
-      const p = map.get(Number(it.product_id));
-      if (!p) return sum;
-      const unit = p.discount_price && p.discount_price > 0 ? p.discount_price : p.price;
+      const productId = Number(it.product_id);
+      const variantId = it.variant_id ? Number(it.variant_id) : null;
+      const unit = getUnitPriceForVariant(productId, variantId);
       return sum + Math.max(1, Number(it.qty || 1)) * unit;
     }, 0);
-  }, [createItems, productOptions]);
+  }, [createItems, getUnitPriceForVariant]);
 
-  const onSearch = () => fetchOrders(1);
+  const onSearch = () => fetchOrders(1, qInput);
+
+  const visibleProductItems = useMemo(() => {
+    const q = qDebounced.trim().toLowerCase();
+    if (!q) return productItems;
+    return productItems.filter((p) => {
+      const hay = `${p.product_name || ""} ${p.product_description || ""}`.toLowerCase();
+      if (hay.includes(q)) return true;
+      if (Array.isArray(p.variants) && p.variants.some((v) => String(v.label || "").toLowerCase().includes(q))) return true;
+      return false;
+    });
+  }, [productItems, qDebounced]);
 
   const handleSort = (field: keyof Order) => {
     if (sortField === field) {
@@ -310,11 +350,14 @@ export default function AdminOrdersTable() {
             </div>
           )}
           <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Нэр / Имэйл / ID хайх..."
+            value={qInput}
+            onChange={(e) => setQInput(e.target.value)}
+            placeholder={viewMode === "product" ? "Бараа хайх..." : "Нэр / Имэйл / ID хайх..."}
             className="border rounded px-3 py-1 text-sm w-full sm:w-64"
           />
+          {viewMode === "product" && qInput.trim() && qInput !== qDebounced && (
+            <div className="text-xs text-gray-500">3 сек дараа хайна…</div>
+          )}
           {viewMode === "order" && !isProductOnly && (
             <button onClick={onSearch} className="bg-blue-600 text-white px-3 py-1 rounded">Хайх</button>
           )}
@@ -367,10 +410,10 @@ export default function AdminOrdersTable() {
             <tbody>
               {productLoading ? (
                 <tr><td colSpan={8} className="p-4 text-center">Уншиж байна...</td></tr>
-              ) : productItems.length === 0 ? (
+              ) : visibleProductItems.length === 0 ? (
                 <tr><td colSpan={8} className="p-4 text-center">Мэдээлэл алга</td></tr>
               ) : (
-                productItems.map((p) => (
+                visibleProductItems.map((p) => (
                   <React.Fragment key={`${p.product_id ?? "x"}-${p.product_name}`}>
                   <tr className="border-t">
                     <td className="p-3">
@@ -801,26 +844,32 @@ export default function AdminOrdersTable() {
                         ))}
                     </datalist>
                   </div>
-                  <select
-                    value={it.variant_id === "" || it.variant_id == null ? "" : String(it.variant_id)}
-                    onChange={(e) =>
-                      setCreateItems((prev) =>
-                        prev.map((row, i) =>
-                          i === idx ? { ...row, variant_id: e.target.value ? Number(e.target.value) : "" } : row
+                  <div>
+                    <select
+                      value={it.variant_id === "" || it.variant_id == null ? "" : String(it.variant_id)}
+                      onChange={(e) =>
+                        setCreateItems((prev) =>
+                          prev.map((row, i) =>
+                            i === idx ? { ...row, variant_id: e.target.value ? Number(e.target.value) : "" } : row
+                          )
                         )
-                      )
-                    }
-                    className="border rounded-lg px-3 py-2"
-                    disabled={!it.product_id}
-                  >
-                    <option value="">Төрөл сонгох</option>
-                    {it.product_id &&
-                      (variantOptions[Number(it.product_id)] || []).map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {getVariantLabel(v)}
-                        </option>
-                      ))}
-                  </select>
+                      }
+                      className="border rounded-lg px-3 py-2 w-full"
+                      disabled={!it.product_id}
+                    >
+                      <option value="">Төрөл сонгох</option>
+                      {it.product_id &&
+                        (variantOptions[Number(it.product_id)] || []).map((v) => {
+                          const pid = Number(it.product_id);
+                          const unit = getUnitPriceForVariant(pid, v.id);
+                          return (
+                            <option key={v.id} value={v.id}>
+                              {getVariantLabel(v)} — {Number(unit || 0).toLocaleString()}₮
+                            </option>
+                          );
+                        })}
+                    </select>
+                  </div>
                   <div className="flex items-center gap-2">
                     <input
                       type="number"
