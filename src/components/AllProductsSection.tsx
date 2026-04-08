@@ -44,11 +44,16 @@ export default function AllProductsSection({
   const [subcategoryId, setSubcategoryId] = useState<string>(initialSubcategoryId);
   const [sort, setSort] = useState<string>("newest");
   const [discountOnly, setDiscountOnly] = useState(false);
+  const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
     setCategoryId(initialCategoryId);
     setSubcategoryId(initialSubcategoryId);
   }, [initialCategoryId, initialSubcategoryId]);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const updateQuery = (nextCategory: string, nextSubcategory: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -83,8 +88,8 @@ export default function AllProductsSection({
     } else if (sort === "price_desc") {
       data.sort((a, b) => (b.discount_price ?? b.price) - (a.discount_price ?? a.price));
     }
-    // shuffle for "all products" view
-    if (categoryId === "all" && subcategoryId === "all" && sort === "newest") {
+    // shuffle only on client to avoid hydration mismatch
+    if (isClient && categoryId === "all" && subcategoryId === "all" && sort === "newest") {
       const shuffled = [...data];
       for (let i = shuffled.length - 1; i > 0; i -= 1) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -93,7 +98,7 @@ export default function AllProductsSection({
       return shuffled;
     }
     return data;
-  }, [products, categoryId, discountOnly, sort]);
+  }, [products, categoryId, subcategoryId, discountOnly, sort, isClient]);
 
   const activeCategory = categories.find((c) => String(c.category_id) === categoryId) || null;
 

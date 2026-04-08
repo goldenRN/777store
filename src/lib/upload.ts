@@ -31,7 +31,32 @@ export async function saveFile(file: File, folder = "uploads"): Promise<SavedFil
   try {
     await access(filePath);
   } catch {
-    await writeFile(filePath, buffer);
+    let wroteOptimized = false;
+    const isImage = [".jpg", ".jpeg", ".png", ".webp"].includes(extLower);
+    if (isImage) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const sharp = require("sharp") as any;
+        if (sharp) {
+          const pipeline = sharp(buffer).rotate().resize({ width: 1600, withoutEnlargement: true });
+          if (extLower === ".jpg" || extLower === ".jpeg") {
+            await writeFile(filePath, await pipeline.jpeg({ quality: 75 }).toBuffer());
+          } else if (extLower === ".png") {
+            await writeFile(filePath, await pipeline.png({ compressionLevel: 9 }).toBuffer());
+          } else if (extLower === ".webp") {
+            await writeFile(filePath, await pipeline.webp({ quality: 75 }).toBuffer());
+          } else {
+            await writeFile(filePath, buffer);
+          }
+          wroteOptimized = true;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    if (!wroteOptimized) {
+      await writeFile(filePath, buffer);
+    }
   }
 
   const isImage = [".jpg", ".jpeg", ".png", ".webp"].includes(extLower);

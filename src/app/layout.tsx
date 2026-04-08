@@ -22,8 +22,8 @@ export const metadata: Metadata = {
   description: "777 Family Store онлайн дэлгүүр",
   icons: {
     icon: [
-      { url: "/logo-777.png", sizes: "32x32", type: "image/png" },
-      { url: "/logo-777.png", sizes: "192x192", type: "image/png" },
+      // `sizes` must match the actual file size; use `any` so browsers don't ignore it.
+      { url: "/logo-777.png", sizes: "any", type: "image/png" },
     ],
     shortcut: "/logo-777.png",
     apple: "/logo-777.png",
