@@ -130,8 +130,6 @@ const ThumbnailGrid = memo(function ThumbnailGrid({
   activeImage: string | null;
   onSelect: (url: string) => void;
 }) {
-  const [thumbFallback, setThumbFallback] = useState<Record<string, boolean>>({});
-
   return (
     <div className="mt-4 grid grid-cols-4 gap-3">
       {items.map((item, index) => (
@@ -145,15 +143,17 @@ const ThumbnailGrid = memo(function ThumbnailGrid({
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={resolveImageUrl(thumbFallback[item.url] ? item.url : getThumbUrl(item.url))}
+            src={resolveImageUrl(getThumbUrl(item.url))}
             alt={`thumb-${index}`}
             className="h-full w-full object-cover"
             loading={index === 0 ? "eager" : "lazy"}
             decoding="async"
-            onError={() => {
-              if (!thumbFallback[item.url]) {
-                setThumbFallback((prev) => ({ ...prev, [item.url]: true }));
-              }
+            onError={(e) => {
+              // Avoid React state updates; just swap src in-place.
+              const img = e.currentTarget as HTMLImageElement;
+              const fallback = resolveImageUrl(item.url);
+              if (img.src !== fallback) img.src = fallback;
+              img.onerror = null;
             }}
           />
         </button>
@@ -164,21 +164,51 @@ const ThumbnailGrid = memo(function ThumbnailGrid({
 
 const ProductImageGallery = memo(function ProductImageGallery({
   productName,
-  activeImage,
-  mainImageError,
-  onMainImageError,
-  onSelectImage,
-  onOpenZoom,
   gallery,
+  selectedVariantId,
+  variantPrimaryImage,
 }: {
   productName: string;
-  activeImage: string | null;
-  mainImageError: boolean;
-  onMainImageError: () => void;
-  onSelectImage: (url: string) => void;
-  onOpenZoom: () => void;
   gallery: GalleryItem[];
+  selectedVariantId: number | null;
+  variantPrimaryImage: string | null;
 }) {
+  const [activeImage, setActiveImage] = useState<string | null>(() => variantPrimaryImage || gallery[0]?.url || null);
+  const [mainImageError, setMainImageError] = useState(false);
+  const [zoomOpen, setZoomOpen] = useState(false);
+  const prevVariantIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    // Initialize once if gallery arrives later.
+    if (!activeImage && gallery.length > 0) setActiveImage(gallery[0].url);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gallery.length]);
+
+  useEffect(() => {
+    setMainImageError(false);
+  }, [activeImage]);
+
+  useEffect(() => {
+    // When variant changes, switch to that variant's primary image.
+    const prev = prevVariantIdRef.current;
+    if (prev === selectedVariantId) return;
+    if (selectedVariantId == null) return;
+    if (variantPrimaryImage) setActiveImage(variantPrimaryImage);
+    prevVariantIdRef.current = selectedVariantId;
+  }, [selectedVariantId, variantPrimaryImage]);
+
+  const onSelectImage = useCallback((url: string) => {
+    setActiveImage(url);
+  }, []);
+
+  const onOpenZoom = useCallback(() => {
+    setZoomOpen(true);
+  }, []);
+
+  const onCloseZoom = useCallback(() => {
+    setZoomOpen(false);
+  }, []);
+
   return (
     <div className="rounded-2xl bg-white p-4 shadow">
       <div className="relative h-[420px] w-full overflow-hidden rounded-xl bg-[var(--sky-100)]">
@@ -193,7 +223,7 @@ const ProductImageGallery = memo(function ProductImageGallery({
               quality={70}
               className="object-cover"
             unoptimized={isExternalUrl(activeImage)}
-            onError={onMainImageError}
+            onError={() => setMainImageError(true)}
           />
         ) : activeImage ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -217,6 +247,32 @@ const ProductImageGallery = memo(function ProductImageGallery({
 
       {gallery.length > 1 && (
         <ThumbnailGrid items={gallery} activeImage={activeImage} onSelect={onSelectImage} />
+      )}
+
+      {zoomOpen && activeImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={onCloseZoom} />
+          <div className="relative z-10 w-full max-w-5xl">
+            <div className="mb-2 flex justify-end">
+              <button
+                type="button"
+                onClick={onCloseZoom}
+                className="rounded bg-white px-3 py-1 text-sm"
+              >
+                Хаах
+              </button>
+            </div>
+            <div className="relative h-[70vh] w-full overflow-hidden rounded-xl bg-black">
+              <Image
+                src={resolveImageUrl(activeImage)}
+                alt={productName}
+                fill
+                className="object-contain"
+                unoptimized
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -253,10 +309,17 @@ const VariantSelector = memo(function VariantSelector({
                 {vImage ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={resolveImageUrl(vImage)}
+                    src={resolveImageUrl(getThumbUrl(vImage))}
                     alt={label}
                     className="h-full w-full object-cover"
                     loading="lazy"
+                    decoding="async"
+                    onError={(e) => {
+                      const img = e.currentTarget as HTMLImageElement;
+                      const fallback = resolveImageUrl(vImage);
+                      if (img.src !== fallback) img.src = fallback;
+                      img.onerror = null;
+                    }}
                   />
                 ) : null}
               </div>
@@ -291,39 +354,16 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
   const initialVariantId = product.variants[0]?.id ?? null;
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(initialVariantId);
   const [qty, setQty] = useState(1);
-  const [activeImage, setActiveImage] = useState<string | null>(gallery[0]?.url ?? null);
-  const [mainImageError, setMainImageError] = useState(false);
-  const [zoomOpen, setZoomOpen] = useState(false);
-
-  const prevVariantIdRef = useRef<number | null>(null);
 
   const selectedVariant = useMemo(
     () => (selectedVariantId != null ? variantMap.get(selectedVariantId) ?? null : null),
     [selectedVariantId, variantMap]
   );
 
-  const sizeVariants = useMemo(() => product.variants, [product.variants]);
-
-  useEffect(() => {
-    if (!activeImage && gallery.length > 0) {
-      setActiveImage(gallery[0].url);
-    }
-  }, [activeImage, gallery]);
-
-  useEffect(() => {
-    setMainImageError(false);
-  }, [activeImage]);
-
-  useEffect(() => {
-    if (!selectedVariant) return;
-
-    const prevId = prevVariantIdRef.current;
-    if (prevId === selectedVariant.id) return;
-
-    const variantImages = (selectedVariant.images || []).map(normalizeImage).filter(Boolean);
-    setActiveImage(variantImages[0] || gallery[0]?.url || null);
-    prevVariantIdRef.current = selectedVariant.id;
-  }, [selectedVariant, gallery]);
+  const variantPrimaryImage = useMemo(() => {
+    const url = selectedVariant?.images?.[0] ?? null;
+    return url ? normalizeImage(url) : null;
+  }, [selectedVariant]);
 
   const finalPrice = useMemo(() => {
     return (
@@ -386,12 +426,9 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
     <div className="grid gap-8 lg:grid-cols-2">
       <ProductImageGallery
         productName={product.name}
-        activeImage={activeImage}
-        mainImageError={mainImageError}
-        onMainImageError={() => setMainImageError(true)}
-        onSelectImage={setActiveImage}
-        onOpenZoom={() => setZoomOpen(true)}
         gallery={gallery}
+        selectedVariantId={selectedVariantId}
+        variantPrimaryImage={variantPrimaryImage}
       />
 
       <div className="rounded-2xl bg-white p-6 shadow">
@@ -567,32 +604,6 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
           </div>
         </div>
       </div>
-
-      {zoomOpen && activeImage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setZoomOpen(false)} />
-          <div className="relative z-10 w-full max-w-5xl">
-            <div className="mb-2 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setZoomOpen(false)}
-                className="rounded bg-white px-3 py-1 text-sm"
-              >
-                Хаах
-              </button>
-            </div>
-            <div className="relative h-[70vh] w-full overflow-hidden rounded-xl bg-black">
-              <Image
-                src={resolveImageUrl(activeImage)}
-                alt={product.name}
-                fill
-                className="object-contain"
-                unoptimized
-              />
-            </div>
-          </div>
-        </div>
-      )}
 
     </div>
   );

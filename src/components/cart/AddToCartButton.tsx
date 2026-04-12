@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { startTransition, type ReactNode } from "react";
 import { useCart } from "@/components/cart/CartProvider";
 import { toast } from "@/components/ui/use-toast";
 
@@ -44,8 +44,11 @@ export default function AddToCartButton({
           toast({ title: "Захиалах тоо дууссан байна" });
           return;
         }
-        addItem({ id, name, price, image_url, type_name, variant_id, variant_sku, variant_label }, qty);
-        onAdded?.();
+        // Mark cart updates as non-urgent to keep INP low on slower devices.
+        startTransition(() => {
+          addItem({ id, name, price, image_url, type_name, variant_id, variant_sku, variant_label }, qty);
+          onAdded?.();
+        });
       }}
       aria-disabled={disabled}
       className={
