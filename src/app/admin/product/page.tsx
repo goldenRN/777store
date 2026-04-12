@@ -3,13 +3,13 @@ import React, { useEffect, useState, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { RefreshCcw, Edit, Trash2, Plus } from "lucide-react";
+import { Edit, Trash2, Plus } from "lucide-react";
 import AddProductModal from "./AddProductModal";
 import axios from "axios";
 import { getActorHeaders } from "@/lib/actorHeaders";
 import ImageViewerModal from "./ImageViewerModal";
 import ProductVariantModal from "./ProductVariantModal"; 
+import AdminTableSearchBar from "@/components/admin/AdminTableSearchBar";
 
 interface Product {
   id: number;
@@ -43,7 +43,8 @@ const ProductPage = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [open, setOpen] = useState(false);
   const [editData, setEditData] = useState<Product | null>(null);
-  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [searchApplied, setSearchApplied] = useState("");
   const [sortField, setSortField] = useState<keyof Product>("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [loading, setLoading] = useState(false);
@@ -76,6 +77,18 @@ const ProductPage = () => {
     if (typeFilter === "live") return "Лайвын бараа";
     return "Бараа бүртгэл";
   })();
+
+  const formatOrderWindow = (createdAt: string, durationHours?: number | null) => {
+    const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ulaanbaatar" });
+    const start = new Date(createdAt);
+    const startText = fmt.format(start);
+    const hours = Number(durationHours || 0);
+    if (hours > 0) {
+      const end = new Date(start.getTime() + hours * 60 * 60 * 1000);
+      return `${startText} → ${fmt.format(end)}`;
+    }
+    return startText;
+  };
 
   const openVariantModal = (productId: number, productName: string) => {
     setVariantProductId(productId);
@@ -133,9 +146,9 @@ const ProductPage = () => {
     }
     // featured filter removed (no status field)
 
-    if (search) {
+    if (searchApplied) {
       data = data.filter((p) =>
-        p.name.toLowerCase().includes(search.toLowerCase())
+        p.name.toLowerCase().includes(searchApplied.toLowerCase())
       );
     }
 
@@ -168,24 +181,30 @@ const ProductPage = () => {
     });
 
     return data;
-  }, [products, search, sortField, sortOrder, searchParams]);
+  }, [products, searchApplied, sortField, sortOrder, searchParams]);
 
   const pages = Math.max(Math.ceil(filteredProducts.length / limit), 1);
   const pagedProducts = filteredProducts.slice((page - 1) * limit, page * limit);
 
   useEffect(() => {
     setPage(1);
-  }, [search, sortField, sortOrder, searchParams]);
+  }, [searchApplied, sortField, sortOrder, searchParams]);
 
-  const handleViewImages = async (productId: number) => {
-    try {
-      const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/productimg/${productId}`);
-      setImages(res.data.map((img: any) => img.image_url));
-      setImageModalOpen(true);
-    } catch (err) {
-      console.error("Зураг татахад алдаа:", err);
-      alert("Зураг татаж чадсангүй!");
-    }
+	  const handleViewImages = async (productId: number) => {
+	    try {
+	      const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/productimg/${productId}`);
+	      const list: unknown = res.data;
+	      const urls = Array.isArray(list)
+	        ? list
+	            .map((img) => (img && typeof img === "object" ? (img as { image_url?: unknown }).image_url : null))
+	            .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+	        : [];
+	      setImages(urls);
+	      setImageModalOpen(true);
+	    } catch (err) {
+	      console.error("Зураг татахад алдаа:", err);
+	      alert("Зураг татаж чадсангүй!");
+	    }
   };
 
   const handleSort = (field: keyof Product) => {
@@ -313,16 +332,16 @@ const ProductPage = () => {
             )}
           </div>
           <div className="flex gap-2 w-full md:w-auto">
-            <Input
+            <AdminTableSearchBar
+              value={searchInput}
+              onValueChange={setSearchInput}
+              onSearch={() => setSearchApplied(searchInput)}
+              onRefresh={fetchProducts}
               placeholder="Хайлт хийх..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="max-w-sm"
+              debounceMs={3000}
+              showSearchButton={false}
+              loading={loading}
             />
-
-            <Button onClick={fetchProducts} variant="outline" disabled={loading} className="bg-blue-900">
-              <RefreshCcw size={16} className={loading ? "animate-spin text-white" : "text-white"} />
-            </Button>
 
             {!typeFilter && !discountFilter && !closedFilter && (
               <Button
@@ -367,8 +386,8 @@ const ProductPage = () => {
                         { key: "remaining", label: "Үлдэгдэл", sortable: false },
                       ]
                     : [{ key: "stock", label: "Үлдэгдэл" }]),
-                  { key: "created_at", label: "Огноо" },
-                ].map((col) => (
+	                  { key: "created_at", label: "Захиалгын огноо" },
+	                ].map((col) => (
                   <th
                     key={col.key}
                     onClick={() =>
@@ -468,25 +487,46 @@ const ProductPage = () => {
                     ) : (
                       <td className="py-2 px-4 text-xs">{p.stock}</td>
                     )}
-                    <td className="py-2 px-4 text-xs">
-                      {new Date(p.created_at).toLocaleDateString()}
-                    </td>
+	                    <td className="py-2 px-4 text-xs whitespace-nowrap">
+	                      {formatOrderWindow(p.created_at, p.duration_hours)}
+	                    </td>
 
-                    <td className="py-2 px-4 text-center">
-                      <div className="flex justify-center gap-2">
-                        {/* ✔ VARIANT НЭМЭХ */}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => openVariantModal(p.id, p.name)}
-                        >
-                          <Plus size={16} />
-                        </Button>
-                        {isPreorderLive && (
-                          <Button size="sm" variant="outline" onClick={() => openStatusModal(p)}>
-                            Төлөв
-                          </Button>
-                        )}
+	                    <td className="py-2 px-4 text-center">
+	                      <div className="flex justify-center gap-2">
+	                        {/* ✔ VARIANT НЭМЭХ */}
+	                        {(() => {
+	                          // "Хаагдсан бараа" таб дээр төрөл нэмэхийг бүр мөсөн хориглоно.
+	                          if (closedFilter) return null;
+	                          if (isPreorderLive) {
+	                            const total = Number(p.stock || 0);
+	                            const ordered = Number(p.ordered_qty || 0);
+	                            const remaining = Math.max(0, total - ordered);
+	                            const hasDuration = Boolean(p.created_at && p.duration_hours);
+	                            const expiresAt = hasDuration
+	                              ? new Date(
+	                                  new Date(p.created_at).getTime() +
+	                                    Number(p.duration_hours || 0) * 60 * 60 * 1000
+	                                )
+	                              : null;
+	                            const expired = Boolean(expiresAt && expiresAt.getTime() <= Date.now());
+	                            const isClosed = expired || remaining <= 0 || p.order_accept_status === "CLOSED";
+	                            if (isClosed) return null;
+	                          }
+	                          return (
+	                            <Button
+	                              size="sm"
+	                              variant="outline"
+	                              onClick={() => openVariantModal(p.id, p.name)}
+	                            >
+	                              <Plus size={16} />
+	                            </Button>
+	                          );
+	                        })()}
+	                        {isPreorderLive && (
+	                          <Button size="sm" variant="outline" onClick={() => openStatusModal(p)}>
+	                            Төлөв
+	                          </Button>
+	                        )}
 
                         <Button
                           size="sm"
@@ -654,22 +694,24 @@ const ProductPage = () => {
           <div className="relative z-10 w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
             <div className="text-sm font-semibold">Төлөв солих</div>
             <div className="mt-3 space-y-2 text-xs">
-              {[
-                { key: "OPEN", label: "Захиалга авч байгаа" },
-                { key: "CLOSED", label: "Захиалга хаагдсан" },
-                { key: "WAITING", label: "Хүлээгдэж буй" },
-                { key: "ARRIVED", label: "Бараа ирсэн" },
-              ].map((opt) => (
-                <label key={opt.key} className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    name="statusChoice"
-                    checked={statusChoice === opt.key}
-                    onChange={() => setStatusChoice(opt.key as any)}
-                  />
-                  {opt.label}
-                </label>
-              ))}
+	              {(
+	                [
+	                  { key: "OPEN", label: "Захиалга авч байгаа" },
+	                  { key: "CLOSED", label: "Захиалга хаагдсан" },
+	                  { key: "WAITING", label: "Хүлээгдэж буй" },
+	                  { key: "ARRIVED", label: "Бараа ирсэн" },
+	                ] as const
+	              ).map((opt) => (
+	                <label key={opt.key} className="flex items-center gap-2">
+	                  <input
+	                    type="radio"
+	                    name="statusChoice"
+	                    checked={statusChoice === opt.key}
+	                    onChange={() => setStatusChoice(opt.key)}
+	                  />
+	                  {opt.label}
+	                </label>
+	              ))}
               {statusChoice === "ARRIVED" && (
                 <input
                   type="number"

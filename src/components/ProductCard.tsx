@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ShoppingBagIcon, X } from "lucide-react";
 import { useCart } from "@/components/cart/CartProvider";
 import { getVariantLabel } from "@/lib/variantLabel";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "@/components/ui/use-toast";
 
 type ProductCardProps = {
@@ -74,9 +74,6 @@ export default function ProductCard({
     const endMs = new Date(created_at).getTime() + duration_hours * 60 * 60 * 1000;
     return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ulaanbaatar" }).format(new Date(endMs));
   })();
-  const t = String(type_name || "").toLowerCase();
-  const isPreorderLive =
-    t.includes("захиал") || t.includes("preorder") || t.includes("урьдчил") || t.includes("лайв") || t.includes("live");
   const stockNumber = Number(stock || 0);
   const remaining = Math.max(0, stockNumber - Number(ordered_qty || 0));
   const canAddToCart = stockNumber > 0 ? remaining > 0 : true;
@@ -231,25 +228,8 @@ export default function ProductCard({
             <div className="mt-3 text-center text-xs text-[var(--gray-500)]">
               Дуусах огноо: {endDate || "тохируулгагүй"}
             </div>
-            <div className="mt-3">
-              <div className="h-1 w-full rounded-full bg-[#e5e7eb]">
-                <div className="h-1 w-[20%] rounded-full bg-red-500" />
-              </div>
-            </div>
           </>
         ) : null}
-        {isPreorderLive && (!duration_hours || duration_hours === 0) && Number(stock || 0) > 0 && (
-          remaining > 0 ? (
-            <div className="mt-3 text-center text-xs text-[var(--gray-500)]">
-              Захиалга авах тоо:{" "}
-              <span className="font-semibold text-[var(--navy-900)]">{remaining}</span>
-            </div>
-          ) : (
-            <div className="mt-3 text-center text-xs font-semibold text-red-600">
-              Захиалга хаагдсан
-            </div>
-          )
-        )}
       </div>
 
       {variantOpen && (

@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { getActorHeaders } from "@/lib/actorHeaders";
 import { ChevronDown, ChevronUp, Eye } from "lucide-react";
 import OrderDetailsModal from "../order/OrderDetailsModal";
+import AdminTableSearchBar from "@/components/admin/AdminTableSearchBar";
 
 type ProductSummary = {
   product_id: number | null;
@@ -31,15 +32,16 @@ type ProductSummary = {
 };
 
 export default function FulfillmentPage() {
-  const [phone, setPhone] = useState("");
+  const [phoneInput, setPhoneInput] = useState("");
+  const [phoneApplied, setPhoneApplied] = useState("");
   const [items, setItems] = useState<ProductSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [canViewVariants, setCanViewVariants] = useState(false);
 
-  const fetchOrders = async () => {
-    const q = phone.trim();
+  const fetchOrders = async (query = phoneApplied) => {
+    const q = String(query || "").trim();
     if (!q) return;
     setLoading(true);
     try {
@@ -68,27 +70,27 @@ export default function FulfillmentPage() {
         })
       )
     );
-    fetchOrders();
+    fetchOrders(phoneApplied);
   };
 
   return (
     <div className="w-full p-4 md:p-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
         <h1 className="text-2xl font-semibold">Бараа олгох</h1>
-        <div className="flex items-center gap-2 w-full md:w-auto">
-          <input
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="Утасны дугаар"
-            className="border rounded px-3 py-2 text-sm w-full md:w-64"
-          />
-          <button
-            onClick={fetchOrders}
-            className="bg-black text-white px-4 py-2 rounded text-sm"
-          >
-            Хайх
-          </button>
-        </div>
+        <AdminTableSearchBar
+          value={phoneInput}
+          onValueChange={setPhoneInput}
+          placeholder="Утасны дугаар"
+          debounceMs={3000}
+          loading={loading}
+          onSearch={() => {
+            setPhoneApplied(phoneInput);
+            fetchOrders(phoneInput);
+          }}
+          onRefresh={() => fetchOrders(phoneApplied)}
+          showSearchButton
+          searchButtonLabel="Хайх"
+        />
       </div>
 
       <div className="overflow-x-auto bg-white rounded shadow">

@@ -8,6 +8,8 @@ import Footer from "@/components/Footer";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -35,7 +37,7 @@ export default function RegisterPage() {
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone, password }),
+      body: JSON.stringify({ name, email, phone, password }),
     });
 
     if (!res.ok) {
@@ -59,6 +61,26 @@ export default function RegisterPage() {
           </p>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <div>
+              <label className="text-xs font-semibold text-[var(--gray-700)]">Нэр</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                className="mt-2 w-full rounded-xl border border-[var(--gray-200)] px-4 py-3 text-sm outline-none focus:border-black"
+                placeholder="Нэр"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[var(--gray-700)]">Имэйл</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                className="mt-2 w-full rounded-xl border border-[var(--gray-200)] px-4 py-3 text-sm outline-none focus:border-black"
+                placeholder="name@example.com"
+              />
+            </div>
             <div>
               <label className="text-xs font-semibold text-[var(--gray-700)]">Утасны дугаар</label>
               <input

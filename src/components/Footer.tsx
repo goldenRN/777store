@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 
 export default function Footer() {
   const [storeInfo, setStoreInfo] = useState<{
@@ -24,7 +25,13 @@ export default function Footer() {
       <div className="container mx-auto grid gap-10 px-6 py-12 lg:grid-cols-4 sm:grid-cols-2">
         <div>
           <div className="flex items-center gap-3">
-            <img src="/logo-777.svg" alt="777 Family Store" className="h-18 w-18" />
+            <Image
+              src="/logo.png"
+              alt="777 Family Store"
+              width={48}
+              height={48}
+              className="h-12 w-12"
+            />
             <div className="flex-row items-center gap-3">
               <div className="text-md font-extrabold">777 Family Store</div>
               <div className="text-xs font-regular">Онлайн дэлгүүр</div>

@@ -38,13 +38,22 @@ export async function saveFile(file: File, folder = "uploads"): Promise<SavedFil
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const sharp = require("sharp") as any;
         if (sharp) {
-          const pipeline = sharp(buffer).rotate().resize({ width: 1600, withoutEnlargement: true });
+          // Force sRGB to avoid color shifts on some devices (e.g. CMYK/P3 uploads).
+          let pipeline = sharp(buffer, { failOnError: false }).rotate();
+          if (typeof pipeline.toColourspace === "function") {
+            pipeline = pipeline.toColourspace("srgb");
+          }
+          // Do NOT embed ICC metadata: some iOS decoders behave poorly with profiles.
+          const resized = pipeline.resize({ width: 1600, withoutEnlargement: true });
           if (extLower === ".jpg" || extLower === ".jpeg") {
-            await writeFile(filePath, await pipeline.jpeg({ quality: 75 }).toBuffer());
+            await writeFile(
+              filePath,
+              await resized.jpeg({ quality: 78, progressive: false, mozjpeg: false }).toBuffer()
+            );
           } else if (extLower === ".png") {
-            await writeFile(filePath, await pipeline.png({ compressionLevel: 9 }).toBuffer());
+            await writeFile(filePath, await resized.png({ compressionLevel: 9 }).toBuffer());
           } else if (extLower === ".webp") {
-            await writeFile(filePath, await pipeline.webp({ quality: 75 }).toBuffer());
+            await writeFile(filePath, await resized.webp({ quality: 78 }).toBuffer());
           } else {
             await writeFile(filePath, buffer);
           }
@@ -70,10 +79,13 @@ export async function saveFile(file: File, folder = "uploads"): Promise<SavedFil
         try {
           await access(thumbPath);
         } catch {
-          const outputBuffer = await sharp(buffer)
-            .rotate()
+          let pipeline = sharp(buffer, { failOnError: false }).rotate();
+          if (typeof pipeline.toColourspace === "function") {
+            pipeline = pipeline.toColourspace("srgb");
+          }
+          const outputBuffer = await pipeline
             .resize({ width: 600, withoutEnlargement: true })
-            .jpeg({ quality: 70 })
+            .jpeg({ quality: 72, progressive: false, mozjpeg: false })
             .toBuffer();
           await writeFile(thumbPath, outputBuffer);
         }
@@ -109,10 +121,13 @@ export async function saveBannerFile(file: File, folder = "uploads"): Promise<Sa
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const sharp = require("sharp") as any;
     if (sharp) {
-      const outputBuffer = await sharp(buffer)
-        .rotate()
+      let pipeline = sharp(buffer, { failOnError: false }).rotate();
+      if (typeof pipeline.toColourspace === "function") {
+        pipeline = pipeline.toColourspace("srgb");
+      }
+      const outputBuffer = await pipeline
         .resize({ width: 2000, withoutEnlargement: true })
-        .jpeg({ quality: 80 })
+        .jpeg({ quality: 82, progressive: false, mozjpeg: false })
         .toBuffer();
       const safeName = `${baseName}.jpg`;
       const filePath = path.join(uploadDir, safeName);

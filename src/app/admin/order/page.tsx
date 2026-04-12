@@ -4,7 +4,8 @@ import { useSearchParams } from "next/navigation";
 import OrderDetailsModal from "./OrderDetailsModal";
 import { getActorHeaders } from "@/lib/actorHeaders";
 import { Modal } from "@/components/ui/modal";
-import { Eye, Tag, Trash2, Plus, MoreVertical, CheckCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { Tag, Trash2, Plus, MoreVertical, CheckCircle, ChevronDown, ChevronUp } from "lucide-react";
+import AdminTableSearchBar from "@/components/admin/AdminTableSearchBar";
 
 type Order = {
   id: number;
@@ -96,12 +97,6 @@ export default function AdminOrdersTable() {
   const statusFilter = searchParams.get("status") ?? "";
   const isPending = statusFilter.toLowerCase() === "pending";
   const isProductOnly = Boolean(statusFilter);
-  const orderStatusLabels: Record<string, string> = {
-    "Бараа олгосон": "Бараа олгосон",
-    "Хүргэлтэнд бүртгэгдсэн": "Хүргэлтэнд бүртгэгдсэн",
-    "Буцаагдсан": "Буцаагдсан",
-    "Цуцлагдсан": "Цуцлагдсан",
-  };
   const titleLabel = (() => {
     if (!statusFilter) return "Захиалгын жагсаалт";
     const hit = statusOptions.find((s) => s.name === statusFilter);
@@ -131,12 +126,6 @@ export default function AdminOrdersTable() {
       setViewMode("product");
     }
   }, [isPending]);
-
-  // Pending бараа дээр хайлтыг API руу дахин дахин цохихгүйгээр (debounce) шүүнэ.
-  useEffect(() => {
-    const t = setTimeout(() => setQDebounced(qInput), 3000);
-    return () => clearTimeout(t);
-  }, [qInput]);
 
   const fetchOrders = async (p = page, query = qDebounced) => {
     setLoading(true);
@@ -276,7 +265,13 @@ export default function AdminOrdersTable() {
     }, 0);
   }, [createItems, getUnitPriceForVariant]);
 
-  const onSearch = () => fetchOrders(1, qInput);
+  const onSearch = () => {
+    setQDebounced(qInput);
+    if (viewMode === "product") {
+      return;
+    }
+    fetchOrders(1, qInput);
+  };
 
   const visibleProductItems = useMemo(() => {
     const q = qDebounced.trim().toLowerCase();
@@ -349,18 +344,23 @@ export default function AdminOrdersTable() {
               </button>
             </div>
           )}
-          <input
+          <AdminTableSearchBar
             value={qInput}
-            onChange={(e) => setQInput(e.target.value)}
+            onValueChange={setQInput}
             placeholder={viewMode === "product" ? "Бараа хайх..." : "Нэр / Имэйл / ID хайх..."}
-            className="border rounded px-3 py-1 text-sm w-full sm:w-64"
+            debounceMs={3000}
+            loading={viewMode === "order" ? loading : productLoading}
+            onSearch={onSearch}
+            onRefresh={() => {
+              if (viewMode === "order") {
+                fetchOrders(page, qDebounced);
+              } else {
+                fetchProductSummary();
+              }
+            }}
+            showSearchButton
+            searchButtonLabel="Хайх"
           />
-          {viewMode === "product" && qInput.trim() && qInput !== qDebounced && (
-            <div className="text-xs text-gray-500">3 сек дараа хайна…</div>
-          )}
-          {viewMode === "order" && !isProductOnly && (
-            <button onClick={onSearch} className="bg-blue-600 text-white px-3 py-1 rounded">Хайх</button>
-          )}
           {/* <button onClick={exportCSV} className="bg-gray-700 text-white px-3 py-1 rounded">Export CSV</button> */}
           <button
             onClick={() => {
@@ -417,12 +417,13 @@ export default function AdminOrdersTable() {
                   <React.Fragment key={`${p.product_id ?? "x"}-${p.product_name}`}>
                   <tr className="border-t">
                     <td className="p-3">
-                      <div className="h-12 w-12 rounded overflow-hidden border bg-gray-100">
-                        <img
-                          src={p.image_url || "/logo.png"}
-                          alt={p.product_name}
-                          className="h-full w-full object-cover"
-                          onError={(e) => {
+	                      <div className="h-12 w-12 rounded overflow-hidden border bg-gray-100">
+	                        {/* eslint-disable-next-line @next/next/no-img-element */}
+	                        <img
+	                          src={p.image_url || "/logo.png"}
+	                          alt={p.product_name}
+	                          className="h-full w-full object-cover"
+	                          onError={(e) => {
                             (e.currentTarget as HTMLImageElement).src = "/logo.png";
                           }}
                         />
@@ -582,13 +583,14 @@ export default function AdminOrdersTable() {
                       >
                         {o.payment_status || "UNPAID"}
                       </span>
-                      {o.qpay_qr_image && (
-                        <img
-                          src={`data:image/png;base64,${o.qpay_qr_image}`}
-                          alt="QPay QR"
-                          className="h-10 w-10 rounded border"
-                        />
-                      )}
+	                      {o.qpay_qr_image && (
+	                        // eslint-disable-next-line @next/next/no-img-element
+	                        <img
+	                          src={`data:image/png;base64,${o.qpay_qr_image}`}
+	                          alt="QPay QR"
+	                          className="h-10 w-10 rounded border"
+	                        />
+	                      )}
                     </div>
                   </td>
                   <td className="p-3">{new Date(o.created_at).toLocaleString()}</td>
@@ -978,11 +980,17 @@ export default function AdminOrdersTable() {
                   setCreateUserId(null);
                   setPaymentMethodId("");
                   fetchOrders(1);
-                } catch (err: any) {
-                  alert(err?.message || "Алдаа гарлаа");
-                } finally {
-                  setCreateLoading(false);
-                }
+	                } catch (err: unknown) {
+	                  const message =
+	                    err instanceof Error
+	                      ? err.message
+	                      : typeof err === "string"
+	                      ? err
+	                      : "Алдаа гарлаа";
+	                  alert(message);
+	                } finally {
+	                  setCreateLoading(false);
+	                }
               }}
               className="px-4 py-2 rounded bg-black text-white disabled:opacity-50"
               disabled={createLoading}

@@ -78,6 +78,8 @@ export async function GET(request: NextRequest) {
         stock: p.stock ?? null,
         ordered_qty: p.ordered_qty ?? null,
         order_accept_status: p.order_accept_status ?? null,
+        created_at: p.created_at ?? null,
+        duration_hours: p.duration_hours ?? null,
         variants: p.variants ?? [],
       },
     ])
@@ -242,6 +244,15 @@ export async function GET(request: NextRequest) {
     if (!productId) {
       return { ...g, order_count: g.buyers.length, variants: [] };
     }
+    const productMeta = productMap.get(productId) ?? null;
+    const hasDuration = Number(productMeta?.duration_hours || 0) > 0;
+    const durationHours = Number(productMeta?.duration_hours || 0);
+    const endMs =
+      productMeta?.created_at && hasDuration
+        ? new Date(productMeta.created_at).getTime() + durationHours * 60 * 60 * 1000
+        : null;
+    const expired = endMs ? endMs <= Date.now() : false;
+    const productClosed = productMeta?.order_accept_status === "CLOSED" || expired;
     const variants = productMap.get(productId)?.variants ?? [];
     const list = variants.map((v: any) => {
       const confirmed = confirmedMap.get(`${productId}|${v.id}`) ?? 0;
@@ -255,7 +266,7 @@ export async function GET(request: NextRequest) {
         stock,
         ordered_qty: ordered,
         remaining_qty: remaining,
-        closed: stock != null && remaining != null ? remaining <= 0 : false,
+        closed: productClosed || (stock != null && remaining != null ? remaining <= 0 : false),
       };
     }).filter((v) => v.ordered_qty > 0);
     return { ...g, order_count: g.buyers.length, variants: list };

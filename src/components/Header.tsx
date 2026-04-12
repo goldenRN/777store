@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -19,19 +20,21 @@ import {
 } from "lucide-react";
 import { useCart } from "@/components/cart/CartProvider";
 
+type StoredUser = {
+  token: string;
+  role: string;
+  name?: string;
+  phone?: string;
+  avatarUrl?: string;
+};
+
 export default function Header() {
   const [categoryOpen, setCategoryOpen] = useState(false);
   const { count } = useCart();
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [user, setUser] = useState<{
-    token: string;
-    role: string;
-    name?: string;
-    phone?: string;
-    avatarUrl?: string;
-  } | null>(null);
+  const [user, setUser] = useState<StoredUser | null>(null);
   const [storeInfo, setStoreInfo] = useState<{
     working_hours?: string;
     phone?: string;
@@ -60,26 +63,20 @@ export default function Header() {
 
   useEffect(() => {
     const raw = localStorage.getItem("user");
+    let next: StoredUser | null = null;
     if (raw) {
       try {
-        setUser(JSON.parse(raw));
+        next = JSON.parse(raw) as StoredUser;
       } catch {
-        setUser(null);
+        next = null;
       }
-    } else {
-      setUser(null);
     }
+    // Defer state update to avoid cascading-renders lint rule.
+    Promise.resolve().then(() => setUser(next));
   }, []);
 
-  useEffect(() => {
-    if (!categoryOpen) return;
-    if (categories.length > 0 && activeCategoryId == null) {
-      setActiveCategoryId(categories[0].category_id);
-    }
-  }, [categoryOpen, categories, activeCategoryId]);
-
   const activeCategory = useMemo(
-    () => categories.find((c) => c.category_id === activeCategoryId) || categories[0],
+    () => categories.find((c) => c.category_id === activeCategoryId) || categories[0] || null,
     [categories, activeCategoryId]
   );
 
@@ -146,7 +143,14 @@ export default function Header() {
       <header className="sticky top-0 border-b-[3px] border-[var(--accent-2)] z-20 bg-white text-black shadow-md">
         <div className="container mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-4 px-4 sm:px-6 py-4">
           <Link href="/" className="flex items-center gap-3">
-            <img src="/logo.png" alt="777 Family Store" className="h-12 w-12" />
+            <Image
+              src="/logo.png"
+              alt="777 Family Store"
+              width={48}
+              height={48}
+              className="h-12 w-12"
+              priority
+            />
             <div>
               <div className="text-lg font-extrabold tracking-wide ">777 Family Store</div>
               <div className="text-xs opacity-70">Онлайн дэлгүүр</div>
@@ -236,6 +240,8 @@ export default function Header() {
                     {(user.role === "ADMIN" || user.role === "SUPER_ADMIN") && (
                       <Link
                         href="/admin/dashboard"
+                        target="_blank"
+                        rel="noreferrer"
                         className="block rounded-xl px-3 py-2 text-center font-bold text-red-600 hover:bg-[var(--sky-100)]"
                         onClick={() => setUserMenuOpen(false)}
                       >
@@ -278,7 +284,15 @@ export default function Header() {
       <nav className="bg-white relative">
         <div className="container mx-auto flex gap-4 overflow-x-auto whitespace-nowrap px-4 sm:px-6 py-3 text-sm font-semibold text-[var(--gray-700)] md:flex-wrap">
           <button
-            onClick={() => setCategoryOpen((v) => !v)}
+            onClick={() =>
+              setCategoryOpen((v) => {
+                const next = !v;
+                if (next && categories.length > 0 && activeCategoryId == null) {
+                  setActiveCategoryId(categories[0].category_id);
+                }
+                return next;
+              })
+            }
             className="inline-flex items-center gap-2 rounded-full px-4 text-sm font-semibold text-black hover:bg-[var(--sky-100)]"
           >
             <MenuIcon size={16} />

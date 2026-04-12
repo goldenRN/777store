@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createInvoice } from "@/lib/qpay";
 
@@ -151,11 +152,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "Сагс хоосон байна" }, { status: 400 });
   }
 
-  const total = items.reduce((sum: number, it: any) => {
-    const qty = Math.max(1, Number(it.qty ?? 1));
-    const price = Math.max(0, Number(it.price ?? 0));
-    return sum + qty * price;
-  }, 0);
+  const now = new Date();
+  const reserveMinutesRaw = Number(process.env.QPAY_INVOICE_EXPIRE_MINUTES ?? 60);
+  const reserveMinutes = Number.isFinite(reserveMinutesRaw) ? Math.max(1, reserveMinutesRaw) : 60;
+  const reserveWindowStart = new Date(now.getTime() - reserveMinutes * 60 * 1000);
 
   const normalizeType = (name?: string | null) => {
     const t = (name || "").toLowerCase();
@@ -180,33 +180,250 @@ export async function POST(request: NextRequest) {
   const firstStatus = await prisma.adminStatus.findFirst({ orderBy: { id: "asc" } });
   const defaultStatus = firstStatus?.name || "pending";
 
-  const created = await prisma.adminOrder.create({
-    data: {
-      user_id: userId,
-      name,
-      phone1: phone,
-      status: defaultStatus,
-      payment_status: "UNPAID",
-      order_kind: orderKind,
-      delivery_method: deliveryMethod,
-      delivery_name: deliveryName,
-      delivery_phone: deliveryPhone,
-      delivery_address: deliveryAddress,
-      total,
-      items: {
-        create: items.map((it: any) => ({
-          product_id: it.product_id ? Number(it.product_id) : null,
-          variant_id: it.variant_id ? Number(it.variant_id) : null,
-          product_name: String(it.name ?? "Бараа"),
-          quantity: Math.max(1, Number(it.qty ?? 1)),
-          price: Math.max(0, Number(it.price ?? 0)),
-          image_url: it.image_url ? String(it.image_url) : null,
-          status: defaultStatus,
-        })),
-      },
-    },
-    include: { items: true },
-  });
+  class CheckoutError extends Error {
+    status: number;
+    constructor(message: string, status: number) {
+      super(message);
+      this.status = status;
+    }
+  }
+
+  // Validate and create in a transaction (locks prevent oversell on concurrent checkouts).
+  const created = await (async () => {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        type CartLine = {
+          productId: number;
+          variantId: number | null;
+          qty: number;
+          clientName: string;
+          clientImageUrl: string | null;
+        };
+
+        const cartLines: CartLine[] = items.map((it: any) => {
+          const productIdRaw = it.product_id;
+          const productId =
+            productIdRaw != null && String(productIdRaw).trim() !== "" ? Number(productIdRaw) : NaN;
+          if (!Number.isFinite(productId)) {
+            throw new CheckoutError("Бараа олдсонгүй (product_id алга)", 400);
+          }
+          return {
+            productId,
+            variantId: it.variant_id != null && String(it.variant_id).trim() !== "" ? Number(it.variant_id) : null,
+            qty: Math.max(1, Number(it.qty ?? 1)),
+            clientName: String(it.name ?? "Бараа"),
+            clientImageUrl: it.image_url ? String(it.image_url) : null,
+          };
+        });
+
+        const productIds = Array.from(new Set(cartLines.map((l) => l.productId)));
+        const variantIds = Array.from(
+          new Set(cartLines.map((l) => l.variantId).filter((v): v is number => typeof v === "number"))
+        );
+
+        // Serialize by involved product/variant ids.
+        const lockKeys = Array.from(
+          new Set([
+            ...productIds.map((id) => 1_000_000_000 + id),
+            ...variantIds.map((id) => 2_000_000_000 + id),
+          ])
+        );
+        for (const k of lockKeys) {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(${k});`;
+        }
+
+        const products = await tx.adminProduct.findMany({
+          where: { id: { in: productIds } },
+          include: { images: true, variants: { include: { images: true } } },
+        });
+        const productById = new Map(products.map((p) => [p.id, p]));
+        const variantById = new Map<number, { productId: number; variant: any }>();
+        for (const p of products) {
+          for (const v of p.variants || []) {
+            variantById.set(v.id, { productId: p.id, variant: v });
+          }
+        }
+
+        const getVariantLabel = (variant: {
+          sku: string | null;
+          attribute: Record<string, unknown> | null;
+          id: number;
+        }) => {
+          const attr = (variant.attribute || {}) as Record<string, unknown>;
+          const type = typeof attr.type === "string" ? attr.type : "";
+          const color = typeof attr.color === "string" ? attr.color : "";
+          const size = typeof attr.size === "string" ? attr.size : "";
+          const merged = [type, color, size].filter(Boolean).join(" / ");
+          return merged || variant.sku || `Төрөл-${variant.id}`;
+        };
+
+        // Group quantities by (product_id, variant_id) so we validate totals correctly.
+        const grouped = new Map<
+          string,
+          { productId: number; variantId: number | null; qty: number }
+        >();
+        for (const line of cartLines) {
+          const key = `${line.productId}|${line.variantId ?? "x"}`;
+          const existing = grouped.get(key);
+          if (existing) existing.qty += line.qty;
+          else grouped.set(key, { productId: line.productId, variantId: line.variantId, qty: line.qty });
+        }
+
+        const orderActiveOrPaid: Prisma.AdminOrderWhereInput = {
+          OR: [
+            { payment_status: "PAID" },
+            {
+              payment_status: "UNPAID",
+              OR: [
+                { payment_expires_at: { gt: now } },
+                { payment_expires_at: null, created_at: { gt: reserveWindowStart } },
+              ],
+            },
+          ],
+          NOT: [{ status: "Цуцлагдсан" }],
+        };
+
+        const variantReservedRows =
+          variantIds.length > 0
+            ? await tx.adminOrderItem.groupBy({
+                by: ["variant_id"],
+                where: {
+                  variant_id: { in: variantIds },
+                  order: { is: orderActiveOrPaid },
+                },
+                _sum: { quantity: true },
+              })
+            : [];
+        const variantReserved = new Map<number, number>();
+        for (const r of variantReservedRows) {
+          const vid = r.variant_id;
+          if (vid == null) continue;
+          variantReserved.set(vid, Number(r._sum?.quantity ?? 0));
+        }
+
+        const productReservedRows =
+          productIds.length > 0
+            ? await tx.adminOrderItem.groupBy({
+                by: ["product_id"],
+                where: {
+                  product_id: { in: productIds },
+                  variant_id: null,
+                  order: { is: orderActiveOrPaid },
+                },
+                _sum: { quantity: true },
+              })
+            : [];
+        const productReserved = new Map<number, number>();
+        for (const r of productReservedRows) {
+          const pid = r.product_id;
+          if (pid == null) continue;
+          productReserved.set(pid, Number(r._sum?.quantity ?? 0));
+        }
+
+        for (const g of grouped.values()) {
+          const p = productById.get(g.productId);
+          if (!p) throw new CheckoutError("Бараа олдсонгүй", 400);
+
+          const hasDuration = Number(p.duration_hours || 0) > 0;
+          const durationHours = Number(p.duration_hours || 0);
+          const endMs =
+            p.created_at && hasDuration
+              ? new Date(p.created_at).getTime() + durationHours * 60 * 60 * 1000
+              : null;
+          const expired = endMs ? endMs <= now.getTime() : false;
+          const productClosed = p.order_accept_status === "CLOSED" || expired;
+          if (productClosed) throw new CheckoutError(`Захиалга хаагдсан байна: ${p.name}`, 409);
+
+          const variants = p.variants || [];
+          if (variants.length > 0 && !g.variantId) {
+            throw new CheckoutError(`Төрөл сонгоно уу: ${p.name}`, 400);
+          }
+
+          if (g.variantId) {
+            const vMeta = variantById.get(g.variantId);
+            if (!vMeta || vMeta.productId !== p.id) {
+              throw new CheckoutError(`Төрөл буруу байна: ${p.name}`, 400);
+            }
+            const v = vMeta.variant;
+            const stock = v.stock != null ? Number(v.stock) : null;
+            if (stock != null) {
+              const reserved = variantReserved.get(g.variantId) ?? 0;
+              const remaining = Math.max(0, stock - reserved);
+              if (remaining <= 0 || remaining < g.qty) {
+                throw new CheckoutError(
+                  `Захиалга авах тоо дууссан байна: ${p.name} (${getVariantLabel(v)})`,
+                  409
+                );
+              }
+            }
+          } else {
+            const stock = p.stock != null ? Number(p.stock) : null;
+            if (stock != null) {
+              const reserved = productReserved.get(p.id) ?? 0;
+              const remaining = Math.max(0, stock - reserved);
+              if (remaining <= 0 || remaining < g.qty) {
+                throw new CheckoutError(`Захиалга авах тоо дууссан байна: ${p.name}`, 409);
+              }
+            }
+          }
+        }
+
+        const createItems = cartLines.map((line) => {
+          const p = productById.get(line.productId) ?? null;
+          const v = line.variantId ? variantById.get(line.variantId)?.variant ?? null : null;
+          const vPrice = v?.price != null ? Number(v.price) : null;
+          const basePrice =
+            p?.discount_price != null && Number(p.discount_price) > 0
+              ? Number(p.discount_price)
+              : p?.price != null
+              ? Number(p.price)
+              : 0;
+          const unitPrice =
+            vPrice != null && vPrice > 0 ? vPrice : basePrice;
+
+          return {
+            product_id: line.productId,
+            variant_id: line.variantId,
+            product_name: String(p?.name ?? line.clientName ?? "Бараа"),
+            quantity: line.qty,
+            price: Math.max(0, unitPrice),
+            image_url: line.clientImageUrl,
+            status: defaultStatus,
+          };
+        });
+
+        const total = createItems.reduce(
+          (sum, it) => sum + Math.max(1, it.quantity) * Math.max(0, it.price),
+          0
+        );
+
+        return tx.adminOrder.create({
+          data: {
+            user_id: userId,
+            name,
+            phone1: phone,
+            status: defaultStatus,
+            payment_status: "UNPAID",
+            order_kind: orderKind,
+            delivery_method: deliveryMethod,
+            delivery_name: deliveryName,
+            delivery_phone: deliveryPhone,
+            delivery_address: deliveryAddress,
+            total,
+            items: { create: createItems },
+          },
+          include: { items: true },
+        });
+      });
+    } catch (err: any) {
+      if (err instanceof CheckoutError) {
+        return NextResponse.json({ message: err.message }, { status: err.status });
+      }
+      throw err;
+    }
+  })();
+
+  if (created instanceof NextResponse) return created;
 
   // QPay invoice create
   const invoiceCode = process.env.QPAY_INVOICE_CODE;
@@ -252,12 +469,12 @@ export async function POST(request: NextRequest) {
     sender_invoice_no: senderInvoiceNo,
     invoice_receiver_code: receiverCode,
     sender_branch_code: senderBranchCode,
-    invoice_description: `Order #${created.id} ${total}₮`,
+    invoice_description: `Order #${created.id} ${created.total}₮`,
     enable_expiry: !disableExpiry,
     ...(disableExpiry ? {} : { expiry_date: formatExpiry(expiresAtForPayload) }),
     allow_partial: false,
     allow_exceed: false,
-    amount: total,
+    amount: created.total,
     callback_url: callbackUrl,
     sender_staff_code: senderStaffCode,
     invoice_receiver_data: {

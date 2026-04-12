@@ -4,8 +4,11 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { phone, password } = body ?? {};
+  const { phone, password, name, email } = body ?? {};
   const normalizedPhone = String(phone ?? "").replace(/\s+/g, "").replace(/-/g, "");
+  const normalizedName = String(name ?? "").trim() || null;
+  const normalizedEmailRaw = String(email ?? "").trim();
+  const normalizedEmail = normalizedEmailRaw ? normalizedEmailRaw.toLowerCase() : null;
 
   if (!normalizedPhone || !password) {
     return NextResponse.json(
@@ -14,15 +17,30 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (normalizedEmail) {
+    const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
+    if (!ok) {
+      return NextResponse.json({ error: "Имэйл буруу байна" }, { status: 400 });
+    }
+  }
+
   const existing = await prisma.user.findFirst({
     where: {
-      phone: normalizedPhone,
+      OR: [
+        { phone: normalizedPhone },
+        ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+      ],
     },
   });
 
   if (existing) {
     return NextResponse.json(
-      { error: "Энэ дугаараар бүртгэлтэй хэрэглэгч байна" },
+      {
+        error:
+          existing.phone === normalizedPhone
+            ? "Энэ дугаараар бүртгэлтэй хэрэглэгч байна"
+            : "Энэ имэйлээр бүртгэлтэй хэрэглэгч байна",
+      },
       { status: 409 }
     );
   }
@@ -32,10 +50,14 @@ export async function POST(request: NextRequest) {
   const user = await prisma.user.create({
     data: {
       phone: normalizedPhone,
+      name: normalizedName,
+      email: normalizedEmail,
       passwordHash,
     },
     select: {
       id: true,
+      name: true,
+      email: true,
       phone: true,
       role: true,
       createdAt: true,

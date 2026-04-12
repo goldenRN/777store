@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { getActorHeaders } from "@/lib/actorHeaders";
+import AdminTableSearchBar from "@/components/admin/AdminTableSearchBar";
 
 type UserRow = {
   id: string;
@@ -46,7 +47,8 @@ type UserDetail = {
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
-  const [q, setQ] = useState("");
+  const [qInput, setQInput] = useState("");
+  const [qApplied, setQApplied] = useState("");
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<UserDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -58,11 +60,12 @@ export default function AdminUsersPage() {
   const [total, setTotal] = useState(0);
   const limit = 20;
 
-  const fetchUsers = async (nextPage = page) => {
+  const fetchUsers = async (nextPage = page, query = qApplied) => {
     setLoading(true);
     try {
       const url = new URL(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/users`, window.location.origin);
-      if (q) url.searchParams.set("q", q);
+      const trimmed = String(query || "").trim();
+      if (trimmed) url.searchParams.set("q", trimmed);
       url.searchParams.set("page", String(nextPage));
       url.searchParams.set("limit", String(limit));
       const res = await fetch(url.toString());
@@ -143,15 +146,20 @@ export default function AdminUsersPage() {
     <div className="w-full mx-auto p-6">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Хэрэглэгчдийн бүртгэл</h1>
-        <div className="flex items-center gap-2">
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Нэр / Имэйл / Утас хайх..."
-            className="border rounded px-3 py-1 text-sm"
-          />
-          <Button onClick={() => fetchUsers(1)} className="text-sm px-3 py-1">Хайх</Button>
-        </div>
+        <AdminTableSearchBar
+          value={qInput}
+          onValueChange={setQInput}
+          placeholder="Нэр / Имэйл / Утас хайх..."
+          debounceMs={3000}
+          loading={loading}
+          onSearch={() => {
+            setQApplied(qInput);
+            fetchUsers(1, qInput);
+          }}
+          onRefresh={() => fetchUsers(page, qApplied)}
+          showSearchButton
+          searchButtonLabel="Хайх"
+        />
       </div>
 
       <div className="overflow-x-auto bg-white rounded shadow">

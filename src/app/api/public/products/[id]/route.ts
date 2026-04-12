@@ -50,6 +50,7 @@ export async function GET(
       product.images?.[0]?.image_url ??
       product.variants?.find((v) => v.images?.[0]?.image_url)?.images?.[0]?.image_url ??
       null,
+    base_images: product.images?.map((img) => img.image_url) ?? [],
     images: [
       ...(product.images?.map((img) => img.image_url) ?? []),
       ...(product.variants?.flatMap((v) => v.images?.map((img) => img.image_url) ?? []) ?? []),

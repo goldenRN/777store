@@ -1,7 +1,7 @@
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import ProductCard from "@/components/ProductCard";
 import AllProductsSection from "@/components/AllProductsSection";
+import ProductsCategoryPicker from "@/components/ProductsCategoryPicker";
 import {
   Pagination,
   PaginationContent,
@@ -121,8 +121,18 @@ export default async function ProductsPage({
             <h1 className="text-2xl font-bold">{title}</h1>
             {q && <div className="mt-1 text-xs text-[var(--gray-500)]">Хайлт: “{q}”</div>}
           </div>
-          <div className="text-xs text-[var(--gray-500)]">
-            Нийт {total}‑аас {total === 0 ? 0 : (page - 1) * limit + 1}‑{Math.min(page * limit, total)} харуулж байна
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:block text-xs text-[var(--gray-500)]">
+              Нийт {total}‑аас {total === 0 ? 0 : (page - 1) * limit + 1}‑{Math.min(page * limit, total)} харуулж байна
+            </div>
+            <ProductsCategoryPicker
+              categories={categories}
+              q={q}
+              type={type}
+              discount={discount}
+              category={category}
+              subcategory={subcategory}
+            />
           </div>
         </div>
 
