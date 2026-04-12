@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import OrderDetailsModal from "./OrderDetailsModal";
 import { getActorHeaders } from "@/lib/actorHeaders";
 import { Modal } from "@/components/ui/modal";
-import { Tag, Trash2, Plus, MoreVertical, CheckCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { Tag, Trash2, Plus, MoreVertical, CheckCircle, ChevronDown, ChevronUp, Lock, PackageCheck } from "lucide-react";
 import AdminTableSearchBar from "@/components/admin/AdminTableSearchBar";
 
 type Order = {
@@ -93,11 +93,18 @@ export default function AdminOrdersTable() {
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [paymentMethodId, setPaymentMethodId] = useState<number | "">("");
   const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
+  const [closingProductId, setClosingProductId] = useState<number | null>(null);
+  const [arrivedOpen, setArrivedOpen] = useState(false);
+  const [arrivedTarget, setArrivedTarget] = useState<{ productId: number; productName: string; itemIds: number[] } | null>(null);
+  const [arrivedCargoFee, setArrivedCargoFee] = useState<string>("");
+  const [arrivedSaving, setArrivedSaving] = useState(false);
   const searchParams = useSearchParams();
   const statusFilter = searchParams.get("status") ?? "";
   const isPending = statusFilter.toLowerCase() === "pending";
+  const openOnly = searchParams.get("openOnly") === "true";
   const isProductOnly = Boolean(statusFilter);
   const titleLabel = (() => {
+    if (openOnly && isPending) return "Захиалга авч байгаа";
     if (!statusFilter) return "Захиалгын жагсаалт";
     const hit = statusOptions.find((s) => s.name === statusFilter);
     if (hit) return hit.name;
@@ -122,10 +129,10 @@ export default function AdminOrdersTable() {
   };
 
   useEffect(() => {
-    if (isPending) {
+    if (isPending || openOnly) {
       setViewMode("product");
     }
-  }, [isPending]);
+  }, [isPending, openOnly]);
 
   const fetchOrders = async (p = page, query = qDebounced) => {
     setLoading(true);
@@ -161,7 +168,7 @@ export default function AdminOrdersTable() {
       fetchProductSummary();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, viewMode]);
+  }, [statusFilter, viewMode, openOnly]);
 
   useEffect(() => {
     fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/status`)
@@ -301,6 +308,12 @@ export default function AdminOrdersTable() {
       if (statusFilter) url.searchParams.set("status", statusFilter);
       url.searchParams.set("payment", "PAID");
       if (isPending) url.searchParams.set("excludeArrived", "true");
+      if (openOnly) url.searchParams.set("openOnly", "true");
+      if (isPending && !openOnly) url.searchParams.set("closedOnly", "true");
+      // "Бараа ирсэн" таб дээр AdminOrderItem.status = "Бараа ирсэн" мөрүүдийг харуулна.
+      if (statusFilter.toLowerCase() === "confirmed") {
+        url.searchParams.set("itemStatus", "Бараа ирсэн");
+      }
       const res = await fetch(url.toString(), { headers: getActorHeaders() });
       const json = await res.json();
       setProductItems(json.items || []);
@@ -308,6 +321,88 @@ export default function AdminOrdersTable() {
       console.error(err);
     } finally {
       setProductLoading(false);
+    }
+  };
+
+  const closeProductOrders = async (productId: number, productName: string) => {
+    if (!confirm(`“${productName}” барааны захиалгыг хаах уу?`)) return;
+    setClosingProductId(productId);
+    try {
+      const res = await fetch(`/api/product/${productId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...getActorHeaders(),
+        },
+        body: JSON.stringify({ order_accept_status: "CLOSED" }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json?.message || "Захиалга хааж чадсангүй");
+      }
+      alert("Захиалга хаагдлаа. Энэ бараа “Хаагдсан бараа” цэсэнд орно.");
+      await fetchProductSummary();
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : typeof err === "string" ? err : "Алдаа гарлаа";
+      alert(`⚠️ ${message}`);
+    } finally {
+      setClosingProductId((prev) => (prev === productId ? null : prev));
+    }
+  };
+
+  const openArrivedModal = (p: ProductSummary) => {
+    if (!p.product_id) return;
+    setArrivedTarget({
+      productId: p.product_id,
+      productName: p.product_name,
+      itemIds: Array.isArray(p.item_ids) ? p.item_ids : [],
+    });
+    setArrivedCargoFee("");
+    setArrivedOpen(true);
+  };
+
+  const saveArrived = async () => {
+    if (!arrivedTarget) return;
+    const feeRaw = arrivedCargoFee.trim();
+    const fee = feeRaw ? Number(feeRaw) : NaN;
+    if (!Number.isFinite(fee) || fee < 0) {
+      alert("Карго үнэ зөв оруулна уу.");
+      return;
+    }
+    if (!arrivedTarget.itemIds.length) {
+      alert("Захиалгын мөр олдсонгүй.");
+      return;
+    }
+    setArrivedSaving(true);
+    try {
+      // 1) Product дээр карго хадгална + бараа ирсэн гэж тэмдэглэнэ.
+      const res1 = await fetch(`/api/product/${arrivedTarget.productId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...getActorHeaders() },
+        body: JSON.stringify({ arrival_status: "Бараа ирсэн", cargo_fee: fee }),
+      });
+      const j1 = await res1.json().catch(() => ({}));
+      if (!res1.ok) throw new Error(j1?.message || "Карго хадгалж чадсангүй");
+
+      // 2) Энэ бүтээгдэхүүнтэй холбоотой захиалгын мөрүүдийг "Бараа ирсэн" болгоно.
+      const res2 = await fetch(`/api/orders/items/bulk-status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...getActorHeaders() },
+        body: JSON.stringify({ itemIds: arrivedTarget.itemIds, status: "Бараа ирсэн" }),
+      });
+      const j2 = await res2.json().catch(() => ({}));
+      if (!res2.ok) throw new Error(j2?.message || "Төлөв шинэчилж чадсангүй");
+
+      setArrivedOpen(false);
+      setArrivedTarget(null);
+      alert("Амжилттай хадгаллаа. “Бараа ирсэн” цэсэнд харагдана.");
+      await fetchProductSummary();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : typeof err === "string" ? err : "Алдаа гарлаа";
+      alert(`⚠️ ${message}`);
+    } finally {
+      setArrivedSaving(false);
     }
   };
 
@@ -464,6 +559,26 @@ export default function AdminOrdersTable() {
                             <ChevronDown size={16} />
                           )}
                         </button>
+                        {openOnly && isPending && p.product_id != null && p.order_accept_status !== "CLOSED" ? (
+                          <button
+                            onClick={() => closeProductOrders(p.product_id as number, p.product_name)}
+                            className="h-9 w-9 rounded border bg-white flex items-center justify-center text-red-600 hover:bg-red-50 disabled:opacity-50"
+                            title="Захиалга хаах"
+                            disabled={closingProductId === p.product_id}
+                          >
+                            <Lock size={16} />
+                          </button>
+                        ) : null}
+                        {isPending && p.product_id != null ? (
+                          <button
+                            onClick={() => openArrivedModal(p)}
+                            className="h-9 w-9 rounded border bg-white flex items-center justify-center hover:bg-gray-50 disabled:opacity-50"
+                            title="Бараа ирсэн"
+                            disabled={arrivedSaving}
+                          >
+                            <PackageCheck size={16} />
+                          </button>
+                        ) : null}
                         <button
                           onClick={() => setProductDetail(p)}
                           className="h-9 w-9 rounded border bg-white flex items-center justify-center"
@@ -949,7 +1064,7 @@ export default function AdminOrdersTable() {
                       return;
                     }
                   }
-                  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/orders/admin-create`, {
+                  const res = await fetch(`/api/orders/admin-create`, {
                     method: "POST",
                     headers: {
                       "Content-Type": "application/json",
@@ -969,8 +1084,15 @@ export default function AdminOrdersTable() {
                     }),
                   });
                   if (!res.ok) {
-                    const err = await res.json().catch(() => ({}));
-                    throw new Error(err?.message || "Алдаа гарлаа");
+                    const contentType = res.headers.get("content-type") || "";
+                    if (contentType.includes("application/json")) {
+                      const err = await res.json().catch(() => ({}));
+                      throw new Error(err?.message || err?.error || "Алдаа гарлаа");
+                    }
+                    const text = await res.text().catch(() => "");
+                    // When the API crashes it may return HTML; keep the message readable.
+                    const trimmed = String(text || "").replace(/\s+/g, " ").trim();
+                    throw new Error(trimmed ? `Серверийн алдаа: ${trimmed.slice(0, 160)}` : "Серверийн алдаа гарлаа");
                   }
                   setCreateOpen(false);
                   setCreateItems([{ product_id: "", product_query: "", qty: 1, variant_id: "" }]);
@@ -994,6 +1116,38 @@ export default function AdminOrdersTable() {
               }}
               className="px-4 py-2 rounded bg-black text-white disabled:opacity-50"
               disabled={createLoading}
+            >
+              Хадгалах
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={arrivedOpen} onClose={() => setArrivedOpen(false)} title="Бараа ирсэн">
+        <div className="space-y-4">
+          <div className="text-sm text-gray-700">
+            <div className="font-semibold">{arrivedTarget?.productName ?? "Бараа"}</div>
+            <div className="text-xs text-gray-500">Карго үнэ оруулаад хадгална.</div>
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Карго (₮)</label>
+            <input
+              type="number"
+              min={0}
+              value={arrivedCargoFee}
+              onChange={(e) => setArrivedCargoFee(e.target.value)}
+              className="mt-1 w-full border rounded px-3 py-2"
+              placeholder="Ж: 12000"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setArrivedOpen(false)} className="px-4 py-2 rounded border">
+              Болих
+            </button>
+            <button
+              onClick={saveArrived}
+              className="px-4 py-2 rounded bg-black text-white disabled:opacity-50"
+              disabled={arrivedSaving}
             >
               Хадгалах
             </button>

@@ -38,6 +38,12 @@ interface Product {
   image_urls?: string[];
 }
 
+type TableCol = {
+  key: string;
+  label: string;
+  sortable?: boolean;
+};
+
 const ProductPage = () => {
   const searchParams = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
@@ -66,8 +72,22 @@ const ProductPage = () => {
     typeFilter === "ready" || typeFilter === "preorder" || typeFilter === "live" ? typeFilter : null;
   const discountFilter = searchParams.get("discount") === "true";
   const closedFilter = searchParams.get("closed") === "true";
-  const isPreorderLive = typeFilter === "preorder" || typeFilter === "live";
-  const colSpan = isPreorderLive ? 10 : 11;
+  // This screen is for product registration only.
+  // Anything order-related (close, ordered qty, remaining, etc.) is shown in the Order screens.
+  const tableColumns: TableCol[] = useMemo(() => {
+    return [
+      { key: "name", label: "Нэр" },
+      { key: "category_name", label: "Ангилал" },
+      { key: "subcategory_name", label: "Дэд ангилал" },
+      ...(closedFilter ? [{ key: "cargo_fee", label: "Карго (₮)", sortable: false }] : []),
+      { key: "type_name", label: "Төрөл" },
+      { key: "price", label: "Үнэ (₮)" },
+      { key: "discount_price", label: "Хямдрал" },
+      { key: "stock", label: "Үлдэгдэл" },
+      { key: "created_at", label: "Бүртгэсэн огноо" },
+    ];
+  }, [closedFilter]);
+  const colSpan = tableColumns.length + 1; // + Үйлдэл
 
   const titleLabel = (() => {
     if (closedFilter) return "Хаагдсан бараа";
@@ -271,37 +291,16 @@ const ProductPage = () => {
   const openStatusModal = (p: Product) => {
     setStatusTarget(p);
     setCargoInput(p.cargo_fee != null ? String(p.cargo_fee) : "");
-    // default choice based on current state
-    if (p.arrival_status === "Бараа ирсэн") {
-      setStatusChoice("ARRIVED");
-    } else if (p.arrival_status === "Хүлээгдэж буй") {
-      setStatusChoice("WAITING");
-    } else if (p.order_accept_status === "CLOSED") {
-      setStatusChoice("CLOSED");
-    } else {
-      setStatusChoice("OPEN");
-    }
+    // This modal is used only for closing preorder/live orders.
+    setStatusChoice("CLOSED");
     setStatusModalOpen(true);
   };
 
   const saveStatusModal = async () => {
     if (!statusTarget) return;
-    if (statusChoice === "OPEN" || statusChoice === "CLOSED") {
-      await updateOrderAcceptStatus(statusTarget.id, statusChoice);
-    } else {
-      if (statusChoice === "ARRIVED") {
-        if (cargoInput.trim() === "") {
-          alert("Каргоны төлбөр оруулна уу.");
-          return;
-        }
-        await updateArrival(statusTarget.id, "Бараа ирсэн", Number(cargoInput));
-        await updateOrderAcceptStatus(statusTarget.id, "CLOSED");
-      } else {
-        await updateArrival(statusTarget.id, "Хүлээгдэж буй", null);
-        await updateOrderAcceptStatus(statusTarget.id, "CLOSED");
-      }
-    }
+    await updateOrderAcceptStatus(statusTarget.id, "CLOSED");
     setStatusModalOpen(false);
+    alert("Захиалга хаагдлаа. Энэ бараа “Хаагдсан бараа” цэсэнд орно.");
   };
 
   const handleDelete = async (id: number) => {
@@ -361,33 +360,7 @@ const ProductPage = () => {
           <table className="w-full border-collapse min-w-[1000px]">
             <thead>
               <tr className="bg-gray-100 text-left">
-                {[
-                  { key: "name", label: "Нэр" },
-                  ...(isPreorderLive
-                    ? []
-                    : [
-                        { key: "category_name", label: "Ангилал" },
-                        { key: "subcategory_name", label: "Дэд ангилал" },
-                      ]),
-                  ...(isPreorderLive
-                    ? [
-                        { key: "status_badge", label: "Төлөв", sortable: false },
-                        { key: "cargo_fee", label: "Карго (₮)" },
-                      ]
-                    : [
-                      ]),
-                  { key: "type_name", label: "Төрөл" },
-                  { key: "price", label: "Үнэ (₮)" },
-                  ...(isPreorderLive ? [] : [{ key: "discount_price", label: "Хямдрал" }]),
-                  ...(isPreorderLive
-                    ? [
-                        { key: "stock", label: "Захиалах тоо" },
-                        { key: "ordered_qty", label: "Захиалсан" },
-                        { key: "remaining", label: "Үлдэгдэл", sortable: false },
-                      ]
-                    : [{ key: "stock", label: "Үлдэгдэл" }]),
-	                  { key: "created_at", label: "Захиалгын огноо" },
-	                ].map((col) => (
+                {tableColumns.map((col) => (
                   <th
                     key={col.key}
                     onClick={() =>
@@ -412,83 +385,23 @@ const ProductPage = () => {
                 pagedProducts.map((p) => (
                   <tr key={p.id} className="border-b hover:bg-gray-50">
                     <td className="py-2 px-4 text-xs">{p.name}</td>
-                    {!isPreorderLive && (
-                      <>
-                        <td className="py-2 px-4 text-xs">{p.category_name}</td>
-                        <td className="py-2 px-4 text-xs">{p.subcategory_name}</td>
-                      </>
-                    )}
-                    {isPreorderLive ? (
-                      <>
-                        <td className="py-2 px-4 text-xs">
-                          {(() => {
-                            const total = Number(p.stock || 0);
-                            const ordered = Number(p.ordered_qty || 0);
-                            const remaining = Math.max(0, total - ordered);
-                            const hasDuration = Boolean(p.created_at && p.duration_hours);
-                            const expiresAt = hasDuration
-                              ? new Date(
-                                  new Date(p.created_at).getTime() +
-                                    Number(p.duration_hours || 0) * 60 * 60 * 1000
-                                )
-                              : null;
-                            const expired = Boolean(expiresAt && expiresAt.getTime() <= Date.now());
-                            const isClosed = expired || remaining <= 0 || p.order_accept_status === "CLOSED";
-                            const arrival = p.arrival_status || "Хүлээгдэж буй";
-                            const showWaiting = arrival === "Хүлээгдэж буй" && p.order_accept_status === "CLOSED";
-                            const showArrived = arrival === "Бараа ирсэн";
-                            const orderBadge = isClosed ? "Захиалга хаагдсан" : "Захиалга авч байгаа";
-                            const orderClass = isClosed
-                              ? "bg-gray-100 text-gray-600"
-                              : "bg-green-100 text-green-700";
-                            const waitingClass = "bg-yellow-100 text-yellow-700";
-                            const arrivedClass = "bg-blue-100 text-blue-700";
-
-                            return (
-                              <span
-                                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                                  showArrived
-                                    ? arrivedClass
-                                    : showWaiting
-                                    ? waitingClass
-                                    : orderClass
-                                }`}
-                              >
-                                {showArrived ? "Бараа ирсэн" : showWaiting ? "Хүлээгдэж буй" : orderBadge}
-                              </span>
-                            );
-                          })()}
-                        </td>
-                        <td className="py-2 px-4 text-xs">
-                          {p.cargo_fee != null ? `${Number(p.cargo_fee).toLocaleString()}₮` : "-"}
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                      </>
+                    <td className="py-2 px-4 text-xs">{p.category_name}</td>
+                    <td className="py-2 px-4 text-xs">{p.subcategory_name}</td>
+                    {closedFilter && (
+                      <td className="py-2 px-4 text-xs">
+                        {p.cargo_fee != null ? `${Number(p.cargo_fee).toLocaleString()}₮` : "-"}
+                      </td>
                     )}
                     <td className="py-2 px-4 text-xs">{p.type_name}</td>
                     <td className="py-2 px-4 text-xs">
                       {p.price.toLocaleString()}₮
                     </td>
-                    {!isPreorderLive && (
-                      <td className="py-2 px-4 text-xs">
-                        {p.discount_price ? `${Number(p.discount_price).toLocaleString()}₮` : "-"}
-                      </td>
-                    )}
-                    {isPreorderLive ? (
-                      <>
-                        <td className="py-2 px-4 text-xs">{p.stock}</td>
-                        <td className="py-2 px-4 text-xs">{p.ordered_qty ?? 0}</td>
-                        <td className="py-2 px-4 text-xs">
-                          {Math.max(0, Number(p.stock || 0) - Number(p.ordered_qty || 0))}
-                        </td>
-                      </>
-                    ) : (
-                      <td className="py-2 px-4 text-xs">{p.stock}</td>
-                    )}
+                    <td className="py-2 px-4 text-xs">
+                      {p.discount_price ? `${Number(p.discount_price).toLocaleString()}₮` : "-"}
+                    </td>
+                    <td className="py-2 px-4 text-xs">{p.stock}</td>
 	                    <td className="py-2 px-4 text-xs whitespace-nowrap">
-	                      {formatOrderWindow(p.created_at, p.duration_hours)}
+	                      {formatOrderWindow(p.created_at, null)}
 	                    </td>
 
 	                    <td className="py-2 px-4 text-center">
@@ -497,21 +410,6 @@ const ProductPage = () => {
 	                        {(() => {
 	                          // "Хаагдсан бараа" таб дээр төрөл нэмэхийг бүр мөсөн хориглоно.
 	                          if (closedFilter) return null;
-	                          if (isPreorderLive) {
-	                            const total = Number(p.stock || 0);
-	                            const ordered = Number(p.ordered_qty || 0);
-	                            const remaining = Math.max(0, total - ordered);
-	                            const hasDuration = Boolean(p.created_at && p.duration_hours);
-	                            const expiresAt = hasDuration
-	                              ? new Date(
-	                                  new Date(p.created_at).getTime() +
-	                                    Number(p.duration_hours || 0) * 60 * 60 * 1000
-	                                )
-	                              : null;
-	                            const expired = Boolean(expiresAt && expiresAt.getTime() <= Date.now());
-	                            const isClosed = expired || remaining <= 0 || p.order_accept_status === "CLOSED";
-	                            if (isClosed) return null;
-	                          }
 	                          return (
 	                            <Button
 	                              size="sm"
@@ -522,11 +420,7 @@ const ProductPage = () => {
 	                            </Button>
 	                          );
 	                        })()}
-	                        {isPreorderLive && (
-	                          <Button size="sm" variant="outline" onClick={() => openStatusModal(p)}>
-	                            Төлөв
-	                          </Button>
-	                        )}
+                        {/* Захиалга хаах үйлдлийг Захиалга цэс рүү шилжүүлсэн (энд харуулахгүй). */}
 
                         <Button
                           size="sm"
@@ -692,41 +586,25 @@ const ProductPage = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50" onClick={() => setStatusModalOpen(false)} />
           <div className="relative z-10 w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
-            <div className="text-sm font-semibold">Төлөв солих</div>
-            <div className="mt-3 space-y-2 text-xs">
-	              {(
-	                [
-	                  { key: "OPEN", label: "Захиалга авч байгаа" },
-	                  { key: "CLOSED", label: "Захиалга хаагдсан" },
-	                  { key: "WAITING", label: "Хүлээгдэж буй" },
-	                  { key: "ARRIVED", label: "Бараа ирсэн" },
-	                ] as const
-	              ).map((opt) => (
-	                <label key={opt.key} className="flex items-center gap-2">
-	                  <input
-	                    type="radio"
-	                    name="statusChoice"
-	                    checked={statusChoice === opt.key}
-	                    onChange={() => setStatusChoice(opt.key)}
-	                  />
-	                  {opt.label}
-	                </label>
-	              ))}
-              {statusChoice === "ARRIVED" && (
-                <input
-                  type="number"
-                  value={cargoInput}
-                  onChange={(e) => setCargoInput(e.target.value)}
-                  placeholder="Каргоны төлбөр"
-                  className="mt-2 w-full rounded-lg border px-3 py-2 text-xs"
-                />
-              )}
+            <div className="text-sm font-semibold">Захиалга хаах</div>
+            <div className="mt-3 space-y-2 text-xs text-gray-700">
+              <div>Энэ барааны захиалгыг хаах уу?</div>
+              <div className="rounded-lg bg-gray-50 p-3 text-[11px] text-gray-600">
+                Хаагдсаны дараа энэ бараа “Хаагдсан бараа” цэсэнд орно.
+              </div>
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <Button variant="outline" onClick={() => setStatusModalOpen(false)}>
                 Болих
               </Button>
-              <Button onClick={saveStatusModal}>Хадгалах</Button>
+              <Button
+                onClick={() => {
+                  if (!confirm("Захиалгыг хаах уу?")) return;
+                  saveStatusModal();
+                }}
+              >
+                Хаах
+              </Button>
             </div>
           </div>
         </div>

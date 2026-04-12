@@ -388,6 +388,13 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
     );
   }, [product.type_name]);
 
+  const totalOrderLimit = useMemo(() => {
+    const base = Number(product.stock || 0);
+    if (base > 0) return base;
+    const sum = (product.variants || []).reduce((acc, v) => acc + Math.max(0, Number(v.stock || 0)), 0);
+    return sum > 0 ? sum : null;
+  }, [product.stock, product.variants]);
+
   const isClosed = stockNumber > 0 && remainingQty !== null && remainingQty <= 0;
   const canAddToCart = stockNumber > 0 ? !isClosed : true;
 
@@ -479,11 +486,18 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
             </div>
           )}
 
-          {product.type_has_duration && (
+          {isPreorderLive && totalOrderLimit != null && (
+            <div>
+              Захиалга авах тоо:{" "}
+              <span className="font-semibold text-[var(--navy-900)]">{totalOrderLimit}</span>
+            </div>
+          )}
+
+          {product.type_has_duration && endDate && (
             <div>
               Дуусах огноо:{" "}
               <span className="font-semibold text-[var(--navy-900)]">
-                {endDate || "тохируулгагүй"}
+                {endDate}
               </span>
             </div>
           )}

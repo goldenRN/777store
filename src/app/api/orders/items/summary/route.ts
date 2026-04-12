@@ -4,8 +4,11 @@ import { prisma } from "@/lib/prisma";
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   let status = (searchParams.get("status") ?? "").trim();
+  const itemStatus = (searchParams.get("itemStatus") ?? "").trim();
   const payment = (searchParams.get("payment") ?? "PAID").trim().toUpperCase();
   const excludeArrived = searchParams.get("excludeArrived") === "true";
+  const openOnly = searchParams.get("openOnly") === "true";
+  const closedOnly = searchParams.get("closedOnly") === "true";
 
   if (status) {
     const key = status.toLowerCase();
@@ -29,14 +32,20 @@ export async function GET(request: NextRequest) {
   } else if (payment === "UNPAID") {
     whereOrder.payment_status = "UNPAID";
   }
-  if (status) {
+  // If itemStatus is set, we are filtering by AdminOrderItem.status (arrival workflow),
+  // so do not constrain by AdminOrder.status.
+  if (status && !itemStatus) {
     whereOrder.status = status;
   }
 
   const items = await prisma.adminOrderItem.findMany({
     where: {
       order: whereOrder,
-      ...(excludeArrived ? { status: { not: "Бараа ирсэн" } } : {}),
+      ...(itemStatus
+        ? { status: itemStatus }
+        : excludeArrived
+        ? { status: { not: "Бараа ирсэн" } }
+        : {}),
     },
     include: {
       order: true,
@@ -254,7 +263,7 @@ export async function GET(request: NextRequest) {
     const expired = endMs ? endMs <= Date.now() : false;
     const productClosed = productMeta?.order_accept_status === "CLOSED" || expired;
     const variants = productMap.get(productId)?.variants ?? [];
-    const list = variants.map((v: any) => {
+    const computedAll = variants.map((v: any) => {
       const confirmed = confirmedMap.get(`${productId}|${v.id}`) ?? 0;
       const inferred = inferredMap.get(`${productId}|${v.id}`) ?? 0;
       const ordered = confirmed + inferred;
@@ -268,9 +277,38 @@ export async function GET(request: NextRequest) {
         remaining_qty: remaining,
         closed: productClosed || (stock != null && remaining != null ? remaining <= 0 : false),
       };
-    }).filter((v) => v.ordered_qty > 0);
+    });
+
+    const list = computedAll.filter((v) => v.ordered_qty > 0);
+
+    const variantStockSum = computedAll.reduce((sum, v) => sum + Math.max(0, Number(v.stock || 0)), 0);
+    const productStockRaw = productMeta?.stock != null ? Number(productMeta.stock) : null;
+    const effectiveStock =
+      productStockRaw != null && productStockRaw > 0
+        ? productStockRaw
+        : variantStockSum > 0
+        ? variantStockSum
+        : null;
+    const orderedForClose = Number(productMeta?.ordered_qty ?? g.total_qty ?? 0);
+    const remainingForClose =
+      effectiveStock != null && effectiveStock > 0 ? Math.max(0, effectiveStock - orderedForClose) : null;
+    const allVariantsClosed = computedAll.length > 0 ? computedAll.every((v) => v.closed) : false;
+    const closedByStock = remainingForClose != null ? remainingForClose <= 0 : false;
+    const isClosedItem = productClosed || closedByStock || allVariantsClosed;
+
+    // When `openOnly=true`, return only products that are still accepting orders.
+    if (openOnly) {
+      if (isClosedItem) return null;
+      if (computedAll.length > 0 && !computedAll.some((v) => !v.closed)) return null;
+    }
+
+    // When `closedOnly=true`, return only products that are already closed.
+    if (closedOnly) {
+      if (!isClosedItem) return null;
+    }
+
     return { ...g, order_count: g.buyers.length, variants: list };
   });
 
-  return NextResponse.json({ items: result });
+  return NextResponse.json({ items: result.filter(Boolean) });
 }

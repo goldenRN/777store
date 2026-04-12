@@ -46,6 +46,7 @@ const data = {
       url: "/admin/order",
       icon: <BoxIcon />,
       items: [
+        { title: "Захиалга авч байгаа", url: "/admin/order?status=pending&openOnly=true" },
         { title: "Хүлээгдэж буй", url: "/admin/order?status=pending" },
         { title: "Бараа ирсэн", url: "/admin/order?status=confirmed" },
         { title: "Хүргэлтэнд бүртгэгдсэн", url: "/admin/order?status=shipping" },
