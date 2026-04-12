@@ -1,7 +1,6 @@
 
 "use client";
 
-import Image from "next/image";
 import { memo, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AddToCartButton from "@/components/cart/AddToCartButton";
@@ -213,16 +212,16 @@ const ProductImageGallery = memo(function ProductImageGallery({
     <div className="rounded-2xl bg-white p-4 shadow">
       <div className="relative h-[420px] w-full overflow-hidden rounded-xl bg-[var(--sky-100)]">
         {activeImage && !mainImageError ? (
-            <Image
-              src={resolveImageUrl(activeImage)}
-              alt={productName}
-              fill
-              priority
-              loading="eager"
-              sizes="(min-width: 1024px) 50vw, 100vw"
-              quality={70}
-              className="object-cover"
-            unoptimized={isExternalUrl(activeImage)}
+          // Use a plain <img> for uploaded images to avoid Next.js optimizer issues
+          // with some JPEG variants (and to keep colors consistent after server-side re-encode).
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={resolveImageUrl(activeImage)}
+            alt={productName}
+            className="h-full w-full object-cover"
+            loading="eager"
+            decoding="async"
+            fetchPriority="high"
             onError={() => setMainImageError(true)}
           />
         ) : activeImage ? (
@@ -263,12 +262,12 @@ const ProductImageGallery = memo(function ProductImageGallery({
               </button>
             </div>
             <div className="relative h-[70vh] w-full overflow-hidden rounded-xl bg-black">
-              <Image
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
                 src={resolveImageUrl(activeImage)}
                 alt={productName}
-                fill
-                className="object-contain"
-                unoptimized
+                className="h-full w-full object-contain"
+                decoding="async"
               />
             </div>
           </div>
@@ -470,7 +469,6 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
               <span className="font-semibold text-[var(--navy-900)]">
                 {product.category_name}
               </span>
-              {product.subcategory_name ? ` / ${product.subcategory_name}` : ""}
             </div>
           )}
 
@@ -490,34 +488,8 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
             </div>
           )}
 
-          {(!isPreorderLive || stockNumber <= 0) && (
-            <div>
-              Үлдэгдэл:{" "}
-              <span className="font-semibold text-[var(--navy-900)]">
-                {remainingQty ?? "-"}
-              </span>
-            </div>
-          )}
-
-          {isPreorderLive && stockNumber > 0 && (
-            remainingQty && remainingQty > 0 ? (
-              <>
-                <div>
-                  Захиалга авах тоо:{" "}
-                  <span className="font-semibold text-[var(--navy-900)]">{stockNumber}</span>
-                </div>
-                <div>
-                  Захиалсан:{" "}
-                  <span className="font-semibold text-[var(--navy-900)]">{orderedNumber}</span>
-                </div>
-                <div>
-                  Үлдэгдэл:{" "}
-                  <span className="font-semibold text-[var(--navy-900)]">{remainingQty}</span>
-                </div>
-              </>
-            ) : (
-              <div className="font-semibold text-red-600">Захиалга хаагдсан</div>
-            )
+          {isPreorderLive && stockNumber > 0 && isClosed && (
+            <div className="font-semibold text-red-600">Захиалга хаагдсан</div>
           )}
 
           {product.material && (

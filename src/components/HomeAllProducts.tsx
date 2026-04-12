@@ -28,26 +28,28 @@ type Category = {
 export default function HomeAllProducts({
   products,
   categories,
+  initialTotal,
 }: {
   products: Product[];
   categories: Category[];
+  initialTotal: number;
 }) {
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [items, setItems] = useState<Product[]>(products);
-  const [total, setTotal] = useState<number>(products.length);
+  const [total, setTotal] = useState<number>(Number(initialTotal ?? products.length));
   const [loading, setLoading] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       setLoading(true);
       const params = new URLSearchParams({ limit: "8" });
-      if (activeCategory !== "all") params.set("category", activeCategory);
+      if (activeCategory !== "all") {
+        params.set("category", activeCategory);
+      } else {
+        // Use the same server-side random selection as the mobile app.
+        params.set("random", "true");
+      }
       const res = await fetch(`/api/public/products?${params.toString()}`);
       if (!res.ok) {
         setLoading(false);
@@ -57,7 +59,8 @@ export default function HomeAllProducts({
       if (cancelled) return;
       const list = (json.items || []) as Product[];
       setItems(list);
-      setTotal(Number(json.total ?? 0));
+      // The API's `total` is not meaningful for random queries; keep the real total from SSR for "all".
+      if (activeCategory !== "all") setTotal(Number(json.total ?? 0));
       setLoading(false);
     };
     load();
@@ -66,27 +69,7 @@ export default function HomeAllProducts({
     };
   }, [activeCategory]);
 
-  const displayItems = useMemo(() => {
-    const base = items;
-    if (activeCategory === "all" && base.length > 1) {
-      const shuffled = [...base];
-      for (let i = shuffled.length - 1; i > 0; i -= 1) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-      }
-      return shuffled;
-    }
-    if (activeCategory !== "all") {
-      return [...base].sort((a, b) => {
-        const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
-        const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
-        return bTime - aTime;
-      });
-    }
-    return base;
-  }, [items, activeCategory]);
-
-  const showItems = mounted ? displayItems.slice(0, 8) : [];
+  const showItems = useMemo(() => items.slice(0, 8), [items]);
 
   const resolveImageUrl = (url?: string | null) => {
     if (!url) return "";

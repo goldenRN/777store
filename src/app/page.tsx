@@ -119,6 +119,7 @@ export default async function Home() {
   const discountProducts = discountRes.items;
   const discountTotal = discountRes.total;
   const allProducts = allRes.items.length > 0 ? allRes.items : readyRes.items;
+  const allTotal = allRes.total || readyRes.total;
   const orderItems = Array.from(
     new Map([...preorderRes.items, ...liveRes.items].map((p) => [p.id, p])).values()
   )
@@ -290,7 +291,7 @@ export default async function Home() {
 
 
 
-        <HomeAllProducts products={allProducts} categories={categories} />
+        <HomeAllProducts products={allProducts} categories={categories} initialTotal={allTotal} />
       </main>
 
       <Footer />
