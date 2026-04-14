@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
     } else if (payment === "UNPAID") {
       whereOrder.payment_status = "UNPAID";
     }
+    whereOrder.deleted_at = null;
     if (status) {
       whereOrder.status = status;
     }
@@ -133,6 +134,7 @@ export async function GET(request: NextRequest) {
   }
 
   const orders = await prisma.adminOrder.findMany({
+    where: { deleted_at: null },
     include: { items: true },
     orderBy: { created_at: "desc" },
   });

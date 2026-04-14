@@ -14,6 +14,9 @@ export async function GET(request: NextRequest) {
   if (!order?.qpay_invoice_id) {
     return NextResponse.json({ message: "invoice not found" }, { status: 404 });
   }
+  if (order.deleted_at) {
+    return NextResponse.json({ status: "DELETED" });
+  }
 
   // expiry check
   if (order.payment_expires_at && new Date(order.payment_expires_at) < new Date()) {

@@ -111,6 +111,7 @@ export async function POST(request: NextRequest) {
       const reserveWindowStart = new Date(now.getTime() - reserveMinutes * 60 * 1000);
 
       const orderActiveOrPaid: Prisma.AdminOrderWhereInput = {
+        deleted_at: null,
         OR: [
           { payment_status: "PAID" },
           {

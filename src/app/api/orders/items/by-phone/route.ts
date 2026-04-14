@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
   } else if (payment === "UNPAID") {
     whereOrder.payment_status = "UNPAID";
   }
+  whereOrder.deleted_at = null;
 
   const items = await prisma.adminOrderItem.findMany({
     where: { order: whereOrder },

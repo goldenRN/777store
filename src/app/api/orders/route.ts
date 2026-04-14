@@ -8,12 +8,14 @@ export async function GET(request: NextRequest) {
   const q = (searchParams.get("q") ?? "").trim();
   let status = (searchParams.get("status") ?? "").trim();
   const payment = (searchParams.get("payment") ?? "").trim().toUpperCase();
+  const deletedOnly = searchParams.get("deleted") === "true";
 
   // auto cleanup: unpaid + expired
   await prisma.adminOrder.deleteMany({
     where: {
       payment_status: "UNPAID",
       payment_expires_at: { not: null, lt: new Date() },
+      deleted_at: null,
     },
   });
 
@@ -45,14 +47,22 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  if (payment === "UNPAID") {
-    where.payment_status = "UNPAID";
+  if (!deletedOnly) {
+    // Default admin order views are for PAID orders unless explicitly requested.
+    if (payment === "UNPAID") {
+      where.payment_status = "UNPAID";
+    } else {
+      where.payment_status = "PAID";
+    }
   } else {
-    where.payment_status = "PAID";
+    // Deleted list: show both PAID/UNPAID unless explicitly filtered.
+    if (payment === "PAID") where.payment_status = "PAID";
+    if (payment === "UNPAID") where.payment_status = "UNPAID";
   }
   if (status) {
     where.status = status;
   }
+  where.deleted_at = deletedOnly ? { not: null } : null;
 
   const total = await prisma.adminOrder.count({ where });
   const pages = Math.max(Math.ceil(total / limit), 1);

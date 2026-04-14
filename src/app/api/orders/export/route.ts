@@ -11,6 +11,7 @@ const escapeCsv = (value: string | number | null | undefined) => {
 
 export async function GET() {
   const orders = await prisma.adminOrder.findMany({
+    where: { deleted_at: null },
     include: { items: true },
     orderBy: { created_at: "desc" },
   });

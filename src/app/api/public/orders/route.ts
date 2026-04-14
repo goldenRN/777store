@@ -270,6 +270,7 @@ export async function POST(request: NextRequest) {
         }
 
         const orderActiveOrPaid: Prisma.AdminOrderWhereInput = {
+          deleted_at: null,
           OR: [
             { payment_status: "PAID" },
             {

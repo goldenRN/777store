@@ -49,6 +49,10 @@ export async function GET(request: NextRequest) {
         ? await prisma.adminOrder.findUnique({ where: { id: Number(orderIdParam) } })
         : await prisma.adminOrder.findFirst({ where: { qpay_invoice_id: invoiceId } });
 
+    if (order?.deleted_at) {
+      return new NextResponse("SUCCESS");
+    }
+
     if (order && payment.payment_status === "PAID") {
       const statuses = await prisma.adminStatus.findMany({ orderBy: { id: "asc" } });
       const pendingName =

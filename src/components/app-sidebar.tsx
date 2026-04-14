@@ -52,6 +52,7 @@ const data = {
         { title: "Хүргэлтэнд бүртгэгдсэн", url: "/admin/order?status=shipping" },
         { title: "Хүргэгдсэн", url: "/admin/order?status=delivered" },
         { title: "Цуцлагдсан", url: "/admin/order?status=cancelled" },
+        { title: "Устгасан захиалга", url: "/admin/order?deleted=true" },
       ],
     },
     {

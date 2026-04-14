@@ -324,6 +324,12 @@ model AdminOrder {
   total      Int              @default(0)
   items      AdminOrderItem[]
   payment_method AdminPaymentMethod? @relation(fields: [payment_method_id], references: [id], onDelete: SetNull)
+  deleted_at DateTime?
+  deleted_by_id String?
+  deleted_by_name String?
+  deleted_by_phone String?
+  deleted_by_role String?
+  deleted_reason String?
   created_at DateTime         @default(now())
   updated_at DateTime         @updatedAt
 }

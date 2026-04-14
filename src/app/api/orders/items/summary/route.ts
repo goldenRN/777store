@@ -32,6 +32,8 @@ export async function GET(request: NextRequest) {
   } else if (payment === "UNPAID") {
     whereOrder.payment_status = "UNPAID";
   }
+  // Exclude soft-deleted orders from all summaries.
+  whereOrder.deleted_at = null;
   // If itemStatus is set, we are filtering by AdminOrderItem.status (arrival workflow),
   // so do not constrain by AdminOrder.status.
   if (status && !itemStatus) {
