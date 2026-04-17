@@ -27,21 +27,32 @@ type Category = {
   subcategories?: { id: number; name: string }[];
 };
 
+type Brand = {
+  id: number;
+  name: string;
+  image_url: string | null;
+};
+
 export default function AllProductsSection({
   products,
   categories,
+  brands,
   initialCategoryId = "all",
   initialSubcategoryId = "all",
+  initialBrandId = "all",
 }: {
   products: Product[];
   categories: Category[];
+  brands: Brand[];
   initialCategoryId?: string;
   initialSubcategoryId?: string;
+  initialBrandId?: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [categoryId, setCategoryId] = useState<string>(initialCategoryId);
   const [subcategoryId, setSubcategoryId] = useState<string>(initialSubcategoryId);
+  const [brandId, setBrandId] = useState<string>(initialBrandId);
   const [sort, setSort] = useState<string>("newest");
   const [discountOnly, setDiscountOnly] = useState(false);
   const [isClient, setIsClient] = useState(false);
@@ -49,13 +60,14 @@ export default function AllProductsSection({
   useEffect(() => {
     setCategoryId(initialCategoryId);
     setSubcategoryId(initialSubcategoryId);
-  }, [initialCategoryId, initialSubcategoryId]);
+    setBrandId(initialBrandId);
+  }, [initialCategoryId, initialSubcategoryId, initialBrandId]);
 
   useEffect(() => {
     setIsClient(true);
   }, []);
 
-  const updateQuery = (nextCategory: string, nextSubcategory: string) => {
+  const updateQuery = (nextCategory: string, nextSubcategory: string, nextBrand: string) => {
     const params = new URLSearchParams(searchParams.toString());
     if (nextCategory && nextCategory !== "all") {
       params.set("category", nextCategory);
@@ -66,6 +78,11 @@ export default function AllProductsSection({
       params.set("subcategory", nextSubcategory);
     } else {
       params.delete("subcategory");
+    }
+    if (nextBrand && nextBrand !== "all") {
+      params.set("brand", nextBrand);
+    } else {
+      params.delete("brand");
     }
     params.set("page", "1");
     const qs = params.toString();
@@ -111,7 +128,7 @@ export default function AllProductsSection({
             onClick={() => {
               setCategoryId("all");
               setSubcategoryId("all");
-              updateQuery("all", "all");
+              updateQuery("all", "all", brandId);
             }}
             className={`w-full rounded-lg px-3 py-2 text-left text-sm ${
               categoryId === "all" ? "bg-[var(--sky-100)]" : "hover:bg-[var(--sky-100)]"
@@ -125,7 +142,7 @@ export default function AllProductsSection({
               onClick={() => {
                 setCategoryId(String(c.category_id));
                 setSubcategoryId("all");
-                updateQuery(String(c.category_id), "all");
+                updateQuery(String(c.category_id), "all", brandId);
               }}
               className={`w-full rounded-lg px-3 py-2 text-left text-sm ${
                 String(c.category_id) === categoryId ? "bg-[var(--sky-100)]" : "hover:bg-[var(--sky-100)]"
@@ -141,7 +158,10 @@ export default function AllProductsSection({
             <div className="text-xs font-semibold text-[var(--gray-500)]">Дэд ангилал</div>
             <div className="mt-2 space-y-2">
               <button
-                onClick={() => setSubcategoryId("all")}
+                onClick={() => {
+                  setSubcategoryId("all");
+                  updateQuery(categoryId, "all", brandId);
+                }}
                 className={`w-full rounded-lg px-3 py-2 text-left text-xs ${
                   subcategoryId === "all" ? "bg-[var(--sky-100)]" : "hover:bg-[var(--sky-100)]"
                 }`}
@@ -153,7 +173,7 @@ export default function AllProductsSection({
                   key={s.id}
                   onClick={() => {
                     setSubcategoryId(String(s.id));
-                    updateQuery(categoryId, String(s.id));
+                    updateQuery(categoryId, String(s.id), brandId);
                   }}
                   className={`w-full rounded-lg px-3 py-2 text-left text-xs ${
                     String(s.id) === subcategoryId ? "bg-[var(--sky-100)]" : "hover:bg-[var(--sky-100)]"
@@ -162,6 +182,51 @@ export default function AllProductsSection({
                   {s.name}
                 </button>
               ))}
+            </div>
+          </div>
+        ) : null}
+
+        {brands.length > 0 ? (
+          <div className="mt-6">
+            <div className="text-sm font-bold">Брэнд</div>
+            <div className="mt-3 space-y-2">
+              <button
+                onClick={() => {
+                  setBrandId("all");
+                  updateQuery(categoryId, subcategoryId, "all");
+                }}
+                className={`w-full rounded-lg px-3 py-2 text-left text-sm ${
+                  brandId === "all" ? "bg-[var(--sky-100)]" : "hover:bg-[var(--sky-100)]"
+                }`}
+              >
+                Бүх брэнд
+              </button>
+              <div className="max-h-56 space-y-2 overflow-auto pr-1">
+                {brands.map((b) => (
+                  <button
+                    key={b.id}
+                    onClick={() => {
+                      const next = String(b.id);
+                      setBrandId(next);
+                      updateQuery(categoryId, subcategoryId, next);
+                    }}
+                    className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${
+                      String(b.id) === brandId ? "bg-[var(--sky-100)]" : "hover:bg-[var(--sky-100)]"
+                    }`}
+                    title={b.name}
+                  >
+                    <div className="h-7 w-7 overflow-hidden rounded-md border bg-[var(--sky-50)]">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={b.image_url || "/logo.png"}
+                        alt={b.name}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1 truncate">{b.name}</div>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         ) : null}

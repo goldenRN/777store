@@ -2,6 +2,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import AllProductsSection from "@/components/AllProductsSection";
 import ProductsCategoryPicker from "@/components/ProductsCategoryPicker";
+import { headers } from "next/headers";
 import {
   Pagination,
   PaginationContent,
@@ -26,6 +27,8 @@ type PublicProduct = {
   created_at?: string | null;
   category_id?: number | null;
   subcategory_id?: number | null;
+  brand_id?: number | null;
+  brand_name?: string | null;
 };
 
 type Category = {
@@ -34,14 +37,21 @@ type Category = {
   subcategories?: { id: number; name: string }[];
 };
 
-const getBaseUrl = () => {
-  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+type Brand = { id: number; name: string; image_url: string | null };
+
+const getBaseUrl = async () => {
+  const raw = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (raw) return raw.replace(/\/+$/, "");
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`.replace(/\/+$/, "");
+  const h = (await headers()) as unknown as Headers;
+  const host = h?.get?.("x-forwarded-host") ?? h?.get?.("host");
+  const proto = h?.get?.("x-forwarded-proto") ?? (process.env.NODE_ENV === "development" ? "http" : "https");
+  if (host) return `${proto}://${host}`.replace(/\/+$/, "");
   return "http://localhost:3000";
 };
 
 const fetchProducts = async (params: Record<string, string | number | boolean | undefined>) => {
-  const base = getBaseUrl();
+  const base = await getBaseUrl();
   const searchParams = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== "") {
@@ -58,10 +68,28 @@ const fetchProducts = async (params: Record<string, string | number | boolean | 
 };
 
 const fetchCategories = async () => {
-  const base = getBaseUrl();
+  const base = await getBaseUrl();
   const res = await fetch(`${base}/api/category`, { cache: "no-store" });
   if (!res.ok) return [];
   return (await res.json()) as Category[];
+};
+
+const fetchBrands = async () => {
+  const base = await getBaseUrl();
+  const res = await fetch(`${base}/api/brand`, { cache: "no-store" });
+  if (!res.ok) return [] as Brand[];
+  const data = (await res.json()) as unknown[];
+  if (!Array.isArray(data)) return [] as Brand[];
+  return data
+    .map((item) => {
+      const b = item as Record<string, unknown>;
+      return {
+        id: Number(b.id),
+        name: String(b.name ?? ""),
+        image_url: b.image_url ? String(b.image_url) : null,
+      };
+    })
+    .filter((b) => Number.isFinite(b.id) && b.name.trim().length > 0);
 };
 
 export default async function ProductsPage({
@@ -73,6 +101,7 @@ export default async function ProductsPage({
     discount?: string;
     category?: string;
     subcategory?: string;
+    brand?: string;
     page?: string;
   }>;
 }) {
@@ -82,20 +111,23 @@ export default async function ProductsPage({
   const discount = params.discount ?? "";
   const category = params.category ?? "";
   const subcategory = params.subcategory ?? "";
+  const brand = params.brand ?? "";
   const page = Math.max(Number(params.page ?? 1), 1);
   const limit = 15;
 
-  const [productsRes, categories] = await Promise.all([
+  const [productsRes, categories, brands] = await Promise.all([
     fetchProducts({
       q: q || undefined,
       type: type || undefined,
       discount: discount === "true" ? true : undefined,
       category: category || undefined,
       subcategory: subcategory || undefined,
+      brand: brand || undefined,
       limit,
       page,
     }),
     fetchCategories(),
+    fetchBrands(),
   ]);
   const items = productsRes.items;
   const total = productsRes.total;
@@ -132,6 +164,7 @@ export default async function ProductsPage({
               discount={discount}
               category={category}
               subcategory={subcategory}
+              brand={brand}
             />
           </div>
         </div>
@@ -144,8 +177,10 @@ export default async function ProductsPage({
           <AllProductsSection
             products={items}
             categories={categories}
+            brands={brands}
             initialCategoryId={category || "all"}
             initialSubcategoryId={subcategory || "all"}
+            initialBrandId={brand || "all"}
           />
         )}
         {totalPages > 1 && (
@@ -160,6 +195,7 @@ export default async function ProductsPage({
                       discount,
                       category,
                       subcategory,
+                      brand,
                       page: String(page - 1),
                     }).toString()}`} />
                   </PaginationItem>
@@ -175,6 +211,7 @@ export default async function ProductsPage({
                           discount,
                           category,
                           subcategory,
+                          brand,
                           page: String(p),
                         }).toString()}`}
                         isActive={p === page}
@@ -192,6 +229,7 @@ export default async function ProductsPage({
                       discount,
                       category,
                       subcategory,
+                      brand,
                       page: String(page + 1),
                     }).toString()}`} />
                   </PaginationItem>
@@ -200,6 +238,64 @@ export default async function ProductsPage({
             </Pagination>
           </div>
         )}
+
+        {brands.length > 0 && (
+          <section className="mt-10 rounded-[28px] border border-[var(--gray-200)] bg-white px-5 py-6 shadow-sm sm:px-6">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-bold text-[var(--navy-900)]">Брэндүүд</h2>
+                <p className="mt-1 text-xs text-[var(--gray-500)]">
+                  Брэндээр нь шүүж бараануудаа хурдан хараарай.
+                </p>
+              </div>
+              <a
+                href="/products"
+                className="shrink-0 text-xs font-semibold text-[var(--accent-2)] hover:underline"
+              >
+                Бүгдийг харах
+              </a>
+            </div>
+
+            <div className="mt-5 flex gap-3 overflow-x-auto pb-2">
+              {brands.map((b) => (
+                <a
+                  key={b.id}
+                  href={`/products?${new URLSearchParams({
+                    ...(category ? { category } : {}),
+                    ...(subcategory ? { subcategory } : {}),
+                    brand: String(b.id),
+                    page: "1",
+                  }).toString()}`}
+                  className={`flex min-w-[200px] items-center gap-3 rounded-2xl border px-4 py-3 transition hover:bg-[var(--sky-100)] ${
+                    String(b.id) === brand
+                      ? "border-[var(--accent-2)] bg-[var(--sky-100)]"
+                      : "border-[var(--gray-200)] bg-white"
+                  }`}
+                  title={b.name}
+                >
+                  <div className="h-12 w-12 overflow-hidden rounded-xl border bg-[var(--sky-50)]">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={b.image_url || "/logo.png"}
+                      alt={b.name}
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src = "/logo.png";
+                      }}
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-[var(--navy-900)]">
+                      {b.name}
+                    </div>
+                    <div className="text-[11px] text-[var(--gray-500)]">Брэнд</div>
+                  </div>
+                </a>
+              ))}
+            </div>
+          </section>
+        )}
+
       </main>
       <Footer />
     </div>

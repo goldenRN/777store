@@ -271,17 +271,25 @@ export async function GET(request: NextRequest) {
       const ordered = confirmed + inferred;
       const stock = v.stock != null ? Number(v.stock) : null;
       const remaining = stock != null ? Math.max(0, stock - ordered) : null;
+      const variantStatusClosed = v.order_accept_status === "CLOSED";
       return {
         variant_id: v.id,
         label: getVariantLabel(v),
         stock,
         ordered_qty: ordered,
         remaining_qty: remaining,
-        closed: productClosed || (stock != null && remaining != null ? remaining <= 0 : false),
+        closed:
+          productClosed ||
+          variantStatusClosed ||
+          (stock != null && remaining != null ? remaining <= 0 : false),
       };
     });
 
-    const list = computedAll.filter((v) => v.ordered_qty > 0);
+    const list = openOnly
+      ? computedAll
+      : closedOnly
+      ? computedAll.filter((v) => v.closed)
+      : computedAll.filter((v) => v.ordered_qty > 0);
 
     const variantStockSum = computedAll.reduce((sum, v) => sum + Math.max(0, Number(v.stock || 0)), 0);
     const productStockRaw = productMeta?.stock != null ? Number(productMeta.stock) : null;
@@ -306,7 +314,8 @@ export async function GET(request: NextRequest) {
 
     // When `closedOnly=true`, return only products that are already closed.
     if (closedOnly) {
-      if (!isClosedItem) return null;
+      // Include products that have at least one closed/finished variant as well.
+      if (!isClosedItem && !computedAll.some((v) => v.closed)) return null;
     }
 
     return { ...g, order_count: g.buyers.length, variants: list };

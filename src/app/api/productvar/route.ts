@@ -10,7 +10,7 @@ export async function POST(request: Request) {
 
   const baseProduct = await prisma.adminProduct.findUnique({
     where: { id: product_id },
-    select: { price: true, discount_price: true },
+    select: { price: true, discount_price: true, order_accept_status: true },
   });
   if (!baseProduct) {
     return NextResponse.json({ message: "Бараа олдсонгүй" }, { status: 404 });
@@ -32,6 +32,7 @@ export async function POST(request: Request) {
       // If variant price is missing/0, fall back to the product's base unit price.
       price: nextPrice,
       stock: body?.stock != null ? Math.round(Number(body.stock)) : null,
+      order_accept_status: baseProduct.order_accept_status === "CLOSED" ? "CLOSED" : "OPEN",
       images: body?.images?.length
         ? {
             create: body.images.map((img: { image_url: string; public_id?: string | null }) => ({

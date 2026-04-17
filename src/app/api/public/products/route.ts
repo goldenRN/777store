@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
   const q = searchParams.get("q");
   const category = searchParams.get("category");
   const subcategory = searchParams.get("subcategory");
+  const brand = searchParams.get("brand");
   const discount = searchParams.get("discount") === "true";
   const random = searchParams.get("random") === "true";
   const limit = Number(searchParams.get("limit") ?? DEFAULT_LIMIT);
@@ -77,10 +78,18 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  if (brand) {
+    const id = Number(brand);
+    if (!Number.isNaN(id)) {
+      where.brand_id = id;
+    }
+  }
+
   const include = {
     type: true,
     category: true,
     subcategory: true,
+    brand: true,
     images: {
       where: { product_variant_id: null },
       orderBy: { id: "asc" as const },
@@ -128,6 +137,13 @@ export async function GET(request: NextRequest) {
       const id = Number(subcategory);
       if (!Number.isNaN(id)) {
         clauses.push(Prisma.sql`p."subcategory_id" = ${id}`);
+      }
+    }
+
+    if (brand) {
+      const id = Number(brand);
+      if (!Number.isNaN(id)) {
+        clauses.push(Prisma.sql`p."brand_id" = ${id}`);
       }
     }
 
@@ -248,6 +264,8 @@ export async function GET(request: NextRequest) {
     category_name: p.category?.category_name ?? "",
     subcategory_id: p.subcategory_id,
     subcategory_name: p.subcategory?.name ?? "",
+        brand_id: p.brand_id,
+        brand_name: p.brand?.name ?? "",
         image_url:
           p.images?.[0]?.image_url ??
           p.variants?.find((v) => v.images?.[0]?.image_url)?.images?.[0]?.image_url ??

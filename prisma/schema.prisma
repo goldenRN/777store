@@ -248,6 +248,7 @@ model AdminProduct {
   duration_hours Int?
   arrival_status String?              @default("Хүлээгдэж буй")
   cargo_fee      Int?
+  cargo_note     String?
   ordered_qty    Int                 @default(0)
   order_accept_status String?        @default("OPEN")
   category_id    Int?
@@ -288,6 +289,9 @@ model AdminProductVariant {
   price      Int?
   stock      Int?
   ordered_qty Int               @default(0)
+  order_accept_status String?   @default("OPEN")
+  cargo_fee  Int?
+  cargo_note String?
   product    AdminProduct        @relation(fields: [product_id], references: [id], onDelete: Cascade)
   images     AdminProductImage[]
   order_items AdminOrderItem[]

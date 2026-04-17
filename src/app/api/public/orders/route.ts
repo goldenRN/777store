@@ -346,6 +346,12 @@ export async function POST(request: NextRequest) {
               throw new CheckoutError(`Төрөл буруу байна: ${p.name}`, 400);
             }
             const v = vMeta.variant;
+            if ((v as any).order_accept_status === "CLOSED") {
+              throw new CheckoutError(
+                `Захиалга хаагдсан байна: ${p.name} (${getVariantLabel(v)})`,
+                409
+              );
+            }
             const stock = v.stock != null ? Number(v.stock) : null;
             if (stock != null) {
               const reserved = variantReserved.get(g.variantId) ?? 0;

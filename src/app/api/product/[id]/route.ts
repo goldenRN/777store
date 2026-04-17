@@ -47,8 +47,9 @@ export async function PUT(
     body?.cargo_fee != null && body.cargo_fee !== ""
       ? Math.round(Number(body.cargo_fee))
       : null;
+  const cargo_note = body?.cargo_note != null ? String(body.cargo_note).trim() : null;
   const order_accept_status = body?.order_accept_status
-    ? String(body.order_accept_status)
+    ? String(body.order_accept_status).toUpperCase()
     : null;
 
   if (!name) {
@@ -60,26 +61,37 @@ export async function PUT(
     select: { name: true, price: true, discount_price: true, stock: true },
   });
 
-  await prisma.adminProduct.update({
-    where: { id },
-    data: {
-      name,
-      description: description || null,
-      video_url: video_url || null,
-      price,
-      discount_price: discount_price ?? null,
-      stock,
-      material: material || null,
-      duration_hours: duration_hours ?? null,
-      arrival_status: arrival_status || undefined,
-      cargo_fee: cargo_fee ?? null,
-      order_accept_status: order_accept_status || undefined,
-      category_id: body?.category_id ? Number(body.category_id) : null,
-      subcategory_id: body?.subcategory_id ? Number(body.subcategory_id) : null,
-      brand_id: body?.brand_id ? Number(body.brand_id) : null,
-      unit_id: body?.unit_id ? Number(body.unit_id) : null,
-      type_id: body?.type_id ? Number(body.type_id) : null,
-    },
+  await prisma.$transaction(async (tx) => {
+    await tx.adminProduct.update({
+      where: { id },
+      data: {
+        name,
+        description: description || null,
+        video_url: video_url || null,
+        price,
+        discount_price: discount_price ?? null,
+        stock,
+        material: material || null,
+        duration_hours: duration_hours ?? null,
+        arrival_status: arrival_status || undefined,
+        cargo_fee: cargo_fee ?? null,
+        cargo_note: cargo_note || null,
+        order_accept_status: order_accept_status || undefined,
+        category_id: body?.category_id ? Number(body.category_id) : null,
+        subcategory_id: body?.subcategory_id ? Number(body.subcategory_id) : null,
+        brand_id: body?.brand_id ? Number(body.brand_id) : null,
+        unit_id: body?.unit_id ? Number(body.unit_id) : null,
+        type_id: body?.type_id ? Number(body.type_id) : null,
+      },
+    });
+
+    // If the main product is closed for orders, all variants must be closed as well.
+    if (order_accept_status === "CLOSED") {
+      await tx.adminProductVariant.updateMany({
+        where: { product_id: id },
+        data: { order_accept_status: "CLOSED" },
+      });
+    }
   });
 
   // replace product images (not variant images)
@@ -134,6 +146,7 @@ export async function PATCH(
     body?.cargo_fee != null && body.cargo_fee !== ""
       ? Math.round(Number(body.cargo_fee))
       : null;
+  const cargo_note = body?.cargo_note != null ? String(body.cargo_note).trim() : null;
   const order_accept_status = body?.order_accept_status
     ? String(body.order_accept_status)
     : null;
@@ -148,16 +161,27 @@ export async function PATCH(
 
   const before = await prisma.adminProduct.findUnique({
     where: { id },
-    select: { arrival_status: true, cargo_fee: true, order_accept_status: true },
+    select: { arrival_status: true, cargo_fee: true, cargo_note: true, order_accept_status: true },
   });
 
-  await prisma.adminProduct.update({
-    where: { id },
-    data: {
-      arrival_status: status || undefined,
-      cargo_fee: cargo_fee ?? null,
-      order_accept_status: order_accept_status || undefined,
-    },
+  await prisma.$transaction(async (tx) => {
+    await tx.adminProduct.update({
+      where: { id },
+      data: {
+        arrival_status: status || undefined,
+        cargo_fee: cargo_fee ?? null,
+        cargo_note: cargo_note || null,
+        order_accept_status: order_accept_status || undefined,
+      },
+    });
+
+    // If the main product is closed for orders, all variants must be closed as well.
+    if (order_accept_status === "CLOSED") {
+      await tx.adminProductVariant.updateMany({
+        where: { product_id: id },
+        data: { order_accept_status: "CLOSED" },
+      });
+    }
   });
 
   await logAdminAction({
@@ -170,6 +194,7 @@ export async function PATCH(
       after: {
         arrival_status: status || null,
         cargo_fee,
+        cargo_note,
         order_accept_status: order_accept_status || null,
       },
     },

@@ -185,6 +185,9 @@ export async function POST(request: NextRequest) {
             throw new BadRequestError(`Сонгосон төрөл энэ бараанд хамаарахгүй байна: ${p.name}`);
           }
           const v = vMeta.variant;
+          if ((v as any).order_accept_status === "CLOSED") {
+            throw new ConflictError(`Захиалга хаагдсан байна: ${p.name}`);
+          }
           const stock = v.stock != null ? Number(v.stock) : null;
           if (stock != null) {
             const reserved = variantReserved.get(g.variantId) ?? 0;

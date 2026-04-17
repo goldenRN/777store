@@ -16,12 +16,14 @@ function buildHref({
   discount,
   category,
   subcategory,
+  brand,
 }: {
   q?: string;
   type?: string;
   discount?: string;
   category?: string;
   subcategory?: string;
+  brand?: string;
 }) {
   const params = new URLSearchParams();
   if (q) params.set("q", q);
@@ -29,6 +31,7 @@ function buildHref({
   if (discount) params.set("discount", discount);
   if (category) params.set("category", category);
   if (subcategory) params.set("subcategory", subcategory);
+  if (brand) params.set("brand", brand);
   params.set("page", "1");
   const qs = params.toString();
   return `/products${qs ? `?${qs}` : ""}`;
@@ -41,6 +44,7 @@ export default function ProductsCategoryPicker({
   discount = "",
   category = "",
   subcategory = "",
+  brand = "",
 }: {
   categories: Category[];
   q?: string;
@@ -48,6 +52,7 @@ export default function ProductsCategoryPicker({
   discount?: string;
   category?: string;
   subcategory?: string;
+  brand?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -72,6 +77,7 @@ export default function ProductsCategoryPicker({
       discount: discount || undefined,
       category: nextCategory !== "all" ? nextCategory : undefined,
       subcategory: nextSubcategory !== "all" ? nextSubcategory : undefined,
+      brand: brand || undefined,
     });
     closePicker();
     router.push(href);
@@ -192,4 +198,3 @@ export default function ProductsCategoryPicker({
     </>
   );
 }
-

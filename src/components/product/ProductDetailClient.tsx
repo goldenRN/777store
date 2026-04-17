@@ -14,6 +14,7 @@ type Variant = {
   images: string[];
   price: number | null;
   stock: number | null;
+  order_accept_status?: string | null;
   ordered_qty?: number | null;
 };
 
@@ -294,11 +295,19 @@ const VariantSelector = memo(function VariantSelector({
         const vImage = v.images?.[0] || baseImageUrl || null;
         const vPrice = v.price ?? null;
         const label = getVariantDisplayLabel(v);
+        const stockNum = v.stock != null ? Number(v.stock) : null;
+        const orderedNum = Number(v.ordered_qty || 0);
+        const remaining = stockNum != null ? Math.max(0, stockNum - orderedNum) : null;
+        const closed = v.order_accept_status === "CLOSED" || (remaining != null ? remaining <= 0 : false);
         return (
           <button
             key={v.id}
             type="button"
-            onClick={() => onSelect(v.id)}
+            onClick={() => {
+              if (closed) return;
+              onSelect(v.id);
+            }}
+            disabled={closed}
             className={`w-full rounded-xl border p-3 text-left ${
               selectedVariantId === v.id ? "border-red-500" : "hover:border-[var(--accent-2)]"
             }`}
@@ -330,6 +339,9 @@ const VariantSelector = memo(function VariantSelector({
                 <div className="mt-1 text-xs font-semibold text-red-500">
                   {Number(vPrice ?? 0).toLocaleString()}₮
                 </div>
+                {closed && (
+                  <div className="mt-1 text-[10px] font-semibold text-red-600">Хаагдсан</div>
+                )}
               </div>
             </div>
           </button>
@@ -395,7 +407,9 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
     return sum > 0 ? sum : null;
   }, [product.stock, product.variants]);
 
-  const isClosed = stockNumber > 0 && remainingQty !== null && remainingQty <= 0;
+  const isClosed =
+    selectedVariant?.order_accept_status === "CLOSED" ||
+    (stockNumber > 0 && remainingQty !== null && remainingQty <= 0);
   const canAddToCart = stockNumber > 0 ? !isClosed : true;
 
   useEffect(() => {

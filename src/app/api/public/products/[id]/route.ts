@@ -36,6 +36,7 @@ export async function GET(
     id: product.id,
     name: product.name,
     description: product.description,
+    video_url: product.video_url,
     price: product.price,
     discount_price: product.discount_price,
     stock: product.stock,

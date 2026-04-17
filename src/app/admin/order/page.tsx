@@ -98,9 +98,16 @@ export default function AdminOrdersTable() {
   const [paymentMethodId, setPaymentMethodId] = useState<number | "">("");
   const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
   const [closingProductId, setClosingProductId] = useState<number | null>(null);
+  const [closingVariantId, setClosingVariantId] = useState<number | null>(null);
   const [arrivedOpen, setArrivedOpen] = useState(false);
-  const [arrivedTarget, setArrivedTarget] = useState<{ productId: number; productName: string; itemIds: number[] } | null>(null);
+  const [arrivedTarget, setArrivedTarget] = useState<{
+    productId: number;
+    productName: string;
+    variantId: number | null;
+    variantLabel: string | null;
+  } | null>(null);
   const [arrivedCargoFee, setArrivedCargoFee] = useState<string>("");
+  const [arrivedCargoNote, setArrivedCargoNote] = useState<string>("");
   const [arrivedSaving, setArrivedSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Order | null>(null);
@@ -110,6 +117,7 @@ export default function AdminOrdersTable() {
   const statusFilter = searchParams.get("status") ?? "";
   const isPending = statusFilter.toLowerCase() === "pending";
   const openOnly = searchParams.get("openOnly") === "true";
+  const pendingClosedOnly = isPending && !openOnly;
   const deletedOnly = searchParams.get("deleted") === "true";
   const isProductOnly = Boolean(statusFilter);
   const titleLabel = (() => {
@@ -365,14 +373,55 @@ export default function AdminOrdersTable() {
     }
   };
 
-  const openArrivedModal = (p: ProductSummary) => {
+  const closeVariantOrders = async (variantId: number, variantLabel: string) => {
+    if (!confirm(`“${variantLabel}” төрлийн захиалгыг хаах уу?`)) return;
+    setClosingVariantId(variantId);
+    try {
+      const res = await fetch(`/api/productvar/${variantId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...getActorHeaders(),
+        },
+        body: JSON.stringify({ order_accept_status: "CLOSED" }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json?.message || "Төрөл хааж чадсангүй");
+      }
+      await fetchProductSummary();
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : typeof err === "string" ? err : "Алдаа гарлаа";
+      alert(`⚠️ ${message}`);
+    } finally {
+      setClosingVariantId((prev) => (prev === variantId ? null : prev));
+    }
+  };
+
+  const openArrivedModalForProduct = (p: ProductSummary) => {
     if (!p.product_id) return;
     setArrivedTarget({
       productId: p.product_id,
       productName: p.product_name,
-      itemIds: Array.isArray(p.item_ids) ? p.item_ids : [],
+      variantId: null,
+      variantLabel: null,
     });
     setArrivedCargoFee("");
+    setArrivedCargoNote("");
+    setArrivedOpen(true);
+  };
+
+  const openArrivedModalForVariant = (p: ProductSummary, variantId: number, variantLabel: string) => {
+    if (!p.product_id) return;
+    setArrivedTarget({
+      productId: p.product_id,
+      productName: p.product_name,
+      variantId,
+      variantLabel,
+    });
+    setArrivedCargoFee("");
+    setArrivedCargoNote("");
     setArrivedOpen(true);
   };
 
@@ -384,29 +433,20 @@ export default function AdminOrdersTable() {
       alert("Карго үнэ зөв оруулна уу.");
       return;
     }
-    if (!arrivedTarget.itemIds.length) {
-      alert("Захиалгын мөр олдсонгүй.");
-      return;
-    }
     setArrivedSaving(true);
     try {
-      // 1) Product дээр карго хадгална + бараа ирсэн гэж тэмдэглэнэ.
-      const res1 = await fetch(`/api/product/${arrivedTarget.productId}`, {
+      const res = await fetch(`/api/orders/items/mark-arrived`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", ...getActorHeaders() },
-        body: JSON.stringify({ arrival_status: "Бараа ирсэн", cargo_fee: fee }),
+        body: JSON.stringify({
+          productId: arrivedTarget.productId,
+          variantId: arrivedTarget.variantId,
+          cargo_fee: fee,
+          cargo_note: arrivedCargoNote.trim() || null,
+        }),
       });
-      const j1 = await res1.json().catch(() => ({}));
-      if (!res1.ok) throw new Error(j1?.message || "Карго хадгалж чадсангүй");
-
-      // 2) Энэ бүтээгдэхүүнтэй холбоотой захиалгын мөрүүдийг "Бараа ирсэн" болгоно.
-      const res2 = await fetch(`/api/orders/items/bulk-status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", ...getActorHeaders() },
-        body: JSON.stringify({ itemIds: arrivedTarget.itemIds, status: "Бараа ирсэн" }),
-      });
-      const j2 = await res2.json().catch(() => ({}));
-      if (!res2.ok) throw new Error(j2?.message || "Төлөв шинэчилж чадсангүй");
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.message || "Хадгалж чадсангүй");
 
       setArrivedOpen(false);
       setArrivedTarget(null);
@@ -640,9 +680,9 @@ export default function AdminOrdersTable() {
                             <Lock size={16} />
                           </button>
                         ) : null}
-                        {isPending && p.product_id != null ? (
+                        {isPending && !openOnly && p.product_id != null && (!p.variants || p.variants.length === 0) ? (
                           <button
-                            onClick={() => openArrivedModal(p)}
+                            onClick={() => openArrivedModalForProduct(p)}
                             className="h-9 w-9 rounded border bg-white flex items-center justify-center hover:bg-gray-50 disabled:opacity-50"
                             title="Бараа ирсэн"
                             disabled={arrivedSaving}
@@ -673,6 +713,8 @@ export default function AdminOrdersTable() {
                                   <th className="px-3 py-2 text-left">Захиалга авах тоо</th>
                                   <th className="px-3 py-2 text-left">Үлдэгдэл</th>
                                   <th className="px-3 py-2 text-left">Төлөв</th>
+                                  {openOnly && isPending ? <th className="px-3 py-2 text-left">Үйлдэл</th> : null}
+                                  {pendingClosedOnly ? <th className="px-3 py-2 text-left">Карго</th> : null}
                                 </tr>
                               </thead>
                               <tbody>
@@ -688,9 +730,35 @@ export default function AdminOrdersTable() {
                                           v.closed ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"
                                         }`}
                                       >
-                                        {v.closed ? "Дууссан" : "Нээлттэй"}
+                                        {v.closed ? "Хаагдсан" : "Нээлттэй"}
                                       </span>
                                     </td>
+                                    {openOnly && isPending ? (
+                                      <td className="px-3 py-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => closeVariantOrders(v.variant_id, v.label)}
+                                          className="h-7 w-7 rounded border bg-white inline-flex items-center justify-center text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                          title="Захиалга хаах"
+                                          disabled={v.closed || closingVariantId === v.variant_id}
+                                        >
+                                          <Lock size={14} />
+                                        </button>
+                                      </td>
+                                    ) : null}
+                                    {pendingClosedOnly ? (
+                                      <td className="px-3 py-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => openArrivedModalForVariant(p, v.variant_id, v.label)}
+                                          className="h-7 w-7 rounded border bg-white inline-flex items-center justify-center hover:bg-gray-50 disabled:opacity-50"
+                                          title="Карго оруулах"
+                                          disabled={arrivedSaving}
+                                        >
+                                          <PackageCheck size={14} />
+                                        </button>
+                                      </td>
+                                    ) : null}
                                   </tr>
                                 ))}
                               </tbody>
@@ -1219,6 +1287,9 @@ export default function AdminOrdersTable() {
         <div className="space-y-4">
           <div className="text-sm text-gray-700">
             <div className="font-semibold">{arrivedTarget?.productName ?? "Бараа"}</div>
+            {arrivedTarget?.variantLabel ? (
+              <div className="text-xs text-gray-600">Төрөл: {arrivedTarget.variantLabel}</div>
+            ) : null}
             <div className="text-xs text-gray-500">Карго үнэ оруулаад хадгална.</div>
           </div>
           <div>
@@ -1230,6 +1301,15 @@ export default function AdminOrdersTable() {
               onChange={(e) => setArrivedCargoFee(e.target.value)}
               className="mt-1 w-full border rounded px-3 py-2"
               placeholder="Ж: 12000"
+            />
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Тайлбар</label>
+            <textarea
+              value={arrivedCargoNote}
+              onChange={(e) => setArrivedCargoNote(e.target.value)}
+              className="mt-1 w-full border rounded px-3 py-2 min-h-[88px]"
+              placeholder="Ж: Карго 2 багц, 4/20-нд ирнэ гэх мэт"
             />
           </div>
           <div className="flex justify-end gap-2">

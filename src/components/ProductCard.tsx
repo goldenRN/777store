@@ -30,6 +30,7 @@ type Variant = {
   price?: number | null;
   stock?: number | null;
   ordered_qty?: number | null;
+  order_accept_status?: string | null;
   images?: { image_url: string }[];
 };
 
@@ -128,7 +129,7 @@ export default function ProductCard({
     <div className="flex flex-col rounded-3xl border border-[#e5e7eb] bg-white shadow-sm">
       <div className="relative">
         {discountPercent !== null && (
-          <div className="absolute right-4 top-4 rounded-lg bg-red-500 px-3 py-2 text-xs font-bold text-white">
+          <div className="absolute left-3 top-3 z-10 flex h-5 w-15 items-center justify-center rounded-full border-2 border-red-500 bg-red-500 text-sm font-extrabold text-white">
             -{discountPercent}%
           </div>
         )}
@@ -137,7 +138,7 @@ export default function ProductCard({
         </div> */}
         <Link
           href={`/product/${id}`}
-          className="relative flex h-[260px] w-full items-center justify-center overflow-hidden rounded-2xl bg-white"
+          className="relative flex h-[260px] w-full items-center justify-center overflow-hidden rounded-t-2xl rounded-b-none bg-[#f3f4f6]"
         >
           {resolvedImage && !imgError ? (
             <Image
@@ -260,13 +261,14 @@ export default function ProductCard({
                   const vPrice = v.price != null ? Number(v.price) : finalPrice;
                   const vStock = Number(v.stock || 0);
                   const vRemaining = vStock > 0 ? Math.max(0, vStock - Number(v.ordered_qty || 0)) : null;
-                  const vClosed = vStock > 0 && vRemaining != null && vRemaining <= 0;
+                  const vStatusClosed = v.order_accept_status === "CLOSED";
+                  const vClosed = vStatusClosed || (vStock > 0 && vRemaining != null && vRemaining <= 0);
                   return (
                     <button
                       key={v.id}
                       onClick={() => {
                         if (vClosed) {
-                          toast({ title: "Захиалах тоо дууссан байна" });
+                          toast({ title: vStatusClosed ? "Захиалга хаагдсан байна" : "Захиалах тоо дууссан байна" });
                           return;
                         }
                         handleSelectVariant(v);

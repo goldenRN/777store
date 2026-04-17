@@ -24,6 +24,7 @@ type ProductDetail = {
       images: string[];
       price: number | null;
       stock: number | null;
+      order_accept_status?: string | null;
       ordered_qty?: number | null;
     }[];
   category_id: number | null;
@@ -196,6 +197,7 @@ const fetchProduct = async (id: string): Promise<ProductDetail | null> => {
         images: v.images?.map((img) => img.image_url) ?? [],
         price: v.price ?? null,
         stock: v.stock ?? null,
+        order_accept_status: (v as any).order_accept_status ?? null,
         ordered_qty: (confirmedMap.get(v.id) ?? 0) + (inferredMap.get(v.id) ?? 0),
       })) ?? [],
     category_id: product.category_id ?? null,

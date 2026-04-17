@@ -5,6 +5,7 @@ import ProductCard from "@/components/ProductCard";
 import OrderProductsSlider from "@/components/OrderProductsSlider";
 import HomeAllProducts from "@/components/HomeAllProducts";
 import { headers } from "next/headers";
+import Link from "next/link";
 
 type PublicProduct = {
   id: number;
@@ -39,6 +40,8 @@ type Category = {
   category_name: string;
   category_image: string | null;
 };
+
+type Brand = { id: number; name: string; image_url: string | null };
 
 const getBaseUrl = async () => {
   const raw = process.env.NEXT_PUBLIC_API_URL?.trim();
@@ -75,6 +78,24 @@ const fetchPromo = async () => {
   return (await res.json()) as Promo;
 };
 
+const fetchBrands = async () => {
+  const base = await getBaseUrl();
+  const res = await fetch(`${base}/api/brand`, { cache: "no-store" });
+  if (!res.ok) return [] as Brand[];
+  const data = (await res.json()) as unknown[];
+  if (!Array.isArray(data)) return [] as Brand[];
+  return data
+    .map((item) => {
+      const b = item as Record<string, unknown>;
+      return {
+        id: Number(b.id),
+        name: String(b.name ?? ""),
+        image_url: b.image_url ? String(b.image_url) : null,
+      };
+    })
+    .filter((b) => Number.isFinite(b.id) && b.name.trim().length > 0);
+};
+
 const fetchProducts = async (params: Record<string, string | number | boolean | undefined>) => {
   const base = await getBaseUrl();
   const searchParams = new URLSearchParams();
@@ -100,9 +121,10 @@ export default async function Home() {
     if (url.startsWith("/")) return url;
     return `/uploads/${url}`;
   };
-  const [categories, promo, readyRes, preorderRes, liveRes, discountRes, allRes] = await Promise.all([
+  const [categories, promo, brands, readyRes, preorderRes, liveRes, discountRes, allRes] = await Promise.all([
     fetchCategories(),
     fetchPromo(),
+    fetchBrands(),
     fetchProducts({ type: "ready", limit: 8 }),
     fetchProducts({ type: "preorder", limit: 200 }),
     fetchProducts({ type: "live", limit: 200 }),
@@ -292,6 +314,39 @@ export default async function Home() {
 
 
         <HomeAllProducts products={allProducts} categories={categories} initialTotal={allTotal} />
+
+        {brands.length > 0 && (
+          <section className="pb-10 pt-6">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-xl font-extrabold text-[var(--navy-900)]">Брэндүүд</h2>
+              <Link href="/products" className="text-xs font-semibold text-[var(--accent-2)]">
+                Бүгдийг харах
+              </Link>
+            </div>
+            <div className="flex gap-3 overflow-x-auto pb-2">
+              {brands.map((b) => (
+                <Link
+                  key={b.id}
+                  href={`/products?${new URLSearchParams({ brand: String(b.id), page: "1" }).toString()}`}
+                  className="flex min-w-[140px] flex-col items-center gap-2 rounded-2xl border border-[var(--gray-200)] bg-white px-4 py-4 shadow-sm hover:bg-[var(--sky-100)]"
+                  title={b.name}
+                >
+                  <div className="h-14 w-14 overflow-hidden rounded-full border bg-[var(--sky-50)]">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={b.image_url ? resolveImageUrl(b.image_url) : "/logo.png"}
+                      alt={b.name}
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                  <div className="w-full truncate text-center text-sm font-semibold text-[var(--navy-900)]">
+                    {b.name}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
       </main>
 
       <Footer />

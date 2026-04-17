@@ -28,6 +28,12 @@ type StoredUser = {
   avatarUrl?: string;
 };
 
+type Brand = {
+  id: number;
+  name: string;
+  image_url: string | null;
+};
+
 export default function Header() {
   const [categoryOpen, setCategoryOpen] = useState(false);
   const { count } = useCart();
@@ -45,6 +51,7 @@ export default function Header() {
   const [categories, setCategories] = useState<
     { category_id: number; category_name: string; subcategories: { id: number; name: string }[] }[]
   >([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
   const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -59,6 +66,13 @@ export default function Header() {
       .then((r) => r.json())
       .then((data) => setStoreInfo(data))
       .catch(() => null);
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/brand")
+      .then((r) => r.json())
+      .then((data) => setBrands(Array.isArray(data) ? data : []))
+      .catch(() => setBrands([]));
   }, []);
 
   useEffect(() => {
@@ -384,6 +398,54 @@ export default function Header() {
                       <div className="text-sm text-[var(--gray-400)]">Дэд ангилал байхгүй</div>
                     )}
                   </div>
+
+                  {brands.length > 0 && (
+                    <div className="mt-6 border-t pt-4">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-bold text-[var(--navy-900)]">Брэндүүд</div>
+                        <Link
+                          href="/products"
+                          onClick={() => setCategoryOpen(false)}
+                          className="text-xs font-semibold text-[var(--accent-2)] hover:underline"
+                        >
+                          Бүгд
+                        </Link>
+                      </div>
+                      <div className="mt-3 flex gap-3 overflow-x-auto pb-2">
+                        {brands.slice(0, 20).map((b) => (
+                          <Link
+                            key={b.id}
+                            href={`/products?${new URLSearchParams({
+                              ...(activeCategory?.category_id
+                                ? { category: String(activeCategory.category_id) }
+                                : {}),
+                              brand: String(b.id),
+                              page: "1",
+                            }).toString()}`}
+                            onClick={() => setCategoryOpen(false)}
+                            className="flex min-w-[180px] items-center gap-3 rounded-2xl border border-[var(--gray-200)] bg-white px-4 py-3 shadow-sm hover:bg-[var(--sky-100)]"
+                            title={b.name}
+                          >
+                            <div className="h-10 w-10 overflow-hidden rounded-xl border bg-[var(--sky-50)]">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={b.image_url || "/logo.png"}
+                                alt={b.name}
+                                className="h-full w-full object-cover"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLImageElement).src = "/logo.png";
+                                }}
+                              />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-semibold text-[var(--navy-900)]">{b.name}</div>
+                              <div className="text-[10px] text-[var(--gray-500)]">Брэнд</div>
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

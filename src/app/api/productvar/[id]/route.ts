@@ -134,6 +134,16 @@ export async function PUT(
   }
 
   const body = await request.json();
+  const nextOrderAcceptStatusRaw =
+    Object.prototype.hasOwnProperty.call(body ?? {}, "order_accept_status") ? body?.order_accept_status : undefined;
+  const nextOrderAcceptStatus =
+    nextOrderAcceptStatusRaw == null || nextOrderAcceptStatusRaw === ""
+      ? null
+      : String(nextOrderAcceptStatusRaw).toUpperCase();
+  if (nextOrderAcceptStatus && !["OPEN", "CLOSED"].includes(nextOrderAcceptStatus)) {
+    return NextResponse.json({ message: "Invalid order_accept_status" }, { status: 400 });
+  }
+
   const updated = await prisma.$transaction(async (tx) => {
     const exists = await tx.adminProductVariant.findUnique({ where: { id } });
     if (!exists) {
@@ -147,25 +157,40 @@ export async function PUT(
       baseProduct && baseProduct.discount_price != null && baseProduct.discount_price > 0
         ? baseProduct.discount_price
         : baseProduct?.price;
-    const rawPrice = body?.price;
+    const shouldUpdatePrice = Object.prototype.hasOwnProperty.call(body ?? {}, "price");
+    const rawPrice = shouldUpdatePrice ? body?.price : undefined;
     const parsedPrice = rawPrice === "" || rawPrice == null ? null : Math.round(Number(rawPrice));
-    const nextPrice =
-      parsedPrice != null && Number.isFinite(parsedPrice) && parsedPrice > 0
+    const nextPrice = shouldUpdatePrice
+      ? parsedPrice != null && Number.isFinite(parsedPrice) && parsedPrice > 0
         ? parsedPrice
-        : baseUnitPrice ?? null;
+        : baseUnitPrice ?? null
+      : exists.price ?? null;
+
+    const nextSku = Object.prototype.hasOwnProperty.call(body ?? {}, "sku") ? (body?.sku ?? null) : exists.sku ?? null;
+    const nextAttribute = Object.prototype.hasOwnProperty.call(body ?? {}, "attribute")
+      ? (body?.attribute ?? null)
+      : exists.attribute ?? null;
+    const nextStock = Object.prototype.hasOwnProperty.call(body ?? {}, "stock")
+      ? body?.stock != null
+        ? Math.round(Number(body.stock))
+        : null
+      : exists.stock ?? null;
+    const nextOrderAcceptStatusFinal =
+      nextOrderAcceptStatusRaw !== undefined ? nextOrderAcceptStatus : (exists as any).order_accept_status ?? null;
 
     const next = await tx.adminProductVariant.update({
       where: { id },
       data: {
-        sku: body?.sku ?? null,
-        attribute: body?.attribute ?? null,
+        sku: nextSku,
+        attribute: nextAttribute,
         // If variant price is missing/0, fall back to the product's base unit price.
         price: nextPrice,
-        stock: body?.stock != null ? Math.round(Number(body.stock)) : null,
+        stock: nextStock,
+        ...(nextOrderAcceptStatusRaw !== undefined ? { order_accept_status: nextOrderAcceptStatusFinal } : {}),
       },
     });
 
-    if (Array.isArray(body?.images)) {
+    if (Object.prototype.hasOwnProperty.call(body ?? {}, "images") && Array.isArray(body?.images)) {
       await tx.adminProductImage.deleteMany({
         where: { product_variant_id: id },
       });
