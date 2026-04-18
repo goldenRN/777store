@@ -76,7 +76,7 @@ const fetchCategories = async () => {
 
 const fetchBrands = async () => {
   const base = await getBaseUrl();
-  const res = await fetch(`${base}/api/brand`, { cache: "no-store" });
+  const res = await fetch(`${base}/api/brand?withProducts=true`, { cache: "no-store" });
   if (!res.ok) return [] as Brand[];
   const data = (await res.json()) as unknown[];
   if (!Array.isArray(data)) return [] as Brand[];
@@ -275,14 +275,11 @@ export default async function ProductsPage({
                 >
                   <div className="h-12 w-12 overflow-hidden rounded-xl border bg-[var(--sky-50)]">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={b.image_url || "/logo.png"}
-                      alt={b.name}
-                      className="h-full w-full object-cover"
-                      onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).src = "/logo.png";
-                      }}
-                    />
+                      <img
+                        src={b.image_url || "/logo.png"}
+                        alt={b.name}
+                        className="h-full w-full object-cover"
+                      />
                   </div>
                   <div className="min-w-0">
                     <div className="truncate text-sm font-semibold text-[var(--navy-900)]">

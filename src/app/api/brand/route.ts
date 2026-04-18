@@ -1,10 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { saveFile } from "@/lib/upload";
 import { logAdminAction } from "@/lib/audit";
 
-export async function GET() {
-  const list = await prisma.adminBrand.findMany({ orderBy: { id: "asc" } });
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const withProducts = searchParams.get("withProducts") === "true";
+  const list = await prisma.adminBrand.findMany({
+    where: withProducts ? { products: { some: {} } } : undefined,
+    orderBy: { id: "asc" },
+  });
   return NextResponse.json(
     list.map((b) => ({
       id: b.id,

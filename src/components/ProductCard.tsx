@@ -7,6 +7,7 @@ import { useCart } from "@/components/cart/CartProvider";
 import { getVariantLabel } from "@/lib/variantLabel";
 import { useEffect, useState } from "react";
 import { toast } from "@/components/ui/use-toast";
+import DiscountBadge from "@/components/DiscountBadge";
 
 type ProductCardProps = {
   id: number;
@@ -126,19 +127,15 @@ export default function ProductCard({
   }, [variantOpen]);
 
   return (
-    <div className="flex flex-col rounded-3xl border border-[#e5e7eb] bg-white shadow-sm">
+    <div className="flex flex-col rounded-3xl border border-[#e5e7eb] bg-[#f3f4f6] shadow-sm">
       <div className="relative">
-        {discountPercent !== null && (
-          <div className="absolute left-3 top-3 z-10 flex h-5 w-15 items-center justify-center rounded-full border-2 border-red-500 bg-red-500 text-sm font-extrabold text-white">
-            -{discountPercent}%
-          </div>
-        )}
+        <DiscountBadge percent={discountPercent} />
         {/* <div className="absolute right-4 top-4 text-[10px] font-bold text-[var(--navy-900)]">
           VMLC
         </div> */}
         <Link
           href={`/product/${id}`}
-          className="relative flex h-[260px] w-full items-center justify-center overflow-hidden rounded-t-2xl rounded-b-none bg-[#f3f4f6]"
+          className="relative flex h-[260px] w-full items-center justify-center overflow-hidden rounded-t-2xl rounded-b-none bg-white"
         >
           {resolvedImage && !imgError ? (
             <Image

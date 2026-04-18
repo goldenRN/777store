@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
   const category = searchParams.get("category");
   const subcategory = searchParams.get("subcategory");
   const brand = searchParams.get("brand");
+  const brandOnly = searchParams.get("brandOnly") === "true";
   const discount = searchParams.get("discount") === "true";
   const random = searchParams.get("random") === "true";
   const limit = Number(searchParams.get("limit") ?? DEFAULT_LIMIT);
@@ -83,6 +84,8 @@ export async function GET(request: NextRequest) {
     if (!Number.isNaN(id)) {
       where.brand_id = id;
     }
+  } else if (brandOnly) {
+    where.brand_id = { not: null };
   }
 
   const include = {
@@ -145,6 +148,8 @@ export async function GET(request: NextRequest) {
       if (!Number.isNaN(id)) {
         clauses.push(Prisma.sql`p."brand_id" = ${id}`);
       }
+    } else if (brandOnly) {
+      clauses.push(Prisma.sql`p."brand_id" IS NOT NULL`);
     }
 
     if (type) {
