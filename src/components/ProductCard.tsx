@@ -9,7 +9,7 @@ import { getVariantLabel } from "@/lib/variantLabel";
 import { useEffect, useState } from "react";
 import { toast } from "@/components/ui/use-toast";
 import DiscountBadge from "@/components/DiscountBadge";
-import { isExternalMediaUrl, resolveMediaUrl } from "@/lib/media";
+import { resolveMediaUrl } from "@/lib/media";
 
 type ProductCardProps = {
   id: number;
@@ -163,7 +163,7 @@ export default function ProductCard({
               fill
               className="object-contain"
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-              unoptimized={isExternalMediaUrl(image_url)}
+              unoptimized
               quality={70}
               onError={() => setImgError(true)}
             />

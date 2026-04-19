@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { isExternalMediaUrl, resolveMediaUrl } from "@/lib/media";
+import { resolveMediaUrl } from "@/lib/media";
 
 type Banner = {
   id: number;
@@ -58,7 +58,7 @@ export default function BannerSlider({ banners, intervalMs = 5000 }: BannerSlide
           priority
           sizes="100vw"
           quality={70}
-          unoptimized={isExternalMediaUrl(current.image_url || FALLBACK_IMAGE)}
+          unoptimized
         />
         <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-transparent" />
       </div>
