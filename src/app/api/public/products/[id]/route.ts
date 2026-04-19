@@ -39,6 +39,7 @@ export async function GET(
     video_url: product.video_url,
     price: product.price,
     discount_price: product.discount_price,
+    bulk_prices: (product as any).bulk_prices ?? null,
     stock: product.stock,
     material: product.material,
     duration_hours: product.duration_hours,

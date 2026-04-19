@@ -243,7 +243,9 @@ model AdminProduct {
   video_url      String?
   price          Int
   discount_price Int?
+  bulk_prices    Json?
   stock          Int
+  arrived_qty    Int?
   material       String?
   duration_hours Int?
   arrival_status String?              @default("Хүлээгдэж буй")
@@ -288,6 +290,7 @@ model AdminProductVariant {
   attribute  Json?
   price      Int?
   stock      Int?
+  arrived_qty Int?
   ordered_qty Int               @default(0)
   order_accept_status String?   @default("OPEN")
   cargo_fee  Int?
@@ -316,6 +319,12 @@ model AdminOrder {
   delivery_name String?
   delivery_phone String?
   delivery_address String?
+  delivery_district_id Int?
+  delivery_district_name String?
+  delivery_khoroo_id Int?
+  delivery_khoroo_name String?
+  delivery_zone String?
+  delivery_fee Int            @default(0)
   qpay_invoice_id String?
   qpay_payment_id String?
   qpay_sender_invoice_no String?
@@ -336,6 +345,26 @@ model AdminOrder {
   deleted_reason String?
   created_at DateTime         @default(now())
   updated_at DateTime         @updatedAt
+}
+
+model AdminDeliveryDistrict {
+  id         Int      @id @default(autoincrement())
+  name       String
+  sort_order Int      @default(0)
+  khoroos    AdminDeliveryKhoroo[]
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+model AdminDeliveryKhoroo {
+  id          Int      @id @default(autoincrement())
+  district_id Int
+  name        String
+  zone        String   @default("Ойр")
+  fee         Int      @default(0)
+  district    AdminDeliveryDistrict @relation(fields: [district_id], references: [id], onDelete: Cascade)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
 }
 
 model AdminPaymentMethod {

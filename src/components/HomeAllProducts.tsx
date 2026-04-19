@@ -171,6 +171,7 @@ export default function HomeAllProducts({
                 description={item.description}
                 price={item.price}
                 discount_price={item.discount_price}
+                bulk_prices={(item as any).bulk_prices ?? null}
                 stock={item.stock}
                 ordered_qty={item.ordered_qty}
                 image_url={item.image_url}

@@ -15,6 +15,7 @@ type ProductCardProps = {
   description?: string | null;
   price: number;
   discount_price: number | null;
+  bulk_prices?: unknown | null;
   stock?: number | null;
   ordered_qty?: number | null;
   image_url: string | null;
@@ -41,6 +42,7 @@ export default function ProductCard({
   description,
   price,
   discount_price,
+  bulk_prices,
   stock,
   ordered_qty,
   image_url,
@@ -91,13 +93,29 @@ export default function ProductCard({
       const list = Array.isArray(json) ? (json as Variant[]) : [];
       setVariants(list);
       if (list.length === 0) {
-        addItem({ id, name, price: finalPrice, image_url, type_name });
+        addItem({
+          id,
+          name,
+          price: finalPrice,
+          base_price: finalPrice,
+          bulk_prices: bulk_prices ?? null,
+          image_url,
+          type_name,
+        });
       } else {
         setVariantOpen(true);
       }
     } catch {
       setVariantError("Төрөл мэдээлэл уншиж чадсангүй");
-      addItem({ id, name, price: finalPrice, image_url, type_name });
+      addItem({
+        id,
+        name,
+        price: finalPrice,
+        base_price: finalPrice,
+        bulk_prices: bulk_prices ?? null,
+        image_url,
+        type_name,
+      });
     } finally {
       setVariantLoading(false);
     }
@@ -106,10 +124,13 @@ export default function ProductCard({
   const handleSelectVariant = (v: Variant) => {
     const vPrice = v.price != null ? Number(v.price) : finalPrice;
     const vImage = v.images?.[0]?.image_url || image_url;
+    const applyBulk = !(v.price != null && Number(v.price) > 0);
     addItem({
       id,
       name,
       price: vPrice,
+      base_price: vPrice,
+      bulk_prices: applyBulk ? (bulk_prices ?? null) : null,
       image_url: vImage || null,
       type_name,
       variant_id: v.id,
@@ -127,11 +148,12 @@ export default function ProductCard({
   }, [variantOpen]);
 
   return (
-    <div className="flex flex-col rounded-3xl border border-[#e5e7eb] bg-[#f3f4f6] shadow-sm">
+    <div className="flex flex-col rounded-3xl border border-[#e5e7eb] bg-slate-50 shadow-sm">
       <div className="relative">
         <DiscountBadge percent={discountPercent} />
         {/* <div className="absolute right-4 top-4 text-[10px] font-bold text-[var(--navy-900)]">
           VMLC
+          "
         </div> */}
         <Link
           href={`/product/${id}`}

@@ -12,6 +12,7 @@ type ProductDetail = {
   video_url?: string | null;
   price: number;
   discount_price: number | null;
+  bulk_prices?: unknown | null;
   stock: number;
   ordered_qty?: number | null;
   material: string | null;
@@ -43,6 +44,7 @@ type RelatedProduct = {
   description: string | null;
   price: number;
   discount_price: number | null;
+  bulk_prices?: unknown | null;
   stock?: number | null;
   ordered_qty?: number | null;
   image_url: string | null;
@@ -184,6 +186,7 @@ const fetchProduct = async (id: string): Promise<ProductDetail | null> => {
     video_url: product.video_url ?? null,
     price: product.price,
     discount_price: product.discount_price,
+    bulk_prices: (product as any).bulk_prices ?? null,
     stock: product.stock,
     ordered_qty: totalOrdered,
     material: product.material,
@@ -299,6 +302,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     description: p.description,
     price: p.price,
     discount_price: p.discount_price,
+    bulk_prices: (p as any).bulk_prices ?? null,
     stock: p.stock,
     ordered_qty: p.ordered_qty,
     image_url: p.images?.[0]?.image_url ?? null,
@@ -321,18 +325,19 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 <ProductCard
                   key={item.id}
                   id={item.id}
-                name={item.name}
-                description={item.description}
-                price={item.price}
-                discount_price={item.discount_price}
-                stock={item.stock}
-                ordered_qty={item.ordered_qty}
-                image_url={item.image_url}
-                type_name={item.type_name}
-                type_has_duration={item.type_has_duration}
-                duration_hours={item.duration_hours}
-                created_at={item.created_at}
-              />
+                  name={item.name}
+                  description={item.description}
+                  price={item.price}
+                  discount_price={item.discount_price}
+                  bulk_prices={(item as any).bulk_prices ?? null}
+                  stock={item.stock}
+                  ordered_qty={item.ordered_qty}
+                  image_url={item.image_url}
+                  type_name={item.type_name}
+                  type_has_duration={item.type_has_duration}
+                  duration_hours={item.duration_hours}
+                  created_at={item.created_at}
+                />
               ))}
             </div>
           </section>

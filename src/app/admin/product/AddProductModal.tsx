@@ -1,6 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import Image from "next/image";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import type { AxiosError } from "axios";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,13 +11,33 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import axios from "axios";
 import { getActorHeaders } from "@/lib/actorHeaders";
+import { normalizeBulkTiers } from "@/lib/bulkPricing";
+import { Trash2 } from "lucide-react";
 
 interface AddProductModalProps {
     open: boolean;
     onClose: () => void;
     onRefresh: () => void;
-    editData?: any | null;
+    editData?: EditableProduct | null;
     initialType?: "ready" | "preorder" | "live" | null;
+}
+
+interface NamedOption {
+    id: number;
+    name: string;
+}
+
+interface CategoryOption {
+    category_id: number;
+    category_name: string;
+}
+
+interface SubCategoryOption extends NamedOption {
+    category_id: number;
+}
+
+interface TypeOption extends NamedOption {
+    has_duration?: boolean | null;
 }
 
 interface UploadFile {
@@ -26,13 +48,78 @@ interface UploadFile {
     progress?: number;
 }
 
+type BulkTier = { min_qty: string; price: string };
+
+interface ProductFormState {
+    name: string;
+    description: string;
+    video_url: string;
+    price: string;
+    discount_price: string;
+    bulk_prices: BulkTier[];
+    stock: string;
+    material: string;
+    duration_hours: string;
+    category_id: string;
+    category_name: string;
+    subcategory_id: string;
+    subcategory_name: string;
+    brand_id: string;
+    brand_name: string;
+    unit_id: string;
+    unit_name: string;
+    type_id: string;
+    type_name: string;
+    type_has_duration: boolean;
+    images: UploadFile[];
+}
+
+type BulkTierValue = { min_qty?: number | string | null; price?: number | string | null };
+
+interface EditableProduct {
+    id: number;
+    name?: string | null;
+    description?: string | null;
+    video_url?: string | null;
+    price?: number | string | null;
+    discount_price?: number | string | null;
+    bulk_prices?: BulkTierValue[] | null;
+    stock?: number | string | null;
+    material?: string | null;
+    duration_hours?: number | string | null;
+    category_id?: number | string | null;
+    category_name?: string | null;
+    subcategory_id?: number | string | null;
+    subcategory_name?: string | null;
+    brand_id?: number | string | null;
+    brand_name?: string | null;
+    unit_id?: number | string | null;
+    unit_name?: string | null;
+    type_id?: number | string | null;
+    type_name?: string | null;
+    type_has_duration?: boolean | null;
+}
+
+interface ProductImageResponse {
+    image_url: string;
+    public_id?: string | null;
+}
+
+interface UploadResponse {
+    images: {
+        imageUrl: string;
+        public_id: string;
+    }[];
+}
+
 export default function AddProductModal({ open, onClose, onRefresh, editData, initialType }: AddProductModalProps) {
-    const [form, setForm] = useState({
+    const [form, setForm] = useState<ProductFormState>({
         name: "",
         description: "",
         video_url: "",
         price: "",
         discount_price: "",
+        bulk_prices: [] as BulkTier[],
         stock: "",
         material: "",
         duration_hours: "",
@@ -50,18 +137,19 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
         images: [] as UploadFile[],
     });
 
-    const [categories, setCategories] = useState<any[]>([]);
-    const [allSubCategories, setAllSubCategories] = useState<any[]>([]);
-    const [subCategories, setSubCategories] = useState<any[]>([]);
-    const [brands, setBrands] = useState<any[]>([]);
-    const [units, setUnits] = useState<any[]>([]);
-    const [types, setTypes] = useState<any[]>([]);
+    const [categories, setCategories] = useState<CategoryOption[]>([]);
+    const [allSubCategories, setAllSubCategories] = useState<SubCategoryOption[]>([]);
+    const [subCategories, setSubCategories] = useState<SubCategoryOption[]>([]);
+    const [brands, setBrands] = useState<NamedOption[]>([]);
+    const [units, setUnits] = useState<NamedOption[]>([]);
+    const [types, setTypes] = useState<TypeOption[]>([]);
     const [loading, setLoading] = useState(false);
     const [discountMode, setDiscountMode] = useState<"percent" | "amount">("percent");
     const [discountInput, setDiscountInput] = useState("");
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const [productMode, setProductMode] = useState<"ready" | "preorder" | "live" | null>(null);
     const [forceReadyEdit, setForceReadyEdit] = useState(false);
+    const [showImagePanel, setShowImagePanel] = useState(true);
 
     const priceNumber = Number(form.price) || 0;
     const discountInputNumber = Number(discountInput) || 0;
@@ -104,16 +192,30 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
             setForm((prev) => ({
                 ...prev,
                 ...editData,
+                name: editData.name?.toString() || "",
+                description: editData.description?.toString() || "",
                 price: editData.price?.toString() || "",
                 video_url: editData.video_url?.toString() || "",
                 discount_price: editData.discount_price?.toString() || "",
+                bulk_prices: Array.isArray(editData.bulk_prices)
+                  ? editData.bulk_prices.map((t) => ({
+                      min_qty: String(t?.min_qty ?? ""),
+                      price: String(t?.price ?? ""),
+                    }))
+                  : [],
                 stock: editData.stock?.toString() || "",
                 material: editData.material?.toString() || "",
                 duration_hours: editData.duration_hours?.toString() || "",
                 category_id: editData.category_id?.toString() || "",
+                category_name: editData.category_name?.toString() || "",
+                subcategory_id: editData.subcategory_id?.toString() || "",
+                subcategory_name: editData.subcategory_name?.toString() || "",
                 brand_id: editData.brand_id?.toString() || "",
+                brand_name: editData.brand_name?.toString() || "",
                 unit_id: editData.unit_id?.toString() || "",
+                unit_name: editData.unit_name?.toString() || "",
                 type_id: editData.type_id?.toString() || "",
+                type_name: editData.type_name?.toString() || "",
                 type_has_duration: Boolean(editData.type_has_duration),
                 images: [],
             }));
@@ -132,10 +234,10 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
             axios
                 .get(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/productimg/${editData.id}`)
                 .then((res) => {
-                    const imgs = res.data.map((i: any) => ({
+                    const imgs = (res.data as ProductImageResponse[]).map((i) => ({
                         preview: i.image_url,
                         uploadedUrl: i.image_url,
-                        public_id: i.public_id,
+                        public_id: i.public_id ?? undefined,
                     }));
                     setForm((prev) => ({ ...prev, images: imgs }));
                 })
@@ -166,7 +268,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
         });
     }, [open]);
 
-    const findTypeByKind = (kind: "ready" | "preorder" | "live") => {
+    const findTypeByKind = useCallback((kind: "ready" | "preorder" | "live") => {
         if (kind === "ready") {
             return types.find(
                 (tp) => String(tp.name).toLowerCase().includes("бэлэн") || String(tp.name).toLowerCase().includes("ready")
@@ -184,7 +286,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
         return types.find(
             (tp) => String(tp.name).toLowerCase().includes("лайв") || String(tp.name).toLowerCase().includes("live")
         );
-    };
+    }, [types]);
 
     // 🟢 Types ачаалсаны дараа сонгосон mode-д таарах type-г автоматаар сонгоно
     useEffect(() => {
@@ -198,7 +300,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                 type_has_duration: Boolean(selected.has_duration),
             }));
         }
-    }, [productMode, types, form.type_id]);
+    }, [findTypeByKind, productMode, form.type_id, types.length]);
 
     // 🟢 URL-аас ирсэн type дээр үндэслэн шинэ бараа нэмэхэд автоматаар сонгоно
     useEffect(() => {
@@ -222,7 +324,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                 type_has_duration: Boolean(selected.has_duration),
             }));
         }
-    }, [open, editData, initialType, form.type_id, types]);
+    }, [findTypeByKind, open, editData, initialType, form.type_id, types.length]);
 
     const resetForm = () => {
         setForm({
@@ -231,6 +333,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
             video_url: "",
             price: "",
             discount_price: "",
+            bulk_prices: [],
             stock: "",
             material: "",
             duration_hours: "",
@@ -249,6 +352,27 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
         });
         setDiscountMode("percent");
         setDiscountInput("");
+    };
+
+    const addTier = () => {
+        setForm((prev) => ({
+            ...prev,
+            bulk_prices: [...(prev.bulk_prices || []), { min_qty: "", price: "" }],
+        }));
+    };
+
+    const removeTier = (idx: number) => {
+        setForm((prev) => ({
+            ...prev,
+            bulk_prices: (prev.bulk_prices || []).filter((_, i) => i !== idx),
+        }));
+    };
+
+    const updateTier = (idx: number, field: keyof BulkTier, value: string) => {
+        setForm((prev) => ({
+            ...prev,
+            bulk_prices: (prev.bulk_prices || []).map((t, i) => (i === idx ? { ...t, [field]: value } : t)),
+        }));
     };
 
     // 🟢 Change handlers
@@ -274,19 +398,9 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
         setForm({ ...form, subcategory_id: value, subcategory_name: selected?.name || "" });
     };
 
-    const handleSelectWithName = (fieldId: string, fieldName: string, list: any[], value: string) => {
+    const handleSelectWithName = (fieldId: string, fieldName: string, list: NamedOption[], value: string) => {
         const selected = list.find((item) => item.id.toString() === value);
         setForm({ ...form, [fieldId]: value, [fieldName]: selected?.name || "" });
-    };
-
-    const handleTypeSelect = (value: string) => {
-        const selected = types.find((tp) => tp.id.toString() === value);
-        setForm({
-            ...form,
-            type_id: value,
-            type_name: selected?.name || "",
-            type_has_duration: Boolean(selected?.has_duration),
-        });
     };
 
     const handleModeSelect = (mode: "ready" | "preorder" | "live") => {
@@ -335,6 +449,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
 
     const handleClose = () => {
         resetForm();
+        setShowImagePanel(true);
         onClose();
     };
     const handleSubmit = async (e: React.FormEvent) => {
@@ -373,6 +488,8 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
         setLoading(true);
 
         try {
+            const normalizedBulk = normalizeBulkTiers(form.bulk_prices);
+            const bulk_prices = normalizedBulk.length > 0 ? normalizedBulk : null;
             let uploadedImages: { image_url: string; public_id: string }[] = [];
 
             // 🟢 Шинээр upload хийгдэх зурагнууд
@@ -383,13 +500,13 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                     formData.append("images", img.file as File);
                 });
 
-                const res = await axios.post(
+                const res = await axios.post<UploadResponse>(
                     `${process.env.NEXT_PUBLIC_API_URL || ""}/api/productimg/upload-multiple`,
                     formData,
                     { headers: { "Content-Type": "multipart/form-data", ...getActorHeaders() } }
                 );
 
-                uploadedImages = res.data.images.map((imgObj: any) => ({
+                uploadedImages = res.data.images.map((imgObj) => ({
                     image_url: imgObj.imageUrl,
                     public_id: imgObj.public_id,
                 }));
@@ -427,6 +544,7 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                     (productMode === "ready" || forceReadyEdit) && computedDiscountPrice !== null && computedDiscountPrice > 0
                         ? Number(computedDiscountPrice.toFixed(2))
                         : null,
+                bulk_prices,
                 stock: stockNumber,
                 material: form.material,
                 duration_hours: form.type_has_duration ? durationNumber : null,
@@ -451,9 +569,10 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
             onRefresh();
             handleClose();
         } catch (err) {
+            const axiosError = err as AxiosError<{ message?: string; error?: string }>;
             const message =
-                (err as any)?.response?.data?.message ||
-                (err as any)?.response?.data?.error ||
+                axiosError.response?.data?.message ||
+                axiosError.response?.data?.error ||
                 "⚠️ Алдаа гарлаа!";
             console.error("❌ Upload error:", err);
             alert(message);
@@ -465,278 +584,361 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
     // 🧱 UI хэсэг
     return (
         <Modal open={open} onClose={handleClose}>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-2 h-full">
-                {/* -------- LEFT FORM -------- */}
-                <div className="space-y-4 overflow-auto p-2">
-                    <h2 className="text-2xl font-bold mb-2">{editData ? "✏️ Бараа засах" : "🛍️ Шинэ бүтээгдэхүүн нэмэх"}</h2>
+            <div className="flex h-full min-h-0 flex-col">
+                <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+                    <div className="grid min-h-0 grid-cols-1 gap-6 p-1 sm:p-2 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+                        {/* -------- LEFT FORM -------- */}
+                        <div className="min-w-0 space-y-4">
+                            <h2 className="mb-2 text-xl font-bold sm:text-2xl">{editData ? "✏️ Бараа засах" : "🛍️ Шинэ бүтээгдэхүүн нэмэх"}</h2>
 
-                    {!editData && initialType !== "live" && (
-                        <div>
-                            <Label>Ямар төрлийн бараа бүртгэх вэ?</Label>
-                            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {!editData && initialType !== "live" && (
+                                <div>
+                                    <Label>Ямар төрлийн бараа бүртгэх вэ?</Label>
+                                    <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleModeSelect("ready")}
+                                            className={`rounded-xl border px-4 py-3 text-sm font-semibold ${
+                                                productMode === "ready" ? "border-[var(--accent-2)] text-[var(--accent-2)]" : "hover:bg-[var(--sky-100)]"
+                                            }`}
+                                        >
+                                            Бэлэн бараа бүртгэх
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleModeSelect("preorder")}
+                                            className={`rounded-xl border px-4 py-3 text-sm font-semibold ${
+                                                productMode === "preorder" ? "border-[var(--accent-2)] text-[var(--accent-2)]" : "hover:bg-[var(--sky-100)]"
+                                            }`}
+                                        >
+                                            Захиалгын бараа бүртгэх
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {!editData && initialType === "live" && (
+                                <div className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                                    Live бараа бүртгэх горим
+                                </div>
+                            )}
+
+                            {!productMode && !editData && initialType !== "live" && (
+                                <div className="rounded-lg bg-yellow-50 px-3 py-2 text-xs text-yellow-700">
+                                    Төрлөө сонгосны дараа бусад талбарууд гарна.
+                                </div>
+                            )}
+
+                            {productMode && (
+                                <>
+                                    <div>
+                                        <Label>Бүтээгдэхүүний нэр</Label>
+                                        <Input name="name" value={form.name} onChange={handleChange} className="h-12 text-lg" />
+                                    </div>
+                                    <div>
+                                        <Label>Тайлбар</Label>
+                                        <Textarea name="description" value={form.description} onChange={handleChange} className="h-28 text-lg" />
+                                    </div>
+                                    <div>
+                                        <Label>Видео линк (YouTube/Facebook/Instagram)</Label>
+                                        <Input
+                                            name="video_url"
+                                            value={form.video_url}
+                                            onChange={handleChange}
+                                            className="h-12 text-lg"
+                                            placeholder="https://..."
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                                        <div>
+                                            <Label>Үнэ (₮)</Label>
+                                            <Input name="price" type="number" value={form.price} onChange={handleChange} className="h-12 text-lg" />
+                                        </div>
+                                        {(productMode === "ready" || forceReadyEdit) && (
+                                            <>
+                                                <div>
+                                                    <Label>Хямдралын төрөл</Label>
+                                                    <Select value={discountMode} onValueChange={(v) => setDiscountMode(v as "percent" | "amount")}>
+                                                        <SelectTrigger className="h-12">
+                                                            <SelectValue placeholder="Сонгох..." />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="percent">Хувь (%)</SelectItem>
+                                                            <SelectItem value="amount">Дүн (₮)</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div>
+                                                    <Label>{discountMode === "percent" ? "Хямдрал (%)" : "Хямдралын дүн (₮)"}</Label>
+                                                    <Input
+                                                        type="number"
+                                                        value={discountInput}
+                                                        onChange={(e) => setDiscountInput(e.target.value)}
+                                                        className="h-12 text-lg"
+                                                        placeholder={discountMode === "percent" ? "Ж: 10" : "Ж: 50000"}
+                                                    />
+                                                </div>
+                                            </>
+                                        )}
+                                        <div>
+                                            <Label>{productMode === "preorder" || productMode === "live" ? "Захиалах тоо" : "Үлдэгдэл"}</Label>
+                                            <Input name="stock" type="number" value={form.stock} onChange={handleChange} className="h-12 text-lg" />
+                                        </div>
+                                    </div>
+
+                                    {(productMode === "ready" || forceReadyEdit) && (
+                                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                            <div>
+                                                <Label>Бодогдсон хямдрал (₮)</Label>
+                                                <Input
+                                                    value={computedDiscountAmount > 0 ? Math.round(computedDiscountAmount).toLocaleString() : ""}
+                                                    readOnly
+                                                    className="h-12 bg-slate-50 text-lg"
+                                                    placeholder="-"
+                                                />
+                                            </div>
+                                            <div>
+                                                <Label>Бодогдсон хувь (%)</Label>
+                                                <Input
+                                                    value={computedDiscountPercent > 0 ? computedDiscountPercent.toFixed(2) : ""}
+                                                    readOnly
+                                                    className="h-12 bg-slate-50 text-lg"
+                                                    placeholder="-"
+                                                />
+                                            </div>
+                                            <div>
+                                                <Label>Хямдралын үнэ (автомат)</Label>
+                                                <Input
+                                                    value={computedDiscountPrice !== null ? Math.round(computedDiscountPrice).toLocaleString() : ""}
+                                                    readOnly
+                                                    className="h-12 bg-slate-50 text-lg"
+                                                    placeholder="хямдралгүй"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="space-y-3 rounded-xl border p-4">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <Label className="text-base font-semibold">Бөөний үнэ (сонголттой)</Label>
+                                            <Button type="button" variant="outline" className="h-9" onClick={addTier}>
+                                                Нэмэх
+                                            </Button>
+                                        </div>
+                                        <div className="text-xs text-slate-500">
+                                            Жишээ: `10`-аас дээш бол `4500₮`, `100`-аас дээш бол `4000₮` (нэгж үнэ).
+                                        </div>
+
+                                        {!form.bulk_prices || form.bulk_prices.length === 0 ? (
+                                            <div className="text-sm text-slate-500">Одоогоор бөөний үнэ тохируулаагүй.</div>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                {form.bulk_prices.map((t, idx) => (
+                                                    <div key={idx} className="grid grid-cols-1 items-center gap-2 sm:grid-cols-12">
+                                                        <div className="sm:col-span-5">
+                                                            <Label className="text-xs">Доод тоо (min)</Label>
+                                                            <Input
+                                                                type="number"
+                                                                value={t.min_qty}
+                                                                onChange={(e) => updateTier(idx, "min_qty", e.target.value)}
+                                                                className="h-11"
+                                                                placeholder="Ж: 10"
+                                                                min={1}
+                                                            />
+                                                        </div>
+                                                        <div className="sm:col-span-5">
+                                                            <Label className="text-xs">Нэгж үнэ (₮)</Label>
+                                                            <Input
+                                                                type="number"
+                                                                value={t.price}
+                                                                onChange={(e) => updateTier(idx, "price", e.target.value)}
+                                                                className="h-11"
+                                                                placeholder="Ж: 4500"
+                                                                min={0}
+                                                            />
+                                                        </div>
+                                                        <div className="sm:col-span-2 sm:pt-5">
+                                                            <Button
+                                                                type="button"
+                                                                variant="outline"
+                                                                className="h-11 w-full sm:w-11 px-0"
+                                                                onClick={() => removeTier(idx)}
+                                                                aria-label="Устгах"
+                                                                title="Устгах"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <Label>Материал</Label>
+                                        <Input name="material" value={form.material} onChange={handleChange} className="h-12 text-lg" />
+                                    </div>
+
+                                    {form.type_has_duration && (
+                                        <div>
+                                            <Label>Хугацаа (цаг)</Label>
+                                            <Input
+                                                name="duration_hours"
+                                                type="number"
+                                                value={form.duration_hours}
+                                                onChange={handleChange}
+                                                className="h-12 text-lg"
+                                                placeholder="Ж: 72"
+                                            />
+                                        </div>
+                                    )}
+
+                                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                        <div>
+                                            <Label>Ангилал</Label>
+                                            <Select value={form.category_id} onValueChange={handleCategorySelect}>
+                                                <SelectTrigger className="h-12">
+                                                    <SelectValue placeholder="Сонгох..." />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {categories?.map((c) => (
+                                                        <SelectItem key={c.category_id} value={c.category_id.toString()}>
+                                                            {c.category_name}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+
+                                        <div>
+                                            <Label>Дэд ангилал</Label>
+                                            <Select value={form.subcategory_id} onValueChange={handleSubCategorySelect}>
+                                                <SelectTrigger className="h-12">
+                                                    <SelectValue placeholder="Сонгох..." />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {subCategories.map((s) => (
+                                                        <SelectItem key={s.id} value={s.id.toString()}>
+                                                            {s.name}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                        <div>
+                                            <Label>Хэмжих нэгж</Label>
+                                            <Select value={form.unit_id} onValueChange={(v) => handleSelectWithName("unit_id", "unit_name", units, v)}>
+                                                <SelectTrigger className="h-12">
+                                                    <SelectValue placeholder="Сонгох..." />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {units?.map((u) => (
+                                                        <SelectItem key={u.id} value={u.id.toString()}>
+                                                            {u.name}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div>
+                                            <Label>Брэнд</Label>
+                                            <Select value={form.brand_id} onValueChange={(v) => handleSelectWithName("brand_id", "brand_name", brands, v)}>
+                                                <SelectTrigger className="h-12">
+                                                    <SelectValue placeholder="Сонгох..." />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {brands.map((b) => (
+                                                        <SelectItem key={b.id} value={b.id.toString()}>
+                                                            {b.name}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                            {editData && productMode === "preorder" && !forceReadyEdit && (
+                                <div className="mt-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setForceReadyEdit(true);
+                                            handleModeSelect("ready");
+                                        }}
+                                        className="rounded-xl border px-4 py-2 text-xs font-semibold hover:bg-[var(--sky-100)]"
+                                    >
+                                        Бэлэн барааруу бүртгэх
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* -------- RIGHT IMAGE UPLOAD -------- */}
+                        <div className="flex min-w-0 flex-col items-center justify-start rounded-2xl border border-slate-200 bg-slate-50/70 p-3 sm:p-4">
+                            <div className="mb-3 flex w-full items-center justify-between gap-3">
+                                <div>
+                                    <Label className="py-1 text-sm font-semibold sm:text-base">Зураг оруулах</Label>
+                                    <div className="text-xs text-slate-500">Хамгийн ихдээ 5 зураг</div>
+                                </div>
                                 <button
                                     type="button"
-                                    onClick={() => handleModeSelect("ready")}
-                                    className={`rounded-xl border px-4 py-3 text-sm font-semibold ${
-                                        productMode === "ready" ? "border-[var(--accent-2)] text-[var(--accent-2)]" : "hover:bg-[var(--sky-100)]"
-                                    }`}
+                                    onClick={() => setShowImagePanel((prev) => !prev)}
+                                    className="rounded-full border px-3 py-1 text-xs font-semibold text-slate-700 transition hover:bg-white xl:hidden"
                                 >
-                                    Бэлэн бараа бүртгэх
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => handleModeSelect("preorder")}
-                                    className={`rounded-xl border px-4 py-3 text-sm font-semibold ${
-                                        productMode === "preorder" ? "border-[var(--accent-2)] text-[var(--accent-2)]" : "hover:bg-[var(--sky-100)]"
-                                    }`}
-                                >
-                                    Захиалгын бараа бүртгэх
+                                    {showImagePanel ? "Хураах" : `Зураг (${form.images.length})`}
                                 </button>
                             </div>
-                        </div>
-                    )}
 
-                    {!editData && initialType === "live" && (
-                        <div className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
-                            Live бараа бүртгэх горим
-                        </div>
-                    )}
-
-                    {!productMode && !editData && initialType !== "live" && (
-                        <div className="rounded-lg bg-yellow-50 px-3 py-2 text-xs text-yellow-700">
-                            Төрлөө сонгосны дараа бусад талбарууд гарна.
-                        </div>
-                    )}
-
-                    {productMode && (
-                        <>
-                    <div>
-                        <Label>Бүтээгдэхүүний нэр</Label>
-                        <Input name="name" value={form.name} onChange={handleChange} className="h-12 text-lg" />
-                    </div>
-                    <div>
-                        <Label>Тайлбар</Label>
-                        <Textarea name="description" value={form.description} onChange={handleChange} className="h-28 text-lg" />
-                    </div>
-                    <div>
-                        <Label>Видео линк (YouTube/Facebook/Instagram)</Label>
-                        <Input
-                            name="video_url"
-                            value={form.video_url}
-                            onChange={handleChange}
-                            className="h-12 text-lg"
-                            placeholder="https://..."
-                        />
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div>
-                            <Label>Үнэ (₮)</Label>
-                            <Input name="price" type="number" value={form.price} onChange={handleChange} className="h-12 text-lg" />
-                        </div>
-                        {(productMode === "ready" || forceReadyEdit) && (
-                            <>
-                                <div>
-                                    <Label>Хямдралын төрөл</Label>
-                                    <Select value={discountMode} onValueChange={(v) => setDiscountMode(v as "percent" | "amount")}>
-                                        <SelectTrigger className="h-12">
-                                            <SelectValue placeholder="Сонгох..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="percent">Хувь (%)</SelectItem>
-                                            <SelectItem value="amount">Дүн (₮)</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div>
-                                    <Label>{discountMode === "percent" ? "Хямдрал (%)" : "Хямдралын дүн (₮)"}</Label>
-                                    <Input
-                                        type="number"
-                                        value={discountInput}
-                                        onChange={(e) => setDiscountInput(e.target.value)}
-                                        className="h-12 text-lg"
-                                        placeholder={discountMode === "percent" ? "Ж: 10" : "Ж: 50000"}
-                                    />
-                                </div>
-                            </>
-                        )}
-                        <div>
-                            <Label>{productMode === "preorder" || productMode === "live" ? "Захиалах тоо" : "Үлдэгдэл"}</Label>
-                            <Input name="stock" type="number" value={form.stock} onChange={handleChange} className="h-12 text-lg" />
-                        </div>
-                    </div>
-
-                    {(productMode === "ready" || forceReadyEdit) && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                            <div>
-                                <Label>Бодогдсон хямдрал (₮)</Label>
-                                <Input
-                                    value={computedDiscountAmount > 0 ? Math.round(computedDiscountAmount).toLocaleString() : ""}
-                                    readOnly
-                                    className="h-12 text-lg bg-slate-50"
-                                    placeholder="-"
-                                />
-                            </div>
-                            <div>
-                                <Label>Бодогдсон хувь (%)</Label>
-                                <Input
-                                    value={computedDiscountPercent > 0 ? computedDiscountPercent.toFixed(2) : ""}
-                                    readOnly
-                                    className="h-12 text-lg bg-slate-50"
-                                    placeholder="-"
-                                />
-                            </div>
-                            <div>
-                                <Label>Хямдралын үнэ (автомат)</Label>
-                                <Input
-                                    value={computedDiscountPrice !== null ? Math.round(computedDiscountPrice).toLocaleString() : ""}
-                                    readOnly
-                                    className="h-12 text-lg bg-slate-50"
-                                    placeholder="хямдралгүй"
-                                />
-                            </div>
-                        </div>
-                    )}
-
-                    <div>
-                        <Label>Материал</Label>
-                        <Input name="material" value={form.material} onChange={handleChange} className="h-12 text-lg" />
-                    </div>
-
-                    {form.type_has_duration && (
-                        <div>
-                            <Label>Хугацаа (цаг)</Label>
-                            <Input
-                                name="duration_hours"
-                                type="number"
-                                value={form.duration_hours}
-                                onChange={handleChange}
-                                className="h-12 text-lg"
-                                placeholder="Ж: 72"
-                            />
-                        </div>
-                    )}
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <Label>Ангилал</Label>
-                            <Select value={form.category_id} onValueChange={handleCategorySelect}>
-                                <SelectTrigger className="h-12">
-                                    <SelectValue placeholder="Сонгох..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {categories?.map((c) => (
-                                        <SelectItem key={c.category_id} value={c.category_id.toString()}>
-                                            {c.category_name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div>
-                            <Label>Дэд ангилал</Label>
-                            <Select value={form.subcategory_id} onValueChange={handleSubCategorySelect}>
-                                <SelectTrigger className="h-12">
-                                    <SelectValue placeholder="Сонгох..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {subCategories.map((s) => (
-                                        <SelectItem key={s.id} value={s.id.toString()}>
-                                            {s.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <Label>Хэмжих нэгж</Label>
-                            <Select value={form.unit_id} onValueChange={(v) => handleSelectWithName("unit_id", "unit_name", units, v)}>
-                                <SelectTrigger className="h-12">
-                                    <SelectValue placeholder="Сонгох..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {units?.map((u) => (
-                                        <SelectItem key={u.id} value={u.id.toString()}>
-                                            {u.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div>
-                            <Label>Брэнд</Label>
-                            <Select value={form.brand_id} onValueChange={(v) => handleSelectWithName("brand_id", "brand_name", brands, v)}>
-                                <SelectTrigger className="h-12">
-                                    <SelectValue placeholder="Сонгох..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {brands.map((b) => (
-                                        <SelectItem key={b.id} value={b.id.toString()}>
-                                            {b.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-                    </>
-                    )}
-                    {editData && productMode === "preorder" && !forceReadyEdit && (
-                        <div className="mt-2">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setForceReadyEdit(true);
-                                    handleModeSelect("ready");
-                                }}
-                                className="rounded-xl border px-4 py-2 text-xs font-semibold hover:bg-[var(--sky-100)]"
-                            >
-                                Бэлэн барааруу бүртгэх
-                            </button>
-                        </div>
-                    )}
-                </div>
-
-                {/* -------- RIGHT IMAGE UPLOAD -------- */}
-                <div className="flex flex-col items-center justify-start overflow-auto">
-                    <Label className="py-2 mt-2">Зураг оруулах (хамгийн ихдээ 5)</Label>
-                    <div
-                        onDrop={handleDrop}
-                        onDragOver={(e) => e.preventDefault()}
-                        className="w-full h-32 sm:h-40 border-2 border-dashed border-gray-400 rounded-xl flex items-center justify-center cursor-pointer mb-4 text-center px-3 text-sm sm:text-base"
-                        onClick={() => fileInputRef.current?.click()}
-                    >
-                        Зургаа энд чирээд эсвэл click хийж зураг оруулна
-                    </div>
-                    <Input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
-
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        {form.images.map((img, index) => (
-                            <div key={index} className="relative">
-                                <img src={img.preview} alt={`preview-${index}`} className="w-full h-28 sm:h-36 object-cover rounded-xl border shadow-lg" />
-                                <Button
-                                    type="button"
-                                    onClick={() => removeImage(index)}
-                                    className="absolute top-1 right-1 bg-red-500 text-white h-6 w-6 rounded-full p-0 text-xs flex items-center justify-center"
+                            <div className={`w-full ${showImagePanel ? "block" : "hidden"} xl:block`}>
+                                <div
+                                    onDrop={handleDrop}
+                                    onDragOver={(e) => e.preventDefault()}
+                                    className="mb-4 flex h-32 w-full cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-gray-400 bg-white px-3 text-center text-sm sm:h-40 sm:text-base"
+                                    onClick={() => fileInputRef.current?.click()}
                                 >
-                                    ×
-                                </Button>
+                                    Зургаа энд чирээд эсвэл click хийж зураг оруулна
+                                </div>
+                                <Input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
+
+                                <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-3">
+                                    {form.images.map((img, index) => (
+                                        <div key={index} className="relative h-28 overflow-hidden rounded-xl border bg-white shadow-lg sm:h-36">
+                                            <Image
+                                                src={img.preview}
+                                                alt={`preview-${index}`}
+                                                fill
+                                                sizes="(max-width: 640px) 45vw, 160px"
+                                                className="object-cover"
+                                                unoptimized
+                                            />
+                                            <Button
+                                                type="button"
+                                                onClick={() => removeImage(index)}
+                                                className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 p-0 text-xs text-white"
+                                            >
+                                                ×
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
-                        ))}
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <div className="sticky bottom-0 bg-white border-t pt-3 flex flex-col sm:flex-row justify-end gap-3 mt-6 pb-3">
-                <Button variant="outline" onClick={handleClose} className="h-12 px-6 text-base w-full sm:w-auto">
-                    Хаах
-                </Button>
-                <Button onClick={handleSubmit} disabled={loading} className="h-12 px-6 text-base w-full sm:w-auto">
-                    {loading ? "Хадгалж байна..." : editData ? "Засах" : "Хадгалах"}
-                </Button>
+                <div className="sticky bottom-0 z-10 mt-4 flex shrink-0 flex-col justify-end gap-3 border-t bg-white/95 pt-3 pb-2 backdrop-blur sm:mt-6 sm:flex-row">
+                    <Button variant="outline" onClick={handleClose} className="h-12 w-full px-6 text-base sm:w-auto">
+                        Хаах
+                    </Button>
+                    <Button onClick={handleSubmit} disabled={loading} className="h-12 w-full px-6 text-base sm:w-auto">
+                        {loading ? "Хадгалж байна..." : editData ? "Засах" : "Хадгалах"}
+                    </Button>
+                </div>
             </div>
         </Modal>
     );

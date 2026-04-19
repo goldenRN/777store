@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createInvoice } from "@/lib/qpay";
+import { getBulkUnitPrice } from "@/lib/bulkPricing";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -96,6 +97,16 @@ export async function GET(request: NextRequest) {
     status: o.status,
     total: o.total,
     createdAt: o.created_at,
+    delivery_method: o.delivery_method ?? null,
+    delivery_name: o.delivery_name ?? null,
+    delivery_phone: o.delivery_phone ?? null,
+    delivery_address: o.delivery_address ?? null,
+    delivery_district_id: o.delivery_district_id ?? null,
+    delivery_fee: o.delivery_fee ?? 0,
+    delivery_district_name: o.delivery_district_name ?? null,
+    delivery_khoroo_id: o.delivery_khoroo_id ?? null,
+    delivery_khoroo_name: o.delivery_khoroo_name ?? null,
+    delivery_zone: o.delivery_zone ?? null,
     items: o.items.map((it) => ({
       id: it.id,
       qty: it.quantity,
@@ -143,6 +154,16 @@ export async function POST(request: NextRequest) {
   const deliveryName = body?.deliveryName ? String(body.deliveryName) : null;
   const deliveryPhone = body?.deliveryPhone ? String(body.deliveryPhone) : null;
   const deliveryAddress = body?.deliveryAddress ? String(body.deliveryAddress) : null;
+  const deliveryDistrictIdRaw = body?.deliveryDistrictId;
+  const deliveryKhorooIdRaw = body?.deliveryKhorooId;
+  const deliveryDistrictId =
+    deliveryDistrictIdRaw != null && String(deliveryDistrictIdRaw).trim() !== ""
+      ? Number(deliveryDistrictIdRaw)
+      : null;
+  const deliveryKhorooId =
+    deliveryKhorooIdRaw != null && String(deliveryKhorooIdRaw).trim() !== ""
+      ? Number(deliveryKhorooIdRaw)
+      : null;
 
   if (!userId || !name || !phone) {
     return NextResponse.json({ message: "userId, нэр, утас шаардлагатай" }, { status: 400 });
@@ -166,15 +187,28 @@ export async function POST(request: NextRequest) {
   };
   const hasPreorder = items.some((it: any) => normalizeType(it.type_name) === "preorder");
   const computedOrderKind = hasPreorder ? "preorder" : "ready";
+  // We will re-check orderKind based on DB product types inside the transaction,
+  // but keep this initial value as a fallback for early validation.
   const orderKind = orderKindInput || computedOrderKind;
 
-  if (orderKind === "ready" && deliveryMethod === "delivery") {
+  // Allow delivery if there is at least one READY item in the cart.
+  // (We'll validate again inside transaction using DB product types.)
+  const hasReadyInput = items.some((it: any) => normalizeType(it.type_name) !== "preorder");
+  if (deliveryMethod === "delivery" && hasReadyInput) {
     if (!deliveryName || !deliveryPhone || !deliveryAddress) {
       return NextResponse.json(
         { message: "Хүргэлтийн нэр, утас, хаяг шаардлагатай" },
         { status: 400 }
       );
     }
+    if (!deliveryDistrictId || !deliveryKhorooId) {
+      return NextResponse.json({ message: "Дүүрэг, хороо сонгоно уу." }, { status: 400 });
+    }
+  } else if (deliveryMethod === "delivery" && !hasReadyInput) {
+    return NextResponse.json(
+      { message: "Зөвхөн бэлэн бараатай үед хүргэлт сонгож болно." },
+      { status: 400 }
+    );
   }
 
   const firstStatus = await prisma.adminStatus.findFirst({ orderBy: { id: "asc" } });
@@ -234,13 +268,43 @@ export async function POST(request: NextRequest) {
 
         const products = await tx.adminProduct.findMany({
           where: { id: { in: productIds } },
-          include: { images: true, variants: { include: { images: true } } },
+          include: { type: true, images: true, variants: { include: { images: true } } },
         });
         const productById = new Map(products.map((p) => [p.id, p]));
         const variantById = new Map<number, { productId: number; variant: any }>();
         for (const p of products) {
           for (const v of p.variants || []) {
             variantById.set(v.id, { productId: p.id, variant: v });
+          }
+        }
+
+        const isPreorderProduct = (p: any) => {
+          const type = p?.type ?? null;
+          if (type?.has_duration === true) return true;
+          const name = String(type?.name ?? "").toLowerCase();
+          if (name.includes("захиал") || name.includes("урьдчил") || name.includes("preorder")) return true;
+          if (name.includes("лайв") || name.includes("live")) return true;
+          return false;
+        };
+
+        const kindByProductId = new Map<number, "ready" | "preorder">();
+        for (const p of products) {
+          kindByProductId.set(p.id, isPreorderProduct(p) ? "preorder" : "ready");
+        }
+        const hasPreorderDb = productIds.some((id) => kindByProductId.get(id) === "preorder");
+        const hasReadyDb = productIds.some((id) => kindByProductId.get(id) === "ready");
+        const computedOrderKindDb = hasPreorderDb ? "preorder" : "ready";
+        const safeOrderKind = computedOrderKindDb;
+
+        if (deliveryMethod === "delivery" && !hasReadyDb) {
+          throw new CheckoutError("Зөвхөн бэлэн бараатай үед хүргэлт сонгож болно.", 400);
+        }
+        if (deliveryMethod === "delivery" && hasReadyDb) {
+          if (!deliveryName || !deliveryPhone || !deliveryAddress) {
+            throw new CheckoutError("Хүргэлтийн нэр, утас, хаяг шаардлагатай", 400);
+          }
+          if (!deliveryDistrictId || !deliveryKhorooId) {
+            throw new CheckoutError("Дүүрэг, хороо сонгоно уу.", 400);
           }
         }
 
@@ -385,8 +449,9 @@ export async function POST(request: NextRequest) {
               : p?.price != null
               ? Number(p.price)
               : 0;
+          const bulkPrices = p ? (p as any).bulk_prices ?? null : null;
           const unitPrice =
-            vPrice != null && vPrice > 0 ? vPrice : basePrice;
+            vPrice != null && vPrice > 0 ? vPrice : getBulkUnitPrice(basePrice, line.qty, bulkPrices);
 
           return {
             product_id: line.productId,
@@ -399,10 +464,30 @@ export async function POST(request: NextRequest) {
           };
         });
 
-        const total = createItems.reduce(
+        const itemsTotal = createItems.reduce(
           (sum, it) => sum + Math.max(1, it.quantity) * Math.max(0, it.price),
           0
         );
+
+        let delivery_fee = 0;
+        let delivery_district_name: string | null = null;
+        let delivery_khoroo_name: string | null = null;
+        let delivery_zone: string | null = null;
+        if (deliveryMethod === "delivery" && hasReadyDb) {
+          const khoroo = await tx.adminDeliveryKhoroo.findUnique({
+            where: { id: deliveryKhorooId as number },
+            include: { district: true },
+          });
+          if (!khoroo || khoroo.district_id !== deliveryDistrictId) {
+            throw new CheckoutError("Дүүрэг/хороо буруу байна.", 400);
+          }
+          delivery_fee = Math.max(0, Number(khoroo.fee || 0));
+          delivery_district_name = khoroo.district?.name ?? null;
+          delivery_khoroo_name = khoroo.name ?? null;
+          delivery_zone = khoroo.zone ?? null;
+        }
+
+        const total = itemsTotal + delivery_fee;
 
         return tx.adminOrder.create({
           data: {
@@ -411,11 +496,17 @@ export async function POST(request: NextRequest) {
             phone1: phone,
             status: defaultStatus,
             payment_status: "UNPAID",
-            order_kind: orderKind,
-            delivery_method: deliveryMethod,
-            delivery_name: deliveryName,
-            delivery_phone: deliveryPhone,
-            delivery_address: deliveryAddress,
+            order_kind: safeOrderKind,
+            delivery_method: hasReadyDb ? deliveryMethod : null,
+            delivery_name: hasReadyDb && deliveryMethod === "delivery" ? deliveryName : null,
+            delivery_phone: hasReadyDb && deliveryMethod === "delivery" ? deliveryPhone : null,
+            delivery_address: hasReadyDb && deliveryMethod === "delivery" ? deliveryAddress : null,
+            delivery_district_id: hasReadyDb && deliveryMethod === "delivery" ? deliveryDistrictId : null,
+            delivery_district_name: hasReadyDb && deliveryMethod === "delivery" ? delivery_district_name : null,
+            delivery_khoroo_id: hasReadyDb && deliveryMethod === "delivery" ? deliveryKhorooId : null,
+            delivery_khoroo_name: hasReadyDb && deliveryMethod === "delivery" ? delivery_khoroo_name : null,
+            delivery_zone: hasReadyDb && deliveryMethod === "delivery" ? delivery_zone : null,
+            delivery_fee: hasReadyDb && deliveryMethod === "delivery" ? delivery_fee : 0,
             total,
             items: { create: createItems },
           },
@@ -476,7 +567,7 @@ export async function POST(request: NextRequest) {
     sender_invoice_no: senderInvoiceNo,
     invoice_receiver_code: receiverCode,
     sender_branch_code: senderBranchCode,
-    invoice_description: `Order #${created.id} ${created.total}₮`,
+    invoice_description: `Order #${created.id} ${created.total}₮${created.delivery_fee ? ` (Delivery ${created.delivery_fee}₮)` : ""}`,
     enable_expiry: !disableExpiry,
     ...(disableExpiry ? {} : { expiry_date: formatExpiry(expiresAtForPayload) }),
     allow_partial: false,

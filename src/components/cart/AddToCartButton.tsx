@@ -8,6 +8,8 @@ type AddToCartButtonProps = {
   id: number;
   name: string;
   price: number;
+  base_price?: number;
+  bulk_prices?: unknown | null;
   image_url: string | null;
   type_name?: string | null;
   variant_id?: number | null;
@@ -24,6 +26,8 @@ export default function AddToCartButton({
   id,
   name,
   price,
+  base_price,
+  bulk_prices,
   image_url,
   type_name,
   variant_id,
@@ -46,7 +50,21 @@ export default function AddToCartButton({
         }
         // Mark cart updates as non-urgent to keep INP low on slower devices.
         startTransition(() => {
-          addItem({ id, name, price, image_url, type_name, variant_id, variant_sku, variant_label }, qty);
+          addItem(
+            {
+              id,
+              name,
+              price,
+              base_price,
+              bulk_prices,
+              image_url,
+              type_name,
+              variant_id,
+              variant_sku,
+              variant_label,
+            },
+            qty
+          );
           onAdded?.();
         });
       }}

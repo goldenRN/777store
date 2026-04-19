@@ -94,6 +94,7 @@ const data = {
         { title: "Хэрэглэгчид", url: "/admin/users" },
         { title: "Төлбөрийн төрөл", url: "/admin/payment-methods" },
         { title: "Онцгой хямдрал", url: "/admin/promo" },
+        { title: "Хүргэлтийн бүс", url: "/admin/delivery-areas" },
       ],
     },
   ],

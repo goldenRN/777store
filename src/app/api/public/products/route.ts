@@ -258,6 +258,7 @@ export async function GET(request: NextRequest) {
         description: p.description,
         price: p.price,
         discount_price: p.discount_price,
+        bulk_prices: (p as any).bulk_prices ?? null,
         stock: effectiveStock,
         ordered_qty: orderedQty,
         material: p.material,

@@ -61,39 +61,69 @@ export async function GET(request: NextRequest) {
         order.status;
       const shippingName =
         statuses.find((s) => s.name.includes("Хүргэлт"))?.name || pendingName;
-      const nextStatus =
-        order.order_kind === "ready" && order.delivery_method === "delivery"
-          ? shippingName
-          : pendingName;
-      if (order.payment_status !== "PAID" && order.order_kind === "preorder") {
+      const statusNorm = String(order.status || "").toLowerCase();
+      const isArrived =
+        statusNorm.includes("бараа ирсэн") || statusNorm.includes("arrived");
+      const shouldShip =
+        order.delivery_method === "delivery" &&
+        (order.order_kind === "ready" || isArrived);
+      const nextStatus = shouldShip ? shippingName : pendingName;
+      const shouldBackfillOrderedQty =
+        order.payment_status !== "PAID" && String(order.order_kind || "") === "preorder";
+      if (shouldBackfillOrderedQty) {
         const items = await prisma.adminOrderItem.findMany({
           where: { order_id: order.id, product_id: { not: null } },
           select: { product_id: true, variant_id: true, quantity: true },
         });
         if (items.length > 0) {
-          const productUpdates = items.map((it) =>
-            prisma.adminProduct.update({
-              where: { id: it.product_id as number },
-              data: { ordered_qty: { increment: it.quantity } },
-            })
+          const productIds = Array.from(
+            new Set(items.map((it) => it.product_id).filter((x): x is number => x != null))
           );
-          const variantUpdates = items
-            .filter((it) => it.variant_id != null)
-            .map((it) =>
-              prisma.adminProductVariant.update({
-                where: { id: it.variant_id as number },
+          const products = await prisma.adminProduct.findMany({
+            where: { id: { in: productIds } },
+            include: { type: true },
+          });
+          const isPreorderProduct = (p: any) => {
+            const type = p?.type ?? null;
+            if (type?.has_duration === true) return true;
+            const name = String(type?.name ?? "").toLowerCase();
+            if (name.includes("захиал") || name.includes("урьдчил") || name.includes("preorder")) return true;
+            if (name.includes("лайв") || name.includes("live")) return true;
+            return false;
+          };
+          const preorderProductIds = new Set<number>(
+            products.filter((p) => isPreorderProduct(p)).map((p) => p.id)
+          );
+          const preorderItems = items.filter((it) => it.product_id != null && preorderProductIds.has(it.product_id));
+          if (preorderItems.length > 0) {
+            const productUpdates = preorderItems.map((it) =>
+              prisma.adminProduct.update({
+                where: { id: it.product_id as number },
                 data: { ordered_qty: { increment: it.quantity } },
               })
             );
-          await prisma.$transaction([...productUpdates, ...variantUpdates]);
+            const variantUpdates = preorderItems
+              .filter((it) => it.variant_id != null)
+              .map((it) =>
+                prisma.adminProductVariant.update({
+                  where: { id: it.variant_id as number },
+                  data: { ordered_qty: { increment: it.quantity } },
+                })
+              );
+            await prisma.$transaction([...productUpdates, ...variantUpdates]);
+          }
         }
       }
       await prisma.adminOrder.update({
         where: { id: order.id },
         data: {
-          payment_status: "PAID",
-          qpay_payment_id: payment.payment_id,
-          paid_at: new Date(),
+          ...(order.payment_status === "PAID"
+            ? {}
+            : {
+                payment_status: "PAID",
+                qpay_payment_id: payment.payment_id,
+                paid_at: new Date(),
+              }),
           status: nextStatus,
           items: {
             updateMany: {

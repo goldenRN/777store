@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logAdminAction } from "@/lib/audit";
 import { unlink } from "fs/promises";
 import path from "path";
+import { normalizeBulkTiers } from "@/lib/bulkPricing";
 
 const tryDeleteFileIfUnused = async (imageUrl: string | null) => {
   if (!imageUrl) return;
@@ -40,6 +42,14 @@ export async function PUT(
     body?.discount_price != null ? Math.round(Number(body.discount_price)) : null;
   const stock = Math.round(Number(body?.stock ?? 0));
   const material = String(body?.material ?? "").trim();
+  const bulk_prices = Object.prototype.hasOwnProperty.call(body ?? {}, "bulk_prices")
+    ? body?.bulk_prices == null
+      ? Prisma.JsonNull
+      : (() => {
+          const tiers = normalizeBulkTiers(body.bulk_prices);
+          return tiers.length > 0 ? tiers : Prisma.JsonNull;
+        })()
+    : undefined;
   const duration_hours =
     body?.duration_hours != null ? Math.round(Number(body.duration_hours)) : null;
   const arrival_status = body?.arrival_status ? String(body.arrival_status) : null;
@@ -70,6 +80,7 @@ export async function PUT(
         video_url: video_url || null,
         price,
         discount_price: discount_price ?? null,
+        ...(bulk_prices !== undefined ? { bulk_prices } : {}),
         stock,
         material: material || null,
         duration_hours: duration_hours ?? null,

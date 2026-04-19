@@ -1,17 +1,22 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { getBulkUnitPrice } from "@/lib/bulkPricing";
 
 export type CartItem = {
   id: number;
   name: string;
+  // current unit price (can change when qty changes if bulk pricing is enabled)
   price: number;
+  // base unit price before bulk tiers are applied
+  base_price?: number;
   image_url: string | null;
   qty: number;
   type_name?: string | null;
   variant_id?: number | null;
   variant_sku?: string | null;
   variant_label?: string | null;
+  bulk_prices?: unknown | null;
 };
 
 type CartContextValue = {
@@ -36,7 +41,18 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as CartItem[];
-        if (Array.isArray(parsed)) setItems(parsed);
+        if (Array.isArray(parsed)) {
+          // back-compat: older carts may not have base_price/bulk_prices
+          setItems(
+            parsed.map((it) => ({
+              ...it,
+              base_price: Number((it as any).base_price ?? it.price ?? 0) || 0,
+              bulk_prices: (it as any).bulk_prices ?? null,
+              price: Number(it.price ?? 0) || 0,
+              qty: Math.max(1, Math.floor(Number(it.qty ?? 1))),
+            }))
+          );
+        }
       }
     } catch {
       setItems([]);
@@ -77,14 +93,31 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const existing = prev.find(
         (p) => p.id === item.id && (p.variant_id ?? null) === (item.variant_id ?? null)
       );
+      const addQty = Math.max(1, Math.floor(Number(qty || 1)));
       if (existing) {
+        const nextQty = Math.max(1, existing.qty + addQty);
+        const basePrice = Number((existing as any).base_price ?? existing.price ?? 0) || 0;
+        const tiers = (existing as any).bulk_prices ?? null;
+        const nextUnit = tiers ? getBulkUnitPrice(basePrice, nextQty, tiers) : existing.price;
         return prev.map((p) =>
           p.id === item.id && (p.variant_id ?? null) === (item.variant_id ?? null)
-            ? { ...p, qty: p.qty + qty }
+            ? { ...p, qty: nextQty, price: nextUnit, base_price: basePrice, bulk_prices: tiers }
             : p
         );
       }
-      return [...prev, { ...item, qty }];
+      const basePrice = Number((item as any).base_price ?? item.price ?? 0) || 0;
+      const tiers = (item as any).bulk_prices ?? null;
+      const unit = tiers ? getBulkUnitPrice(basePrice, addQty, tiers) : Number(item.price ?? 0) || 0;
+      return [
+        ...prev,
+        {
+          ...item,
+          qty: addQty,
+          base_price: basePrice,
+          bulk_prices: tiers,
+          price: unit,
+        },
+      ];
     });
   };
 
@@ -98,7 +131,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const safeQty = Math.max(1, Math.floor(qty));
     setItems((prev) =>
       prev.map((p) =>
-        p.id === id && (p.variant_id ?? null) === variantId ? { ...p, qty: safeQty } : p
+        p.id === id && (p.variant_id ?? null) === variantId
+          ? (() => {
+              const basePrice = Number((p as any).base_price ?? p.price ?? 0) || 0;
+              const tiers = (p as any).bulk_prices ?? null;
+              const nextUnit = tiers ? getBulkUnitPrice(basePrice, safeQty, tiers) : p.price;
+              return { ...p, qty: safeQty, price: nextUnit, base_price: basePrice, bulk_prices: tiers };
+            })()
+          : p
       )
     );
   };

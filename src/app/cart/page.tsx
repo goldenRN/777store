@@ -34,6 +34,11 @@ export default function CartPage() {
   const [deliveryName, setDeliveryName] = useState("");
   const [deliveryPhone, setDeliveryPhone] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [districts, setDistricts] = useState<{ id: number; name: string }[]>([]);
+  const [khoroos, setKhoroos] = useState<{ id: number; name: string; zone: string; fee: number }[]>([]);
+  const [deliveryDistrictId, setDeliveryDistrictId] = useState<number | "">("");
+  const [deliveryKhorooId, setDeliveryKhorooId] = useState<number | "">("");
+  const [deliveryFee, setDeliveryFee] = useState<number>(0);
   const [resolvedImages, setResolvedImages] = useState<Record<string, string>>({});
   const activeExpiry = invoiceEnableExpiry ? invoiceExpiry || qpay?.expires_at || null : null;
 
@@ -148,22 +153,48 @@ export default function CartPage() {
   useEffect(() => {
     if (deliveryMethod !== "delivery" || !user?.id) return;
     // If already filled, skip
-    if (deliveryName && deliveryPhone && deliveryAddress) return;
+    if (
+      deliveryName &&
+      deliveryPhone &&
+      deliveryAddress &&
+      deliveryDistrictId &&
+      deliveryKhorooId
+    )
+      return;
 
     const fillFromUser = async () => {
       try {
         const res = await fetch(`/api/users/${user.id}`);
         const data = await res.json();
         const u = data?.user ?? {};
+        const last = data?.lastDelivery ?? null;
         if (!deliveryName) setDeliveryName(u.name || user.name || "");
         if (!deliveryPhone) setDeliveryPhone(u.phone || user.phone || "");
-        if (!deliveryAddress) setDeliveryAddress(u.address || user.address || "");
+        if (!deliveryAddress)
+          setDeliveryAddress(last?.delivery_address || u.address || user.address || "");
+        if (!deliveryDistrictId && last?.delivery_district_id) {
+          setDeliveryDistrictId(Number(last.delivery_district_id));
+        }
+        if (!deliveryKhorooId && last?.delivery_khoroo_id) {
+          setDeliveryKhorooId(Number(last.delivery_khoroo_id));
+        }
       } catch {
         // ignore
       }
     };
     fillFromUser();
-  }, [deliveryMethod, user?.id, deliveryName, deliveryPhone, deliveryAddress, user?.name, user?.phone, user?.address]);
+  }, [
+    deliveryMethod,
+    user?.id,
+    deliveryName,
+    deliveryPhone,
+    deliveryAddress,
+    deliveryDistrictId,
+    deliveryKhorooId,
+    user?.name,
+    user?.phone,
+    user?.address,
+  ]);
 
   const normalizeType = (name?: string | null) => {
     const t = (name || "").toLowerCase();
@@ -174,7 +205,45 @@ export default function CartPage() {
   };
 
   const hasPreorder = items.some((it) => normalizeType(it.type_name) === "preorder");
+  const hasReady = items.some((it) => normalizeType(it.type_name) === "ready" || !normalizeType(it.type_name));
   const orderKind = hasPreorder ? "preorder" : "ready";
+  const grandTotal =
+    hasReady && deliveryMethod === "delivery" ? Math.max(0, total + (deliveryFee || 0)) : total;
+
+  useEffect(() => {
+    if (!hasReady) return;
+    if (deliveryMethod !== "delivery") return;
+    if (districts.length > 0) return;
+    fetch("/api/public/delivery/districts")
+      .then((r) => r.json())
+      .then((d) => setDistricts(Array.isArray(d?.items) ? d.items : []))
+      .catch(() => setDistricts([]));
+  }, [deliveryMethod, hasReady, districts.length]);
+
+  useEffect(() => {
+    if (!hasReady) return;
+    if (deliveryMethod !== "delivery") return;
+    if (!deliveryDistrictId) {
+      setKhoroos([]);
+      setDeliveryKhorooId("");
+      setDeliveryFee(0);
+      return;
+    }
+    fetch(`/api/public/delivery/khoroos?districtId=${deliveryDistrictId}`)
+      .then((r) => r.json())
+      .then((d) => setKhoroos(Array.isArray(d?.items) ? d.items : []))
+      .catch(() => setKhoroos([]));
+  }, [deliveryDistrictId, deliveryMethod, hasReady]);
+
+  useEffect(() => {
+    if (deliveryMethod !== "delivery") return;
+    if (!deliveryKhorooId) {
+      setDeliveryFee(0);
+      return;
+    }
+    const k = khoroos.find((x) => Number(x.id) === Number(deliveryKhorooId)) as any;
+    setDeliveryFee(k?.fee != null ? Number(k.fee) : 0);
+  }, [deliveryKhorooId, deliveryMethod, khoroos]);
 
   const handleCheckout = async () => {
     if (!user?.id) {
@@ -183,14 +252,22 @@ export default function CartPage() {
     }
     if (items.length === 0) return;
     setOrderError("");
-    if (!hasPreorder) {
+    if (hasReady) {
       if (!deliveryMethod) {
         alert("Хүргэлтээр авах уу, дэлгүүрээс авах уу гэдгийг сонгоно уу.");
         return;
       }
       if (deliveryMethod === "delivery") {
-        if (!deliveryName.trim() || !deliveryPhone.trim() || !deliveryAddress.trim()) {
-          alert("Хүргэлтийн нэр, утас, хаягаа бүрэн бөглөнө үү.");
+        if (!deliveryName.trim() || !deliveryPhone.trim()) {
+          alert("Хүргэлтийн нэр, утсаа бүрэн бөглөнө үү.");
+          return;
+        }
+        if (!deliveryDistrictId || !deliveryKhorooId) {
+          alert("Дүүрэг, хороо сонгоно уу.");
+          return;
+        }
+        if (!deliveryAddress.trim()) {
+          alert("Нэмэлт хаягаа (байр, тоот, орц гэх мэт) бичнэ үү.");
           return;
         }
       }
@@ -205,10 +282,12 @@ export default function CartPage() {
           name: user.name || user.phone || "Хэрэглэгч",
           phone: user.phone || "0000-0000",
           orderKind,
-          deliveryMethod: hasPreorder ? null : deliveryMethod || null,
+          deliveryMethod: hasReady ? deliveryMethod || null : null,
           deliveryName: deliveryMethod === "delivery" ? deliveryName : null,
           deliveryPhone: deliveryMethod === "delivery" ? deliveryPhone : null,
           deliveryAddress: deliveryMethod === "delivery" ? deliveryAddress : null,
+          deliveryDistrictId: deliveryMethod === "delivery" ? deliveryDistrictId : null,
+          deliveryKhorooId: deliveryMethod === "delivery" ? deliveryKhorooId : null,
           items: items.map((it) => ({
             product_id: it.id,
             variant_id: it.variant_id ?? null,
@@ -360,8 +439,24 @@ export default function CartPage() {
               ))}
 
               <div className="flex items-center justify-between border-t pt-4 text-sm font-semibold">
-                <div>Нийт дүн</div>
-                <div>{total.toLocaleString()}₮</div>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="font-semibold">Дүн</div>
+                    <div className="font-semibold">{total.toLocaleString()}₮</div>
+                  </div>
+                  {!hasPreorder && deliveryMethod === "delivery" ? (
+                    <div className="flex items-center justify-between gap-4 text-xs text-[var(--gray-600)]">
+                      <div>Хүргэлт</div>
+                      <div>{deliveryFee.toLocaleString()}₮</div>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-[var(--gray-500)]">Нийт төлөх</div>
+                  <div className="text-base font-bold text-[var(--navy-900)]">
+                    {grandTotal.toLocaleString()}₮
+                  </div>
+                </div>
               </div>
 
               {orderError && (
@@ -375,7 +470,9 @@ export default function CartPage() {
                   Энэ захиалга дотор **захиалгын бараа** байгаа тул төлбөр амжилттай болсны дараа
                   “Хүлээгдэж байгаа” жагсаалтад бүртгэгдэнэ.
                 </div>
-              ) : (
+              ) : null}
+
+              {hasReady ? (
                 <div className="rounded-xl border bg-white p-4 text-sm">
                   <div className="font-semibold">Хүлээн авах хэлбэр</div>
                   <div className="mt-2 flex items-center gap-4 text-xs">
@@ -401,6 +498,41 @@ export default function CartPage() {
 
                   {deliveryMethod === "delivery" && (
                     <div className="mt-3 grid gap-2 text-xs">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <select
+                          value={deliveryDistrictId === "" ? "" : String(deliveryDistrictId)}
+                          onChange={(e) => setDeliveryDistrictId(e.target.value ? Number(e.target.value) : "")}
+                          className="rounded-lg border px-3 py-2"
+                        >
+                          <option value="">Дүүрэг сонгох</option>
+                          {districts.map((d) => (
+                            <option key={d.id} value={d.id}>
+                              {d.name}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={deliveryKhorooId === "" ? "" : String(deliveryKhorooId)}
+                          onChange={(e) => setDeliveryKhorooId(e.target.value ? Number(e.target.value) : "")}
+                          className="rounded-lg border px-3 py-2"
+                          disabled={!deliveryDistrictId}
+                        >
+                          <option value="">Хороо сонгох</option>
+                          {khoroos.map((k) => (
+                            <option key={k.id} value={k.id}>
+                              {k.name} ({k.zone}) — {Number(k.fee || 0).toLocaleString()}₮
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {deliveryFee > 0 && (
+                        <div className="rounded-lg border bg-[var(--sky-50)] px-3 py-2">
+                          Хүргэлтийн төлбөр:{" "}
+                          <span className="font-semibold text-red-600">{deliveryFee.toLocaleString()}₮</span>
+                        </div>
+                      )}
+
                       <input
                         value={deliveryName}
                         onChange={(e) => setDeliveryName(e.target.value)}
@@ -416,13 +548,13 @@ export default function CartPage() {
                       <input
                         value={deliveryAddress}
                         onChange={(e) => setDeliveryAddress(e.target.value)}
-                        placeholder="Хүргэлтийн хаяг"
+                        placeholder="Нэмэлт хаяг (байр, тоот, орц гэх мэт)"
                         className="rounded-lg border px-3 py-2"
                       />
                     </div>
                   )}
                 </div>
-              )}
+              ) : null}
 
               <div className="flex justify-end">
                 <button

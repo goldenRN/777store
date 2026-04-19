@@ -35,6 +35,31 @@ export async function GET(
     include: { items: true },
   });
 
+  const lastDelivery = await prisma.adminOrder.findFirst({
+    where: {
+      user_id: id,
+      payment_status: "PAID",
+      delivery_method: "delivery",
+      delivery_district_id: { not: null },
+      delivery_khoroo_id: { not: null },
+      delivery_address: { not: null },
+    },
+    orderBy: { created_at: "desc" },
+    select: {
+      delivery_method: true,
+      delivery_name: true,
+      delivery_phone: true,
+      delivery_address: true,
+      delivery_district_id: true,
+      delivery_district_name: true,
+      delivery_khoroo_id: true,
+      delivery_khoroo_name: true,
+      delivery_zone: true,
+      delivery_fee: true,
+      created_at: true,
+    },
+  });
+
   const mappedOrders = orders.map((o) => ({
     id: o.id,
     status: o.status,
@@ -50,7 +75,7 @@ export async function GET(
     })),
   }));
 
-  return NextResponse.json({ user, orders: mappedOrders });
+  return NextResponse.json({ user, orders: mappedOrders, lastDelivery });
 }
 
 export async function PATCH(

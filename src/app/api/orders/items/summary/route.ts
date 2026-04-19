@@ -78,8 +78,61 @@ export async function GET(request: NextRequest) {
         ...productNameOr,
       ],
     },
-    include: { images: true, variants: { include: { images: true } } },
+    include: { images: true, variants: { include: { images: true } }, type: true },
   });
+
+  // When `openOnly=true`, include products that are currently accepting orders even if they have 0 orders.
+  // We limit to "preorder-like" products by type to avoid pulling the entire catalog.
+  if (openOnly) {
+    const openProducts = await prisma.adminProduct.findMany({
+      where: {
+        order_accept_status: { not: "CLOSED" },
+        type: {
+          OR: [
+            { has_duration: true },
+            { name: { contains: "захиал", mode: "insensitive" } },
+            { name: { contains: "урьдчил", mode: "insensitive" } },
+            { name: { contains: "preorder", mode: "insensitive" } },
+            { name: { contains: "live", mode: "insensitive" } },
+            { name: { contains: "лайв", mode: "insensitive" } },
+          ],
+        },
+      },
+      include: { images: true, variants: { include: { images: true } }, type: true },
+      orderBy: [{ id: "asc" }],
+    });
+
+    const existingIds = new Set(products.map((p) => p.id));
+    for (const p of openProducts) {
+      if (!existingIds.has(p.id)) {
+        products.push(p as any);
+        existingIds.add(p.id);
+      }
+    }
+  }
+
+  // When `closedOnly=true`, include products/variants that are explicitly closed even if they have 0 orders.
+  // This supports the "Хүлээгдэж буй" tab showing closed items even before any orders exist.
+  if (closedOnly) {
+    const closedProducts = await prisma.adminProduct.findMany({
+      where: {
+        OR: [
+          { order_accept_status: "CLOSED" },
+          { variants: { some: { order_accept_status: "CLOSED" } } },
+        ],
+      },
+      include: { images: true, variants: { include: { images: true } }, type: true },
+      orderBy: [{ id: "asc" }],
+    });
+
+    const existingIds = new Set(products.map((p) => p.id));
+    for (const p of closedProducts) {
+      if (!existingIds.has(p.id)) {
+        products.push(p as any);
+        existingIds.add(p.id);
+      }
+    }
+  }
   const productMap = new Map(
     products.map((p) => [
       p.id,
@@ -247,6 +300,29 @@ export async function GET(request: NextRequest) {
           inferredMap.set(k, (inferredMap.get(k) ?? 0) + qty);
         }
       }
+    }
+  }
+
+  // Ensure open/closed products appear even when they have 0 order items.
+  if (openOnly || closedOnly) {
+    for (const p of products) {
+      const key = `p:${p.id}`;
+      if (map.has(key)) continue;
+      const productMeta = productMap.get(p.id) ?? null;
+      map.set(key, {
+        product_id: p.id,
+        product_name: p.name,
+        product_description: productMeta?.description ?? p.description ?? "",
+        image_url: productMeta?.image_url ?? p.images?.[0]?.image_url ?? null,
+        product_stock: productMeta?.stock ?? (p as any).stock ?? null,
+        product_ordered_qty: productMeta?.ordered_qty ?? (p as any).ordered_qty ?? 0,
+        order_accept_status: productMeta?.order_accept_status ?? (p as any).order_accept_status ?? null,
+        total_qty: 0,
+        order_count: 0,
+        item_ids: [],
+        buyers: [],
+        variants: [],
+      });
     }
   }
 

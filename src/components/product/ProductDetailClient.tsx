@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import AddToCartButton from "@/components/cart/AddToCartButton";
 import { toast } from "@/components/ui/use-toast";
 import { getVariantLabel } from "@/lib/variantLabel";
+import { getBulkUnitPrice, normalizeBulkTiers } from "@/lib/bulkPricing";
 
 type Variant = {
   id: number;
@@ -25,6 +26,7 @@ type ProductDetail = {
   video_url?: string | null;
   price: number;
   discount_price: number | null;
+  bulk_prices?: unknown | null;
   stock: number;
   ordered_qty?: number | null;
   material: string | null;
@@ -376,14 +378,26 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
     return url ? normalizeImage(url) : null;
   }, [selectedVariant]);
 
+  const baseUnitPrice = useMemo(() => {
+    const vPrice = selectedVariant?.price != null ? Number(selectedVariant.price) : null;
+    if (vPrice != null && vPrice > 0) return vPrice;
+    return product.discount_price && product.discount_price > 0 ? product.discount_price : product.price;
+  }, [selectedVariant?.price, product.discount_price, product.price]);
+
+  const bulkTiers = useMemo(
+    () => normalizeBulkTiers(product.bulk_prices ?? null),
+    [product.bulk_prices]
+  );
+
+  const bulkApplies =
+    !(selectedVariant?.price != null && Number(selectedVariant.price) > 0) && bulkTiers.length > 0;
+
   const finalPrice = useMemo(() => {
-    return (
-      selectedVariant?.price ??
-      (product.discount_price && product.discount_price > 0
-        ? product.discount_price
-        : product.price)
-    );
-  }, [selectedVariant, product.discount_price, product.price]);
+    if (!bulkApplies) return baseUnitPrice;
+    return getBulkUnitPrice(baseUnitPrice, qty, bulkTiers);
+  }, [bulkApplies, baseUnitPrice, qty, bulkTiers]);
+
+  const bulkForCart = bulkApplies ? bulkTiers : null;
 
   const stockNumber = Number(selectedVariant?.stock ?? product.stock ?? 0);
   const orderedNumber = Number(selectedVariant?.ordered_qty ?? product.ordered_qty ?? 0);
@@ -465,6 +479,33 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
             </span>
           )}
         </div>
+
+        {bulkTiers.length > 0 && (
+          <div className="mt-4 rounded-2xl border bg-[var(--sky-50)] p-4">
+            <div className="text-xs font-semibold text-[var(--navy-900)]">Бөөний үнэ</div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {bulkTiers.map((t) => (
+                <span
+                  key={t.min_qty}
+                  className="rounded-full border bg-white px-3 py-1 text-[11px] font-semibold text-[var(--navy-900)]"
+                >
+                  {t.min_qty}ш+ : {Number(t.price).toLocaleString()}₮
+                </span>
+              ))}
+            </div>
+
+            {bulkApplies ? (
+              <div className="mt-2 text-[11px] text-[var(--gray-600)]">
+                Одоогийн {qty}ш дээр нэгж үнэ:{" "}
+                <span className="font-semibold text-red-600">{Number(finalPrice).toLocaleString()}₮</span>
+              </div>
+            ) : (
+              <div className="mt-2 text-[11px] text-[var(--gray-500)]">
+                Сонгосон төрөл тусдаа үнэтэй тул бөөний үнэ үйлчлэхгүй.
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="mt-4 text-sm text-[var(--gray-700)]">
           {product.description || "Тайлбар байхгүй."}
@@ -573,6 +614,8 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
               id={product.id}
               name={product.name}
               price={finalPrice}
+              base_price={baseUnitPrice}
+              bulk_prices={bulkForCart}
               image_url={cartImageUrl}
               type_name={product.type_name}
               variant_id={selectedVariant?.id ?? null}
@@ -589,6 +632,8 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
               id={product.id}
               name={product.name}
               price={finalPrice}
+              base_price={baseUnitPrice}
+              bulk_prices={bulkForCart}
               image_url={cartImageUrl}
               type_name={product.type_name}
               variant_id={selectedVariant?.id ?? null}

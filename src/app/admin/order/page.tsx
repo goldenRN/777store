@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import OrderDetailsModal from "./OrderDetailsModal";
 import { getActorHeaders } from "@/lib/actorHeaders";
+import { getBulkUnitPrice } from "@/lib/bulkPricing";
 import { Modal } from "@/components/ui/modal";
 import { Tag, Trash2, Plus, MoreVertical, CheckCircle, ChevronDown, ChevronUp, Lock, PackageCheck } from "lucide-react";
 import AdminTableSearchBar from "@/components/admin/AdminTableSearchBar";
@@ -56,6 +57,7 @@ type AdminProductOption = {
   name: string;
   price: number;
   discount_price: number | null;
+  bulk_prices?: unknown | null;
   images?: { image_url: string }[];
 };
 
@@ -99,13 +101,19 @@ export default function AdminOrdersTable() {
   const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
   const [closingProductId, setClosingProductId] = useState<number | null>(null);
   const [closingVariantId, setClosingVariantId] = useState<number | null>(null);
+  const [productSortField, setProductSortField] = useState<
+    "product_name" | "total_qty" | "product_stock" | "remaining"
+  >("total_qty");
+  const [productSortOrder, setProductSortOrder] = useState<"asc" | "desc">("desc");
   const [arrivedOpen, setArrivedOpen] = useState(false);
   const [arrivedTarget, setArrivedTarget] = useState<{
     productId: number;
     productName: string;
     variantId: number | null;
     variantLabel: string | null;
+    applyToAllVariants: boolean;
   } | null>(null);
+  const [arrivedQty, setArrivedQty] = useState<string>("");
   const [arrivedCargoFee, setArrivedCargoFee] = useState<string>("");
   const [arrivedCargoNote, setArrivedCargoNote] = useState<string>("");
   const [arrivedSaving, setArrivedSaving] = useState(false);
@@ -115,11 +123,14 @@ export default function AdminOrdersTable() {
   const [deleteSaving, setDeleteSaving] = useState(false);
   const searchParams = useSearchParams();
   const statusFilter = searchParams.get("status") ?? "";
-  const isPending = statusFilter.toLowerCase() === "pending";
+  const statusKey = statusFilter.toLowerCase();
+  const isPending = statusKey === "pending";
+  const isArrivedTab = statusKey === "confirmed";
   const openOnly = searchParams.get("openOnly") === "true";
-  const pendingClosedOnly = isPending && !openOnly;
   const deletedOnly = searchParams.get("deleted") === "true";
-  const isProductOnly = Boolean(statusFilter);
+  // Only some tabs are "product summary" views (pending / openOnly / arrived workflow).
+  // Other tabs (shipping/delivered/cancelled) should remain as order lists.
+  const isProductOnly = !deletedOnly && (isPending || openOnly || isArrivedTab);
   const titleLabel = (() => {
     if (deletedOnly) return "Устгасан захиалга";
     if (openOnly && isPending) return "Захиалга авч байгаа";
@@ -273,15 +284,24 @@ export default function AdminOrdersTable() {
     [productOptionMap]
   );
 
-  const getUnitPriceForVariant = useCallback(
-    (productId: number, variantId: number | null) => {
-    const baseUnit = getBaseUnitPrice(productId);
-    if (!variantId) return baseUnit;
-    const variant = (variantOptions[productId] || []).find((v) => v.id === variantId) || null;
-    const variantPrice = variant?.price != null ? Number(variant.price) : null;
-    return variantPrice != null && variantPrice > 0 ? variantPrice : baseUnit;
+  const getBulkUnitPriceForProduct = useCallback(
+    (productId: number, qty: number) => {
+      const product = productOptionMap.get(productId);
+      const baseUnit = getBaseUnitPrice(productId);
+      const tiers = product?.bulk_prices ?? null;
+      return getBulkUnitPrice(baseUnit, qty, tiers);
     },
-    [getBaseUnitPrice, variantOptions]
+    [getBaseUnitPrice, productOptionMap]
+  );
+
+  const getUnitPriceForVariant = useCallback(
+    (productId: number, variantId: number | null, qty: number) => {
+      if (!variantId) return getBulkUnitPriceForProduct(productId, qty);
+      const variant = (variantOptions[productId] || []).find((v) => v.id === variantId) || null;
+      const variantPrice = variant?.price != null ? Number(variant.price) : null;
+      return variantPrice != null && variantPrice > 0 ? variantPrice : getBulkUnitPriceForProduct(productId, qty);
+    },
+    [getBulkUnitPriceForProduct, variantOptions]
   );
 
   const orderItemTotal = useMemo(() => {
@@ -289,7 +309,7 @@ export default function AdminOrdersTable() {
       if (!it.product_id) return sum;
       const productId = Number(it.product_id);
       const variantId = it.variant_id ? Number(it.variant_id) : null;
-      const unit = getUnitPriceForVariant(productId, variantId);
+      const unit = getUnitPriceForVariant(productId, variantId, Number(it.qty || 1));
       return sum + Math.max(1, Number(it.qty || 1)) * unit;
     }, 0);
   }, [createItems, getUnitPriceForVariant]);
@@ -312,6 +332,48 @@ export default function AdminOrdersTable() {
       return false;
     });
   }, [productItems, qDebounced]);
+
+  const getRemainingForProductRow = (p: ProductSummary) => {
+    if (p.product_stock == null || p.product_ordered_qty == null) return null;
+    return Math.max(0, Number(p.product_stock) - Number(p.product_ordered_qty));
+  };
+
+  const sortedVisibleProductItems = useMemo(() => {
+    const list = [...visibleProductItems];
+    const dir = productSortOrder === "asc" ? 1 : -1;
+    list.sort((a, b) => {
+      const aVal = (() => {
+        if (productSortField === "product_name") return String(a.product_name || "");
+        if (productSortField === "total_qty") return Number(a.total_qty || 0);
+        if (productSortField === "product_stock") return a.product_stock == null ? -1 : Number(a.product_stock);
+        const r = getRemainingForProductRow(a);
+        return r == null ? -1 : Number(r);
+      })();
+      const bVal = (() => {
+        if (productSortField === "product_name") return String(b.product_name || "");
+        if (productSortField === "total_qty") return Number(b.total_qty || 0);
+        if (productSortField === "product_stock") return b.product_stock == null ? -1 : Number(b.product_stock);
+        const r = getRemainingForProductRow(b);
+        return r == null ? -1 : Number(r);
+      })();
+
+      if (typeof aVal === "number" && typeof bVal === "number") {
+        return (aVal - bVal) * dir;
+      }
+      return String(aVal).localeCompare(String(bVal)) * dir;
+    });
+    return list;
+  }, [visibleProductItems, productSortField, productSortOrder]);
+
+  const handleProductSort = (field: "product_name" | "total_qty" | "product_stock" | "remaining") => {
+    if (productSortField === field) {
+      setProductSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setProductSortField(field);
+      // sensible defaults
+      setProductSortOrder(field === "product_name" ? "asc" : "desc");
+    }
+  };
 
   const handleSort = (field: keyof Order) => {
     if (sortField === field) {
@@ -406,20 +468,24 @@ export default function AdminOrdersTable() {
       productName: p.product_name,
       variantId: null,
       variantLabel: null,
+      applyToAllVariants: Array.isArray(p.variants) && p.variants.length > 0,
     });
+    setArrivedQty(String(p.total_qty ?? 0));
     setArrivedCargoFee("");
     setArrivedCargoNote("");
     setArrivedOpen(true);
   };
 
-  const openArrivedModalForVariant = (p: ProductSummary, variantId: number, variantLabel: string) => {
+  const openArrivedModalForVariant = (p: ProductSummary, v: ProductSummary["variants"][number]) => {
     if (!p.product_id) return;
     setArrivedTarget({
       productId: p.product_id,
       productName: p.product_name,
-      variantId,
-      variantLabel,
+      variantId: v.variant_id,
+      variantLabel: v.label,
+      applyToAllVariants: false,
     });
+    setArrivedQty(String(v.ordered_qty ?? 0));
     setArrivedCargoFee("");
     setArrivedCargoNote("");
     setArrivedOpen(true);
@@ -427,6 +493,12 @@ export default function AdminOrdersTable() {
 
   const saveArrived = async () => {
     if (!arrivedTarget) return;
+    const qtyRaw = arrivedQty.trim();
+    const qty = qtyRaw ? Number(qtyRaw) : NaN;
+    if (!Number.isFinite(qty) || qty < 0) {
+      alert("Ирсэн тоо зөв оруулна уу.");
+      return;
+    }
     const feeRaw = arrivedCargoFee.trim();
     const fee = feeRaw ? Number(feeRaw) : NaN;
     if (!Number.isFinite(fee) || fee < 0) {
@@ -441,6 +513,7 @@ export default function AdminOrdersTable() {
         body: JSON.stringify({
           productId: arrivedTarget.productId,
           variantId: arrivedTarget.variantId,
+          arrived_qty: Math.round(qty),
           cargo_fee: fee,
           cargo_note: arrivedCargoNote.trim() || null,
         }),
@@ -450,6 +523,7 @@ export default function AdminOrdersTable() {
 
       setArrivedOpen(false);
       setArrivedTarget(null);
+      setArrivedQty("");
       alert("Амжилттай хадгаллаа. “Бараа ирсэн” цэсэнд харагдана.");
       await fetchProductSummary();
     } catch (err: unknown) {
@@ -602,11 +676,75 @@ export default function AdminOrdersTable() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="p-3 text-left">Зураг</th>
-                <th className="p-3 text-left">Барааны нэр</th>
+                <th className="p-3 text-left">
+                  <button
+                    type="button"
+                    onClick={() => handleProductSort("product_name")}
+                    className="inline-flex items-center gap-1 font-semibold"
+                    title="Sort"
+                  >
+                    Барааны нэр
+                    {productSortField === "product_name" ? (
+                      productSortOrder === "asc" ? (
+                        <ChevronUp size={14} />
+                      ) : (
+                        <ChevronDown size={14} />
+                      )
+                    ) : null}
+                  </button>
+                </th>
                 <th className="p-3 text-left">Тайлбар</th>
-                <th className="p-3 text-left">Захиалсан</th>
-                <th className="p-3 text-left">Захиалга авах тоо</th>
-                <th className="p-3 text-left">Үлдэгдэл</th>
+                <th className="p-3 text-left">
+                  <button
+                    type="button"
+                    onClick={() => handleProductSort("total_qty")}
+                    className="inline-flex items-center gap-1 font-semibold"
+                    title="Sort"
+                  >
+                    Захиалсан
+                    {productSortField === "total_qty" ? (
+                      productSortOrder === "asc" ? (
+                        <ChevronUp size={14} />
+                      ) : (
+                        <ChevronDown size={14} />
+                      )
+                    ) : null}
+                  </button>
+                </th>
+                <th className="p-3 text-left">
+                  <button
+                    type="button"
+                    onClick={() => handleProductSort("product_stock")}
+                    className="inline-flex items-center gap-1 font-semibold"
+                    title="Sort"
+                  >
+                    Захиалга авах тоо
+                    {productSortField === "product_stock" ? (
+                      productSortOrder === "asc" ? (
+                        <ChevronUp size={14} />
+                      ) : (
+                        <ChevronDown size={14} />
+                      )
+                    ) : null}
+                  </button>
+                </th>
+                <th className="p-3 text-left">
+                  <button
+                    type="button"
+                    onClick={() => handleProductSort("remaining")}
+                    className="inline-flex items-center gap-1 font-semibold"
+                    title="Sort"
+                  >
+                    Үлдэгдэл
+                    {productSortField === "remaining" ? (
+                      productSortOrder === "asc" ? (
+                        <ChevronUp size={14} />
+                      ) : (
+                        <ChevronDown size={14} />
+                      )
+                    ) : null}
+                  </button>
+                </th>
                 <th className="p-3 text-left">
                   <Tag size={14} className="text-gray-600" />
                 </th>
@@ -619,7 +757,7 @@ export default function AdminOrdersTable() {
               ) : visibleProductItems.length === 0 ? (
                 <tr><td colSpan={8} className="p-4 text-center">Мэдээлэл алга</td></tr>
               ) : (
-                visibleProductItems.map((p) => (
+                sortedVisibleProductItems.map((p) => (
                   <React.Fragment key={`${p.product_id ?? "x"}-${p.product_name}`}>
                   <tr className="border-t">
                     <td className="p-3">
@@ -642,9 +780,10 @@ export default function AdminOrdersTable() {
                     <td className="p-3">{p.total_qty}</td>
                     <td className="p-3">{p.product_stock ?? "-"}</td>
                     <td className="p-3">
-                      {p.product_stock != null && p.product_ordered_qty != null
-                        ? Math.max(0, p.product_stock - p.product_ordered_qty)
-                        : "-"}
+                      {(() => {
+                        const r = getRemainingForProductRow(p);
+                        return r == null ? "-" : r;
+                      })()}
                     </td>
                     <td className="p-3">
                       <span className="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700">
@@ -680,7 +819,7 @@ export default function AdminOrdersTable() {
                             <Lock size={16} />
                           </button>
                         ) : null}
-                        {isPending && !openOnly && p.product_id != null && (!p.variants || p.variants.length === 0) ? (
+                        {isPending && !openOnly && p.product_id != null && !(p.variants && p.variants.length > 0) ? (
                           <button
                             onClick={() => openArrivedModalForProduct(p)}
                             className="h-9 w-9 rounded border bg-white flex items-center justify-center hover:bg-gray-50 disabled:opacity-50"
@@ -713,8 +852,7 @@ export default function AdminOrdersTable() {
                                   <th className="px-3 py-2 text-left">Захиалга авах тоо</th>
                                   <th className="px-3 py-2 text-left">Үлдэгдэл</th>
                                   <th className="px-3 py-2 text-left">Төлөв</th>
-                                  {openOnly && isPending ? <th className="px-3 py-2 text-left">Үйлдэл</th> : null}
-                                  {pendingClosedOnly ? <th className="px-3 py-2 text-left">Карго</th> : null}
+                                  {isPending ? <th className="px-3 py-2 text-left">Үйлдэл</th> : null}
                                 </tr>
                               </thead>
                               <tbody>
@@ -733,30 +871,29 @@ export default function AdminOrdersTable() {
                                         {v.closed ? "Хаагдсан" : "Нээлттэй"}
                                       </span>
                                     </td>
-                                    {openOnly && isPending ? (
+                                    {isPending ? (
                                       <td className="px-3 py-2">
-                                        <button
-                                          type="button"
-                                          onClick={() => closeVariantOrders(v.variant_id, v.label)}
-                                          className="h-7 w-7 rounded border bg-white inline-flex items-center justify-center text-red-600 hover:bg-red-50 disabled:opacity-50"
-                                          title="Захиалга хаах"
-                                          disabled={v.closed || closingVariantId === v.variant_id}
-                                        >
-                                          <Lock size={14} />
-                                        </button>
-                                      </td>
-                                    ) : null}
-                                    {pendingClosedOnly ? (
-                                      <td className="px-3 py-2">
-                                        <button
-                                          type="button"
-                                          onClick={() => openArrivedModalForVariant(p, v.variant_id, v.label)}
-                                          className="h-7 w-7 rounded border bg-white inline-flex items-center justify-center hover:bg-gray-50 disabled:opacity-50"
-                                          title="Карго оруулах"
-                                          disabled={arrivedSaving}
-                                        >
-                                          <PackageCheck size={14} />
-                                        </button>
+                                        {openOnly ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => closeVariantOrders(v.variant_id, v.label)}
+                                            className="h-7 w-7 rounded border bg-white inline-flex items-center justify-center text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                            title="Захиалга хаах"
+                                            disabled={v.closed || closingVariantId === v.variant_id}
+                                          >
+                                            <Lock size={14} />
+                                          </button>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            onClick={() => openArrivedModalForVariant(p, v)}
+                                            className="h-7 w-7 rounded border bg-white inline-flex items-center justify-center hover:bg-gray-50 disabled:opacity-50"
+                                            title="Бараа ирсэн"
+                                            disabled={arrivedSaving}
+                                          >
+                                            <PackageCheck size={14} />
+                                          </button>
+                                        )}
                                       </td>
                                     ) : null}
                                   </tr>
@@ -1138,7 +1275,7 @@ export default function AdminOrdersTable() {
                       {it.product_id &&
                         (variantOptions[Number(it.product_id)] || []).map((v) => {
                           const pid = Number(it.product_id);
-                          const unit = getUnitPriceForVariant(pid, v.id);
+                          const unit = getUnitPriceForVariant(pid, v.id, Number(it.qty || 1));
                           return (
                             <option key={v.id} value={v.id}>
                               {getVariantLabel(v)} — {Number(unit || 0).toLocaleString()}₮
@@ -1289,8 +1426,24 @@ export default function AdminOrdersTable() {
             <div className="font-semibold">{arrivedTarget?.productName ?? "Бараа"}</div>
             {arrivedTarget?.variantLabel ? (
               <div className="text-xs text-gray-600">Төрөл: {arrivedTarget.variantLabel}</div>
+            ) : arrivedTarget?.applyToAllVariants ? (
+              <div className="text-xs text-gray-600">Энэ барааны бүх төрөлд нэг мөр бүртгэнэ.</div>
             ) : null}
-            <div className="text-xs text-gray-500">Карго үнэ оруулаад хадгална.</div>
+            <div className="text-xs text-gray-500">Ирсэн тоо, карго үнэ оруулаад хадгална.</div>
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Ирсэн тоо (ш)</label>
+            <input
+              type="number"
+              min={0}
+              value={arrivedQty}
+              onChange={(e) => setArrivedQty(e.target.value)}
+              className="mt-1 w-full border rounded px-3 py-2"
+              placeholder="Ж: 10"
+            />
+            <div className="mt-1 text-[11px] text-gray-500">
+              Default утга нь “Захиалсан” тоотой тэнцүү. Хуваагдаж ирсэн/гэмтэлтэй бол багасгаж засч болно.
+            </div>
           </div>
           <div>
             <label className="text-sm text-gray-600">Карго (₮)</label>
@@ -1313,7 +1466,14 @@ export default function AdminOrdersTable() {
             />
           </div>
           <div className="flex justify-end gap-2">
-            <button onClick={() => setArrivedOpen(false)} className="px-4 py-2 rounded border">
+            <button
+              onClick={() => {
+                setArrivedOpen(false);
+                setArrivedTarget(null);
+                setArrivedQty("");
+              }}
+              className="px-4 py-2 rounded border"
+            >
               Болих
             </button>
             <button

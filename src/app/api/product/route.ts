@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { normalizeBulkTiers } from "@/lib/bulkPricing";
 
 export async function GET() {
   const list = await prisma.adminProduct.findMany({
@@ -20,6 +22,7 @@ export async function GET() {
     video_url: p.video_url ?? null,
     price: p.price,
     discount_price: p.discount_price,
+    bulk_prices: p.bulk_prices ?? null,
     stock: p.stock,
     material: p.material,
     duration_hours: p.duration_hours,
@@ -64,6 +67,13 @@ export async function POST(request: Request) {
   const order_accept_status = body?.order_accept_status
     ? String(body.order_accept_status)
     : null;
+  const bulk_prices =
+    body?.bulk_prices == null
+      ? Prisma.JsonNull
+      : (() => {
+          const tiers = normalizeBulkTiers(body.bulk_prices);
+          return tiers.length > 0 ? tiers : Prisma.JsonNull;
+        })();
 
   if (!name) {
     return NextResponse.json({ message: "Нэр шаардлагатай" }, { status: 400 });
@@ -76,6 +86,7 @@ export async function POST(request: Request) {
       video_url: video_url || null,
       price,
       discount_price: discount_price ?? null,
+      bulk_prices,
       stock,
       material: material || null,
       duration_hours: duration_hours ?? null,

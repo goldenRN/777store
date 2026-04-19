@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logAdminAction } from "@/lib/audit";
+import { getBulkUnitPrice } from "@/lib/bulkPricing";
 
 export async function POST(request: NextRequest) {
   class BadRequestError extends Error {
@@ -216,12 +217,15 @@ export async function POST(request: NextRequest) {
         if (!product) throw new BadRequestError("Зарим бараа олдсонгүй");
         const variant = line.variantId ? variantById.get(line.variantId)?.variant ?? null : null;
         const variantPrice = variant?.price != null ? Number(variant.price) : null;
+        const basePrice =
+          product.discount_price != null && product.discount_price > 0
+            ? Number(product.discount_price)
+            : Number(product.price);
+        const bulkPrices = (product as any).bulk_prices ?? null;
         const unitPrice =
           variantPrice != null && variantPrice > 0
             ? variantPrice
-            : product.discount_price != null && product.discount_price > 0
-            ? Number(product.discount_price)
-            : Number(product.price);
+            : getBulkUnitPrice(basePrice, line.qty, bulkPrices);
         const imageUrl = variant?.images?.[0]?.image_url ?? product.images?.[0]?.image_url ?? null;
         return {
           product_id: line.productId,
