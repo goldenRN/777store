@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { isExternalMediaUrl, resolveMediaUrl } from "@/lib/media";
 
 type Banner = {
   id: number;
@@ -19,13 +20,6 @@ const FALLBACK_IMAGE =
   "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1400&q=60";
 
 export default function BannerSlider({ banners, intervalMs = 5000 }: BannerSliderProps) {
-  const resolveImageUrl = (url?: string | null) => {
-    if (!url) return "";
-    if (url.startsWith("http://") || url.startsWith("https://")) return url;
-    if (url.startsWith("/")) return url;
-    return `/uploads/${url}`;
-  };
-
   const safeBanners = useMemo(
     () =>
       banners.length > 0
@@ -51,7 +45,7 @@ export default function BannerSlider({ banners, intervalMs = 5000 }: BannerSlide
     setIndex((prev) => (prev + 1) % safeBanners.length);
   };
 
-  const bannerImage = resolveImageUrl(current.image_url || FALLBACK_IMAGE);
+  const bannerImage = resolveMediaUrl(current.image_url || FALLBACK_IMAGE);
 
   return (
     <div className="relative w-full overflow-hidden bg-white shadow-2xl">
@@ -62,7 +56,9 @@ export default function BannerSlider({ banners, intervalMs = 5000 }: BannerSlide
           fill
           className="object-cover"
           priority
-          unoptimized
+          sizes="100vw"
+          quality={70}
+          unoptimized={isExternalMediaUrl(current.image_url || FALLBACK_IMAGE)}
         />
         <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-transparent" />
       </div>

@@ -3,8 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import Header from "@/components/Header";
-import Footer from "@/components/Footer";
 
 export default function LoginPageClient() {
   const router = useRouter();
@@ -64,10 +62,8 @@ export default function LoginPageClient() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--sky-50)]">
-      <Header />
-      <main className="container mx-auto px-6 py-10">
-        <div className="mx-auto max-w-md rounded-3xl bg-white p-8 shadow">
+    <main className="container mx-auto px-6 py-10">
+      <div className="mx-auto max-w-md rounded-3xl bg-white p-8 shadow">
           <h1 className="text-2xl font-bold">Нэвтрэх</h1>
           <p className="mt-2 text-sm text-[var(--gray-700)]">
             Бүртгэлтэй утасны дугаараараа нэвтэрнэ үү.
@@ -129,9 +125,7 @@ export default function LoginPageClient() {
               Сэргээх
             </Link>
           </p>
-        </div>
-      </main>
-      <Footer />
-    </div>
+      </div>
+    </main>
   );
 }

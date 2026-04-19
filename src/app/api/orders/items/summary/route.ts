@@ -1,5 +1,128 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+
+const preorderTypeWhere: Prisma.AdminTypeWhereInput = {
+  OR: [
+    { has_duration: true },
+    { name: { contains: "захиал", mode: "insensitive" } },
+    { name: { contains: "урьдчил", mode: "insensitive" } },
+    { name: { contains: "preorder", mode: "insensitive" } },
+    { name: { contains: "live", mode: "insensitive" } },
+    { name: { contains: "лайв", mode: "insensitive" } },
+  ],
+};
+
+const itemSelect = Prisma.validator<Prisma.AdminOrderItemSelect>()({
+  id: true,
+  order_id: true,
+  product_id: true,
+  variant_id: true,
+  product_name: true,
+  quantity: true,
+  price: true,
+  image_url: true,
+  status: true,
+  order: {
+    select: {
+      name: true,
+      phone1: true,
+    },
+  },
+});
+
+const productSelect = Prisma.validator<Prisma.AdminProductSelect>()({
+  id: true,
+  name: true,
+  description: true,
+  stock: true,
+  ordered_qty: true,
+  order_accept_status: true,
+  created_at: true,
+  duration_hours: true,
+  images: {
+    where: { product_variant_id: null },
+    orderBy: { id: "asc" },
+    take: 1,
+    select: { image_url: true },
+  },
+  variants: {
+    select: {
+      id: true,
+      sku: true,
+      attribute: true,
+      price: true,
+      stock: true,
+      ordered_qty: true,
+      order_accept_status: true,
+      images: {
+        orderBy: { id: "asc" },
+        take: 1,
+        select: { image_url: true },
+      },
+    },
+  },
+});
+
+type SummaryItem = Prisma.AdminOrderItemGetPayload<{ select: typeof itemSelect }>;
+type SummaryProduct = Prisma.AdminProductGetPayload<{ select: typeof productSelect }>;
+
+type SummaryVariant = {
+  variant_id: number;
+  label: string;
+  stock: number | null;
+  ordered_qty: number;
+  remaining_qty: number | null;
+  closed: boolean;
+};
+
+type SummaryGroup = {
+  product_id: number | null;
+  product_name: string;
+  product_description: string;
+  image_url: string | null;
+  product_stock: number | null;
+  product_ordered_qty: number | null;
+  order_accept_status: string | null;
+  total_qty: number;
+  order_count: number;
+  item_ids: number[];
+  buyers: { order_id: number; name: string; phone: string; qty: number; unit_price: number; total_price: number }[];
+  variants: SummaryVariant[];
+};
+
+function normalizeImage(url?: string | null) {
+  const raw = String(url || "").trim();
+  if (!raw) return "";
+  const cleaned = raw.split("#")[0].split("?")[0];
+  if (cleaned.startsWith("http://") || cleaned.startsWith("https://")) {
+    try {
+      const parsed = new URL(cleaned);
+      if (parsed.pathname && parsed.pathname.includes("/uploads/")) {
+        return parsed.pathname;
+      }
+      return cleaned;
+    } catch {
+      return cleaned;
+    }
+  }
+  if (cleaned.startsWith("uploads/")) return `/${cleaned}`;
+  if (cleaned.startsWith("/uploads/")) return cleaned;
+  if (cleaned.startsWith("/")) return cleaned;
+  return `/uploads/${cleaned}`;
+}
+
+function getVariantLabel(variant: { sku: string | null; attribute: Prisma.JsonValue | null; id: number }) {
+  const attr =
+    variant.attribute && typeof variant.attribute === "object" && !Array.isArray(variant.attribute)
+      ? (variant.attribute as Record<string, unknown>)
+      : {};
+  const type = typeof attr.type === "string" ? attr.type : "";
+  const color = typeof attr.color === "string" ? attr.color : "";
+  const size = typeof attr.size === "string" ? attr.size : "";
+  const merged = [type, color, size].filter(Boolean).join(" / ");
+  return merged || variant.sku || `Төрөл-${variant.id}`;
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -26,16 +149,14 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const whereOrder: Record<string, unknown> = {};
+  const whereOrder: Prisma.AdminOrderWhereInput = {
+    deleted_at: null,
+  };
   if (payment === "PAID") {
     whereOrder.payment_status = "PAID";
   } else if (payment === "UNPAID") {
     whereOrder.payment_status = "UNPAID";
   }
-  // Exclude soft-deleted orders from all summaries.
-  whereOrder.deleted_at = null;
-  // If itemStatus is set, we are filtering by AdminOrderItem.status (arrival workflow),
-  // so do not constrain by AdminOrder.status.
   if (status && !itemStatus) {
     whereOrder.status = status;
   }
@@ -46,209 +167,115 @@ export async function GET(request: NextRequest) {
       ...(itemStatus
         ? { status: itemStatus }
         : excludeArrived
-        ? { status: { not: "Бараа ирсэн" } }
-        : {}),
+          ? { status: { not: "Бараа ирсэн" } }
+          : {}),
     },
-    include: {
-      order: true,
-    },
+    select: itemSelect,
     orderBy: { id: "desc" },
   });
 
   const productIds = Array.from(
-    new Set(items.map((it) => it.product_id).filter((id) => id != null))
-  ) as number[];
+    new Set(items.map((item) => item.product_id).filter((id): id is number => id != null))
+  );
   const nameCandidates = Array.from(
     new Set(
       items
-        .filter((it) => !it.product_id && it.product_name)
-        .map((it) => it.product_name.trim())
+        .filter((item) => !item.product_id && item.product_name)
+        .map((item) => item.product_name.trim())
         .filter(Boolean)
     )
   );
 
-  const productNameOr: { name: { equals: string; mode: "insensitive" } }[] = nameCandidates.map((n) => ({
-    name: { equals: n, mode: "insensitive" },
-  }));
-
-  const products = await prisma.adminProduct.findMany({
-    where: {
-      OR: [
-        ...(productIds.length > 0 ? [{ id: { in: productIds } }] : []),
-        ...productNameOr,
-      ],
-    },
-    include: { images: true, variants: { include: { images: true } }, type: true },
-  });
-
-  // When `openOnly=true`, include products that are currently accepting orders even if they have 0 orders.
-  // We limit to "preorder-like" products by type to avoid pulling the entire catalog.
+  const productWhereOr: Prisma.AdminProductWhereInput[] = [];
+  if (productIds.length > 0) {
+    productWhereOr.push({ id: { in: productIds } });
+  }
+  productWhereOr.push(
+    ...nameCandidates.map((name) => ({
+      name: { equals: name, mode: "insensitive" as const },
+    }))
+  );
   if (openOnly) {
-    const openProducts = await prisma.adminProduct.findMany({
-      where: {
-        order_accept_status: { not: "CLOSED" },
-        type: {
-          OR: [
-            { has_duration: true },
-            { name: { contains: "захиал", mode: "insensitive" } },
-            { name: { contains: "урьдчил", mode: "insensitive" } },
-            { name: { contains: "preorder", mode: "insensitive" } },
-            { name: { contains: "live", mode: "insensitive" } },
-            { name: { contains: "лайв", mode: "insensitive" } },
-          ],
-        },
-      },
-      include: { images: true, variants: { include: { images: true } }, type: true },
-      orderBy: [{ id: "asc" }],
+    productWhereOr.push({
+      order_accept_status: { not: "CLOSED" },
+      type: preorderTypeWhere,
     });
-
-    const existingIds = new Set(products.map((p) => p.id));
-    for (const p of openProducts) {
-      if (!existingIds.has(p.id)) {
-        products.push(p as any);
-        existingIds.add(p.id);
-      }
-    }
   }
-
-  // When `closedOnly=true`, include products/variants that are explicitly closed even if they have 0 orders.
-  // This supports the "Хүлээгдэж буй" tab showing closed items even before any orders exist.
   if (closedOnly) {
-    const closedProducts = await prisma.adminProduct.findMany({
-      where: {
-        OR: [
-          { order_accept_status: "CLOSED" },
-          { variants: { some: { order_accept_status: "CLOSED" } } },
-        ],
-      },
-      include: { images: true, variants: { include: { images: true } }, type: true },
-      orderBy: [{ id: "asc" }],
-    });
-
-    const existingIds = new Set(products.map((p) => p.id));
-    for (const p of closedProducts) {
-      if (!existingIds.has(p.id)) {
-        products.push(p as any);
-        existingIds.add(p.id);
-      }
-    }
+    productWhereOr.push({ order_accept_status: "CLOSED" });
+    productWhereOr.push({ variants: { some: { order_accept_status: "CLOSED" } } });
   }
-  const productMap = new Map(
-    products.map((p) => [
-      p.id,
+
+  const products =
+    productWhereOr.length === 0
+      ? ([] as SummaryProduct[])
+      : await prisma.adminProduct.findMany({
+          where: { OR: productWhereOr },
+          select: productSelect,
+          orderBy: { id: "asc" },
+        });
+
+  const productMetaMap = new Map(
+    products.map((product) => [
+      product.id,
       {
-        description: p.description ?? "",
-        image_url: p.images?.[0]?.image_url ?? null,
-        stock: p.stock ?? null,
-        ordered_qty: p.ordered_qty ?? null,
-        order_accept_status: p.order_accept_status ?? null,
-        created_at: p.created_at ?? null,
-        duration_hours: p.duration_hours ?? null,
-        variants: p.variants ?? [],
+        description: product.description ?? "",
+        image_url: product.images[0]?.image_url ?? null,
+        stock: product.stock ?? null,
+        ordered_qty: product.ordered_qty ?? null,
+        order_accept_status: product.order_accept_status ?? null,
+        created_at: product.created_at ?? null,
+        duration_hours: product.duration_hours ?? null,
+        variants: product.variants ?? [],
       },
     ])
   );
+
   const productByName = new Map(
-    products.map((p) => [String(p.name || "").trim().toLowerCase(), p])
+    products.map((product) => [String(product.name || "").trim().toLowerCase(), product])
   );
 
-  const normalizeImage = (url?: string | null) => {
-    const raw = String(url || "").trim();
-    if (!raw) return "";
-    let cleaned = raw.split("#")[0].split("?")[0];
-    if (cleaned.startsWith("http://") || cleaned.startsWith("https://")) {
-      try {
-        const parsed = new URL(cleaned);
-        if (parsed.pathname && parsed.pathname.includes("/uploads/")) {
-          return parsed.pathname;
-        }
-        return cleaned;
-      } catch {
-        return cleaned;
-      }
-    }
-    if (cleaned.startsWith("uploads/")) return `/${cleaned}`;
-    if (cleaned.startsWith("/uploads/")) return cleaned;
-    if (cleaned.startsWith("/")) return cleaned;
-    return `/uploads/${cleaned}`;
-  };
-
-  const getVariantLabel = (variant: { sku: string | null; attribute: Record<string, unknown> | null; id: number }) => {
-    const attr = (variant.attribute || {}) as Record<string, unknown>;
-    const type = typeof attr.type === "string" ? attr.type : "";
-    const color = typeof attr.color === "string" ? attr.color : "";
-    const size = typeof attr.size === "string" ? attr.size : "";
-    const merged = [type, color, size].filter(Boolean).join(" / ");
-    return merged || variant.sku || `Төрөл-${variant.id}`;
-  };
-
-  const variantByProduct = new Map<number, Map<number, any>>();
   const variantImageIndex = new Map<number, Map<string, number[]>>();
   const variantPriceIndex = new Map<number, Map<number, number[]>>();
-  for (const p of products) {
-    const byId = new Map<number, any>();
+  for (const product of products) {
     const byImage = new Map<string, number[]>();
     const byPrice = new Map<number, number[]>();
-    for (const v of p.variants || []) {
-      byId.set(v.id, v);
-      if (v.price != null) {
-        const price = Number(v.price);
+    for (const variant of product.variants || []) {
+      if (variant.price != null) {
+        const price = Number(variant.price);
         if (!byPrice.has(price)) byPrice.set(price, []);
-        byPrice.get(price)!.push(v.id);
+        byPrice.get(price)!.push(variant.id);
       }
-      (v.images || []).forEach((img: any) => {
-        const norm = normalizeImage(img.image_url);
-        if (!norm) return;
-        if (!byImage.has(norm)) byImage.set(norm, []);
-        byImage.get(norm)!.push(v.id);
-      });
+      for (const image of variant.images || []) {
+        const normalized = normalizeImage(image.image_url);
+        if (!normalized) continue;
+        if (!byImage.has(normalized)) byImage.set(normalized, []);
+        byImage.get(normalized)!.push(variant.id);
+      }
     }
-    variantByProduct.set(p.id, byId);
-    variantImageIndex.set(p.id, byImage);
-    variantPriceIndex.set(p.id, byPrice);
+    variantImageIndex.set(product.id, byImage);
+    variantPriceIndex.set(product.id, byPrice);
   }
 
   const confirmedMap = new Map<string, number>();
   const inferredMap = new Map<string, number>();
+  const grouped = new Map<string, SummaryGroup>();
 
-  const map = new Map<
-    string,
-    {
-      product_id: number | null;
-      product_name: string;
-      product_description: string;
-      image_url: string | null;
-      product_stock: number | null;
-      product_ordered_qty: number | null;
-      order_accept_status: string | null;
-      total_qty: number;
-      order_count: number;
-      item_ids: number[];
-      buyers: { order_id: number; name: string; phone: string; qty: number; unit_price: number; total_price: number }[];
-      variants: {
-        variant_id: number;
-        label: string;
-        stock: number | null;
-        ordered_qty: number;
-        remaining_qty: number | null;
-      }[];
-    }
-  >();
-
-  for (const it of items) {
-    const key = it.product_id ? `p:${it.product_id}` : `n:${it.product_name}`;
-    const nameKey = String(it.product_name || "").trim().toLowerCase();
-    const fallbackProduct = !it.product_id && nameKey ? productByName.get(nameKey) : null;
-    const productMeta = it.product_id
-      ? productMap.get(it.product_id)
+  for (const item of items) {
+    const key = item.product_id ? `p:${item.product_id}` : `n:${item.product_name}`;
+    const nameKey = String(item.product_name || "").trim().toLowerCase();
+    const fallbackProduct = !item.product_id && nameKey ? productByName.get(nameKey) : null;
+    const productMeta = item.product_id
+      ? productMetaMap.get(item.product_id)
       : fallbackProduct
-      ? productMap.get(fallbackProduct.id)
-      : null;
-    const existing = map.get(key) ?? {
-      product_id: it.product_id ?? null,
-      product_name: it.product_name,
+        ? productMetaMap.get(fallbackProduct.id)
+        : null;
+
+    const current = grouped.get(key) ?? {
+      product_id: item.product_id ?? null,
+      product_name: item.product_name,
       product_description: productMeta?.description ?? "",
-      image_url: productMeta?.image_url ?? it.image_url ?? null,
+      image_url: productMeta?.image_url ?? item.image_url ?? null,
       product_stock: productMeta?.stock ?? null,
       product_ordered_qty: productMeta?.ordered_qty ?? null,
       order_accept_status: productMeta?.order_accept_status ?? null,
@@ -259,64 +286,62 @@ export async function GET(request: NextRequest) {
       variants: [],
     };
 
-    existing.total_qty += it.quantity;
-    existing.item_ids.push(it.id);
-    existing.buyers.push({
-      order_id: it.order_id,
-      name: it.order?.name ?? "",
-      phone: it.order?.phone1 ?? "",
-      qty: it.quantity,
-      unit_price: it.price,
-      total_price: it.price * it.quantity,
+    current.total_qty += item.quantity;
+    current.item_ids.push(item.id);
+    current.buyers.push({
+      order_id: item.order_id,
+      name: item.order?.name ?? "",
+      phone: item.order?.phone1 ?? "",
+      qty: item.quantity,
+      unit_price: item.price,
+      total_price: item.price * item.quantity,
     });
+    grouped.set(key, current);
 
-    map.set(key, existing);
+    const productId = item.product_id ?? fallbackProduct?.id ?? null;
+    if (!productId) continue;
 
-    const calcProductId = it.product_id ?? fallbackProduct?.id ?? null;
-    if (calcProductId) {
-      const productId = calcProductId;
-      const qty = it.quantity;
-      const confirmedVariantId = (it as any)?.variant_id ? Number((it as any).variant_id) : null;
-      if (confirmedVariantId) {
-        const k = `${productId}|${confirmedVariantId}`;
-        confirmedMap.set(k, (confirmedMap.get(k) ?? 0) + qty);
-      } else {
-        let inferredVariantId: number | null = null;
-        const normImage = normalizeImage(it.image_url ?? null);
-        if (normImage) {
-          const candidates = variantImageIndex.get(productId)?.get(normImage) ?? [];
-          if (candidates.length === 1) {
-            inferredVariantId = candidates[0];
-          }
-        }
-        if (!inferredVariantId && it.price != null) {
-          const candidates = variantPriceIndex.get(productId)?.get(Number(it.price)) ?? [];
-          if (candidates.length === 1) {
-            inferredVariantId = candidates[0];
-          }
-        }
-        if (inferredVariantId) {
-          const k = `${productId}|${inferredVariantId}`;
-          inferredMap.set(k, (inferredMap.get(k) ?? 0) + qty);
-        }
+    const qty = item.quantity;
+    const confirmedVariantId = item.variant_id ? Number(item.variant_id) : null;
+    if (confirmedVariantId) {
+      const mapKey = `${productId}|${confirmedVariantId}`;
+      confirmedMap.set(mapKey, (confirmedMap.get(mapKey) ?? 0) + qty);
+      continue;
+    }
+
+    let inferredVariantId: number | null = null;
+    const normalizedImage = normalizeImage(item.image_url ?? null);
+    if (normalizedImage) {
+      const candidates = variantImageIndex.get(productId)?.get(normalizedImage) ?? [];
+      if (candidates.length === 1) {
+        inferredVariantId = candidates[0];
       }
+    }
+    if (!inferredVariantId && item.price != null) {
+      const candidates = variantPriceIndex.get(productId)?.get(Number(item.price)) ?? [];
+      if (candidates.length === 1) {
+        inferredVariantId = candidates[0];
+      }
+    }
+    if (inferredVariantId) {
+      const mapKey = `${productId}|${inferredVariantId}`;
+      inferredMap.set(mapKey, (inferredMap.get(mapKey) ?? 0) + qty);
     }
   }
 
-  // Ensure open/closed products appear even when they have 0 order items.
   if (openOnly || closedOnly) {
-    for (const p of products) {
-      const key = `p:${p.id}`;
-      if (map.has(key)) continue;
-      const productMeta = productMap.get(p.id) ?? null;
-      map.set(key, {
-        product_id: p.id,
-        product_name: p.name,
-        product_description: productMeta?.description ?? p.description ?? "",
-        image_url: productMeta?.image_url ?? p.images?.[0]?.image_url ?? null,
-        product_stock: productMeta?.stock ?? (p as any).stock ?? null,
-        product_ordered_qty: productMeta?.ordered_qty ?? (p as any).ordered_qty ?? 0,
-        order_accept_status: productMeta?.order_accept_status ?? (p as any).order_accept_status ?? null,
+    for (const product of products) {
+      const key = `p:${product.id}`;
+      if (grouped.has(key)) continue;
+      const productMeta = productMetaMap.get(product.id) ?? null;
+      grouped.set(key, {
+        product_id: product.id,
+        product_name: product.name,
+        product_description: productMeta?.description ?? product.description ?? "",
+        image_url: productMeta?.image_url ?? product.images[0]?.image_url ?? null,
+        product_stock: productMeta?.stock ?? product.stock ?? null,
+        product_ordered_qty: productMeta?.ordered_qty ?? product.ordered_qty ?? 0,
+        order_accept_status: productMeta?.order_accept_status ?? product.order_accept_status ?? null,
         total_qty: 0,
         order_count: 0,
         item_ids: [],
@@ -326,76 +351,79 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const result = Array.from(map.values()).map((g) => {
-    const productId = g.product_id ?? productByName.get(String(g.product_name || "").trim().toLowerCase())?.id ?? null;
-    if (!productId) {
-      return { ...g, order_count: g.buyers.length, variants: [] };
-    }
-    const productMeta = productMap.get(productId) ?? null;
-    const hasDuration = Number(productMeta?.duration_hours || 0) > 0;
-    const durationHours = Number(productMeta?.duration_hours || 0);
-    const endMs =
-      productMeta?.created_at && hasDuration
-        ? new Date(productMeta.created_at).getTime() + durationHours * 60 * 60 * 1000
-        : null;
-    const expired = endMs ? endMs <= Date.now() : false;
-    const productClosed = productMeta?.order_accept_status === "CLOSED" || expired;
-    const variants = productMap.get(productId)?.variants ?? [];
-    const computedAll = variants.map((v: any) => {
-      const confirmed = confirmedMap.get(`${productId}|${v.id}`) ?? 0;
-      const inferred = inferredMap.get(`${productId}|${v.id}`) ?? 0;
-      const ordered = confirmed + inferred;
-      const stock = v.stock != null ? Number(v.stock) : null;
-      const remaining = stock != null ? Math.max(0, stock - ordered) : null;
-      const variantStatusClosed = v.order_accept_status === "CLOSED";
+  const result = Array.from(grouped.values())
+    .map((group) => {
+      const productId =
+        group.product_id ?? productByName.get(String(group.product_name || "").trim().toLowerCase())?.id ?? null;
+      if (!productId) {
+        return { ...group, order_count: group.buyers.length, variants: [] as SummaryVariant[] };
+      }
+
+      const productMeta = productMetaMap.get(productId) ?? null;
+      const hasDuration = Number(productMeta?.duration_hours || 0) > 0;
+      const durationHours = Number(productMeta?.duration_hours || 0);
+      const endMs =
+        productMeta?.created_at && hasDuration
+          ? new Date(productMeta.created_at).getTime() + durationHours * 60 * 60 * 1000
+          : null;
+      const expired = endMs ? endMs <= Date.now() : false;
+      const productClosed = productMeta?.order_accept_status === "CLOSED" || expired;
+      const variants = productMeta?.variants ?? [];
+
+      const computedAll: SummaryVariant[] = variants.map((variant) => {
+        const confirmed = confirmedMap.get(`${productId}|${variant.id}`) ?? 0;
+        const inferred = inferredMap.get(`${productId}|${variant.id}`) ?? 0;
+        const ordered = confirmed + inferred;
+        const stock = variant.stock != null ? Number(variant.stock) : null;
+        const remaining = stock != null ? Math.max(0, stock - ordered) : null;
+        const variantClosed = variant.order_accept_status === "CLOSED";
+        return {
+          variant_id: variant.id,
+          label: getVariantLabel(variant),
+          stock,
+          ordered_qty: ordered,
+          remaining_qty: remaining,
+          closed: productClosed || variantClosed || (stock != null && remaining != null ? remaining <= 0 : false),
+        };
+      });
+
+      const visibleVariants = openOnly
+        ? computedAll
+        : closedOnly
+          ? computedAll.filter((variant) => variant.closed)
+          : computedAll.filter((variant) => variant.ordered_qty > 0);
+
+      const variantStockSum = computedAll.reduce((sum, variant) => sum + Math.max(0, Number(variant.stock || 0)), 0);
+      const productStockRaw = productMeta?.stock != null ? Number(productMeta.stock) : null;
+      const effectiveStock =
+        productStockRaw != null && productStockRaw > 0
+          ? productStockRaw
+          : variantStockSum > 0
+            ? variantStockSum
+            : null;
+      const orderedForClose = Number(productMeta?.ordered_qty ?? group.total_qty ?? 0);
+      const remainingForClose =
+        effectiveStock != null && effectiveStock > 0 ? Math.max(0, effectiveStock - orderedForClose) : null;
+      const allVariantsClosed = computedAll.length > 0 ? computedAll.every((variant) => variant.closed) : false;
+      const closedByStock = remainingForClose != null ? remainingForClose <= 0 : false;
+      const closedItem = productClosed || closedByStock || allVariantsClosed;
+
+      if (openOnly) {
+        if (closedItem) return null;
+        if (computedAll.length > 0 && !computedAll.some((variant) => !variant.closed)) return null;
+      }
+
+      if (closedOnly) {
+        if (!closedItem && !computedAll.some((variant) => variant.closed)) return null;
+      }
+
       return {
-        variant_id: v.id,
-        label: getVariantLabel(v),
-        stock,
-        ordered_qty: ordered,
-        remaining_qty: remaining,
-        closed:
-          productClosed ||
-          variantStatusClosed ||
-          (stock != null && remaining != null ? remaining <= 0 : false),
+        ...group,
+        order_count: group.buyers.length,
+        variants: visibleVariants,
       };
-    });
+    })
+    .filter(Boolean);
 
-    const list = openOnly
-      ? computedAll
-      : closedOnly
-      ? computedAll.filter((v) => v.closed)
-      : computedAll.filter((v) => v.ordered_qty > 0);
-
-    const variantStockSum = computedAll.reduce((sum, v) => sum + Math.max(0, Number(v.stock || 0)), 0);
-    const productStockRaw = productMeta?.stock != null ? Number(productMeta.stock) : null;
-    const effectiveStock =
-      productStockRaw != null && productStockRaw > 0
-        ? productStockRaw
-        : variantStockSum > 0
-        ? variantStockSum
-        : null;
-    const orderedForClose = Number(productMeta?.ordered_qty ?? g.total_qty ?? 0);
-    const remainingForClose =
-      effectiveStock != null && effectiveStock > 0 ? Math.max(0, effectiveStock - orderedForClose) : null;
-    const allVariantsClosed = computedAll.length > 0 ? computedAll.every((v) => v.closed) : false;
-    const closedByStock = remainingForClose != null ? remainingForClose <= 0 : false;
-    const isClosedItem = productClosed || closedByStock || allVariantsClosed;
-
-    // When `openOnly=true`, return only products that are still accepting orders.
-    if (openOnly) {
-      if (isClosedItem) return null;
-      if (computedAll.length > 0 && !computedAll.some((v) => !v.closed)) return null;
-    }
-
-    // When `closedOnly=true`, return only products that are already closed.
-    if (closedOnly) {
-      // Include products that have at least one closed/finished variant as well.
-      if (!isClosedItem && !computedAll.some((v) => v.closed)) return null;
-    }
-
-    return { ...g, order_count: g.buyers.length, variants: list };
-  });
-
-  return NextResponse.json({ items: result.filter(Boolean) });
+  return NextResponse.json({ items: result });
 }

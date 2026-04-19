@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { getActorHeaders } from "@/lib/actorHeaders";
 import AdminTableSearchBar from "@/components/admin/AdminTableSearchBar";
+import { MoreVertical, Pencil } from "lucide-react";
 
 type UserRow = {
   id: string;
@@ -32,6 +33,7 @@ type UserDetail = {
     name: string | null;
     email: string | null;
     phone: string | null;
+    address?: string | null;
     role: string;
     isActive: boolean;
     createdAt: string;
@@ -58,6 +60,16 @@ export default function AdminUsersPage() {
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [editForm, setEditForm] = useState({
+    id: "",
+    name: "",
+    email: "",
+    phone: "",
+    address: "",
+  });
   const limit = 20;
 
   const fetchUsers = async (nextPage = page, query = qApplied) => {
@@ -140,6 +152,60 @@ export default function AdminUsersPage() {
       body: JSON.stringify({ isActive }),
     });
     fetchUsers(page);
+  };
+
+  const openEdit = async (id: string) => {
+    setEditLoading(true);
+    setEditError("");
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/users/${id}`);
+      const json = await res.json();
+      const user = json?.user;
+      if (!user?.id) {
+        setEditError("Хэрэглэгчийн мэдээлэл олдсонгүй");
+        return;
+      }
+      setEditForm({
+        id: user.id,
+        name: user.name || "",
+        email: user.email || "",
+        phone: user.phone || "",
+        address: user.address || "",
+      });
+      setEditOpen(true);
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const saveEdit = async () => {
+    if (!editForm.id) return;
+    setEditLoading(true);
+    setEditError("");
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/users/${editForm.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...getActorHeaders() },
+        body: JSON.stringify({
+          name: editForm.name,
+          email: editForm.email,
+          phone: editForm.phone,
+          address: editForm.address,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setEditError(json?.message || "Хэрэглэгчийн мэдээлэл засахад алдаа гарлаа");
+        return;
+      }
+      setEditOpen(false);
+      fetchUsers(page, qApplied);
+      if (selected?.user.id === editForm.id) {
+        await openDetail(editForm.id);
+      }
+    } finally {
+      setEditLoading(false);
+    }
   };
 
   return (
@@ -234,9 +300,24 @@ export default function AdminUsersPage() {
                   <td className="p-3">{Number(u.totalSpent).toLocaleString()}₮</td>
                   <td className="p-3">{new Date(u.createdAt).toLocaleString()}</td>
                   <td className="p-3">
-                    <button onClick={() => openDetail(u.id)} className="text-sm px-2 py-1 bg-blue-600 text-white rounded">
-                      Дэлгэрэнгүй
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => openDetail(u.id)}
+                        className="flex h-9 w-9 items-center justify-center rounded border bg-white"
+                        title="Дэлгэрэнгүй"
+                        aria-label="Дэлгэрэнгүй"
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => openEdit(u.id)}
+                        className="flex h-9 w-9 items-center justify-center rounded border border-gray-300 bg-white"
+                        title="Засах"
+                        aria-label="Засах"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -354,6 +435,10 @@ export default function AdminUsersPage() {
                     <div className="font-medium">{selected.user.email || "-"}</div>
                   </div>
                   <div>
+                    <div className="text-gray-600">Хаяг</div>
+                    <div className="font-medium">{selected.user.address || "-"}</div>
+                  </div>
+                  <div>
                     <div className="text-gray-600">Бүртгүүлсэн</div>
                     <div className="font-medium">{new Date(selected.user.createdAt).toLocaleString()}</div>
                   </div>
@@ -390,6 +475,84 @@ export default function AdminUsersPage() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {editOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setEditOpen(false)} />
+          <div className="relative z-10 w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
+            <div className="flex items-start justify-between">
+              <h3 className="text-lg font-semibold">Хэрэглэгчийн мэдээлэл засах</h3>
+              <button
+                onClick={() => setEditOpen(false)}
+                className="text-sm text-gray-500 hover:text-black"
+              >
+                Хаах
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Нэр</label>
+                <input
+                  value={editForm.name}
+                  onChange={(e) => setEditForm((s) => ({ ...s, name: e.target.value }))}
+                  className="w-full rounded-lg border px-3 py-2 text-sm"
+                  placeholder="Хэрэглэгчийн нэр"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Имэйл</label>
+                <input
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm((s) => ({ ...s, email: e.target.value }))}
+                  className="w-full rounded-lg border px-3 py-2 text-sm"
+                  placeholder="name@example.com"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Утас</label>
+                <input
+                  value={editForm.phone}
+                  onChange={(e) => setEditForm((s) => ({ ...s, phone: e.target.value }))}
+                  className="w-full rounded-lg border px-3 py-2 text-sm"
+                  placeholder="99112233"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Хаяг</label>
+                <textarea
+                  value={editForm.address}
+                  onChange={(e) => setEditForm((s) => ({ ...s, address: e.target.value }))}
+                  className="min-h-24 w-full rounded-lg border px-3 py-2 text-sm"
+                  placeholder="Хаяг"
+                />
+              </div>
+              {editError && (
+                <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+                  {editError}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={() => setEditOpen(false)}
+                className="rounded-lg border px-4 py-2 text-sm"
+              >
+                Болих
+              </button>
+              <button
+                onClick={saveEdit}
+                disabled={editLoading}
+                className="rounded-lg bg-[var(--accent-2)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {editLoading ? "Хадгалж байна..." : "Хадгалах"}
+              </button>
+            </div>
           </div>
         </div>
       )}

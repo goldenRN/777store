@@ -10,6 +10,87 @@ const TYPE_ALIASES: Record<string, string[]> = {
   live: ["live", "лайв"],
 };
 
+const listSelect = Prisma.validator<Prisma.AdminProductSelect>()({
+  id: true,
+  name: true,
+  description: true,
+  price: true,
+  discount_price: true,
+  bulk_prices: true,
+  stock: true,
+  ordered_qty: true,
+  material: true,
+  duration_hours: true,
+  type_id: true,
+  category_id: true,
+  subcategory_id: true,
+  brand_id: true,
+  order_accept_status: true,
+  created_at: true,
+  type: {
+    select: {
+      name: true,
+      has_duration: true,
+    },
+  },
+  category: {
+    select: {
+      category_name: true,
+    },
+  },
+  subcategory: {
+    select: {
+      name: true,
+    },
+  },
+  brand: {
+    select: {
+      name: true,
+    },
+  },
+  images: {
+    where: { product_variant_id: null },
+    orderBy: { id: "asc" },
+    take: 1,
+    select: { image_url: true },
+  },
+  variants: {
+    select: {
+      stock: true,
+      ordered_qty: true,
+      images: {
+        orderBy: { id: "asc" },
+        take: 1,
+        select: { image_url: true },
+      },
+    },
+  },
+});
+
+const countSelect = Prisma.validator<Prisma.AdminProductSelect>()({
+  id: true,
+  created_at: true,
+  duration_hours: true,
+  stock: true,
+  ordered_qty: true,
+  order_accept_status: true,
+  type: {
+    select: {
+      name: true,
+      has_duration: true,
+    },
+  },
+  variants: {
+    select: {
+      stock: true,
+      ordered_qty: true,
+    },
+  },
+});
+
+type ListedProduct = Prisma.AdminProductGetPayload<{ select: typeof listSelect }>;
+type CountedProduct = Prisma.AdminProductGetPayload<{ select: typeof countSelect }>;
+
 function buildTypeWhere(type: string) {
   const normalized = type.trim().toLowerCase();
   if (!normalized) return undefined;
@@ -30,6 +111,55 @@ function getTypeFlags(typeName?: string | null) {
   return { isReady, isPreorderLive };
 }
 
+function getFallbackVariantImage(variants: { images: { image_url: string }[] }[]) {
+  return variants.find((variant) => variant.images[0]?.image_url)?.images[0]?.image_url ?? null;
+}
+
+function getEffectiveStock(product: {
+  stock: number;
+  variants: { stock: number | null }[];
+}) {
+  const variantStockSum = product.variants.reduce((sum, variant) => sum + Math.max(0, Number(variant.stock || 0)), 0);
+  return product.stock > 0 ? product.stock : variantStockSum;
+}
+
+function getEffectiveOrderedQty(product: {
+  ordered_qty: number;
+  variants: { ordered_qty?: number | null }[];
+}) {
+  if (Number(product.ordered_qty || 0) > 0) return Number(product.ordered_qty || 0);
+  return product.variants.reduce((sum, variant) => sum + Math.max(0, Number(variant.ordered_qty || 0)), 0);
+}
+
+function isClosedProduct(
+  product: {
+    created_at: Date;
+    duration_hours: number | null;
+    stock: number;
+    ordered_qty: number;
+    order_accept_status: string | null;
+    type: { name: string; has_duration: boolean } | null;
+    variants: { stock: number | null; ordered_qty?: number | null }[];
+  },
+  now: Date
+) {
+  const hasDuration = Number(product.duration_hours || 0) > 0;
+  const durationHours = Number(product.duration_hours || 0);
+  const { isReady } = getTypeFlags(product.type?.name ?? "");
+  const endMs = hasDuration ? product.created_at.getTime() + durationHours * 60 * 60 * 1000 : null;
+  const expired = endMs ? endMs <= now.getTime() : false;
+  const effectiveStock = getEffectiveStock(product);
+  const orderedQty = getEffectiveOrderedQty(product);
+  const remaining = Math.max(0, effectiveStock - orderedQty);
+  const stockLimitEnabled = effectiveStock > 0;
+  const closedByStock = isReady ? remaining <= 0 : stockLimitEnabled && remaining <= 0;
+  return {
+    closed: product.order_accept_status === "CLOSED" || expired || closedByStock,
+    effectiveStock,
+    orderedQty,
+  };
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const type = searchParams.get("type");
@@ -46,7 +176,7 @@ export async function GET(request: NextRequest) {
   const skip = Math.max(page - 1, 0) * take;
 
   const now = new Date();
-  const where: Record<string, unknown> = {
+  const where: Prisma.AdminProductWhereInput = {
     order_accept_status: { not: "CLOSED" },
   };
 
@@ -87,33 +217,6 @@ export async function GET(request: NextRequest) {
   } else if (brandOnly) {
     where.brand_id = { not: null };
   }
-
-  const include = {
-    type: true,
-    category: true,
-    subcategory: true,
-    brand: true,
-    images: {
-      where: { product_variant_id: null },
-      orderBy: { id: "asc" as const },
-    },
-    variants: {
-      include: {
-        images: { orderBy: { id: "asc" as const } },
-      },
-    },
-  };
-
-  const selectForCount = {
-    id: true,
-    created_at: true,
-    duration_hours: true,
-    stock: true,
-    ordered_qty: true,
-    order_accept_status: true,
-    type: { select: { name: true } },
-    variants: { select: { stock: true } },
-  };
 
   const pickRandomIds = async () => {
     // Oversample because we still filter out "closed" items after computing stock/expiry.
@@ -156,8 +259,8 @@ export async function GET(request: NextRequest) {
       const normalized = type.trim().toLowerCase();
       const aliases = TYPE_ALIASES[normalized] ?? [normalized];
       const parts = aliases
-        .filter((a) => a.trim().length > 0)
-        .map((a) => Prisma.sql`LOWER(t.name) LIKE ${`%${a.toLowerCase()}%`}`);
+        .filter((alias) => alias.trim().length > 0)
+        .map((alias) => Prisma.sql`LOWER(t.name) LIKE ${`%${alias.toLowerCase()}%`}`);
       if (parts.length > 0) {
         clauses.push(
           Prisma.sql`EXISTS (
@@ -179,20 +282,21 @@ export async function GET(request: NextRequest) {
         LIMIT ${oversample}
       `
     );
-    return rows.map((r) => r.id);
+    return rows.map((row) => row.id);
   };
 
   const randomIds = random ? await pickRandomIds() : [];
+  const randomWhere = { ...where, id: { in: randomIds.length ? randomIds : [-1] } };
 
   const [items, countRows] = random
     ? await Promise.all([
         prisma.adminProduct.findMany({
-          where: { ...where, id: { in: randomIds.length ? randomIds : [-1] } },
-          include,
+          where: randomWhere,
+          select: listSelect,
         }),
         prisma.adminProduct.findMany({
-          where: { ...where, id: { in: randomIds.length ? randomIds : [-1] } },
-          select: selectForCount,
+          where: randomWhere,
+          select: countSelect,
         }),
       ])
     : await Promise.all([
@@ -201,119 +305,62 @@ export async function GET(request: NextRequest) {
           orderBy: { created_at: "desc" },
           take,
           skip,
-          include,
+          select: listSelect,
         }),
         prisma.adminProduct.findMany({
           where,
-          select: selectForCount,
+          select: countSelect,
         }),
       ]);
 
-  const pendingStatus = await prisma.adminStatus.findFirst({ orderBy: { id: "asc" } });
-  const productIdsAll = Array.from(new Set(countRows.map((p) => p.id)));
-  const orderItems = productIdsAll.length
-    ? await prisma.adminOrderItem.findMany({
-        where: {
-          product_id: { in: productIdsAll },
-          order: {
-            payment_status: "PAID",
-            ...(pendingStatus?.name ? { status: pendingStatus.name } : {}),
-          },
-        },
-        select: {
-          product_id: true,
-          quantity: true,
-        },
-      })
-    : [];
-  const orderedQtyMap = new Map<number, number>();
-  for (const it of orderItems) {
-    if (!it.product_id) continue;
-    const qty = Number(it.quantity || 0);
-    orderedQtyMap.set(it.product_id, (orderedQtyMap.get(it.product_id) ?? 0) + qty);
-  }
-
   const mapped = items
-    .map((p) => {
-      const hasDuration = Number(p.duration_hours || 0) > 0;
-      const durationHours = Number(p.duration_hours || 0);
-      const { isReady } = getTypeFlags(p.type?.name ?? "");
-      const variantStockSum = (p.variants || []).reduce((sum, v) => sum + (Number(v.stock || 0) || 0), 0);
-      const effectiveStock = Number(p.stock || 0) > 0 ? Number(p.stock || 0) : variantStockSum;
-      const orderedQty = orderedQtyMap.get(p.id) ?? Number(p.ordered_qty || 0);
-      const endMs =
-        p.created_at && hasDuration
-          ? p.created_at.getTime() + durationHours * 60 * 60 * 1000
-          : null;
-      const expired = endMs ? endMs <= now.getTime() : false;
-      const remaining = Math.max(0, effectiveStock - orderedQty);
-      const stockLimitEnabled = effectiveStock > 0;
-      // Ready бараа: stock=0 бол "дууссан" гэж үзнэ. Захиалга/лайв: stock тохируулаагүй (0) бол stock limit ажиллахгүй.
-      const closedByStock = isReady ? remaining <= 0 : stockLimitEnabled && remaining <= 0;
-      const closed = p.order_accept_status === "CLOSED" || expired || closedByStock;
+    .map((product) => {
+      const { closed, effectiveStock, orderedQty } = isClosedProduct(product, now);
       if (closed) return null;
       return {
-        id: p.id,
-        name: p.name,
-        description: p.description,
-        price: p.price,
-        discount_price: p.discount_price,
-        bulk_prices: (p as any).bulk_prices ?? null,
+        id: product.id,
+        name: product.name,
+        description: product.description,
+        price: product.price,
+        discount_price: product.discount_price,
+        bulk_prices: product.bulk_prices ?? null,
         stock: effectiveStock,
         ordered_qty: orderedQty,
-        material: p.material,
-        duration_hours: p.duration_hours,
-        type_id: p.type_id,
-        type_name: p.type?.name ?? "",
-        type_has_duration: p.type?.has_duration ?? false,
-    category_id: p.category_id,
-    category_name: p.category?.category_name ?? "",
-    subcategory_id: p.subcategory_id,
-    subcategory_name: p.subcategory?.name ?? "",
-        brand_id: p.brand_id,
-        brand_name: p.brand?.name ?? "",
-        image_url:
-          p.images?.[0]?.image_url ??
-          p.variants?.find((v) => v.images?.[0]?.image_url)?.images?.[0]?.image_url ??
-          null,
-        created_at: p.created_at,
+        material: product.material,
+        duration_hours: product.duration_hours,
+        type_id: product.type_id,
+        type_name: product.type?.name ?? "",
+        type_has_duration: product.type?.has_duration ?? false,
+        category_id: product.category_id,
+        category_name: product.category?.category_name ?? "",
+        subcategory_id: product.subcategory_id,
+        subcategory_name: product.subcategory?.name ?? "",
+        brand_id: product.brand_id,
+        brand_name: product.brand?.name ?? "",
+        image_url: product.images[0]?.image_url ?? getFallbackVariantImage(product.variants) ?? null,
+        created_at: product.created_at,
       };
     })
     .filter(Boolean);
 
-  // Preserve the random order (DB ORDER BY RANDOM()) when requested.
   const orderedMapped = (() => {
     if (!random || randomIds.length === 0) return mapped;
-    const pos = new Map<number, number>();
-    randomIds.forEach((id, i) => pos.set(id, i));
-    return (mapped as any[])
-      .sort((a, b) => (pos.get(a.id) ?? 0) - (pos.get(b.id) ?? 0))
+    const positionById = new Map<number, number>();
+    randomIds.forEach((id, index) => positionById.set(id, index));
+    return (mapped as NonNullable<(typeof mapped)[number]>[])
+      .sort((a, b) => (positionById.get(a.id) ?? 0) - (positionById.get(b.id) ?? 0))
       .slice(0, take);
   })();
 
-  const total = countRows.reduce((acc, p) => {
-    const hasDuration = Number(p.duration_hours || 0) > 0;
-    const durationHours = Number(p.duration_hours || 0);
-    const { isReady } = getTypeFlags((p as any)?.type?.name ?? (p as any)?.type_name ?? "");
-    const endMs =
-      p.created_at && hasDuration
-        ? p.created_at.getTime() + durationHours * 60 * 60 * 1000
-        : null;
-    const expired = endMs ? endMs <= now.getTime() : false;
-    const variantStockSum = ((p as any)?.variants || []).reduce(
-      (sum: number, v: any) => sum + (Number(v?.stock || 0) || 0),
-      0
-    );
-    const effectiveStock = Number((p as any)?.stock || 0) > 0 ? Number((p as any)?.stock || 0) : variantStockSum;
-    const orderedQty = orderedQtyMap.get(p.id) ?? Number((p as any)?.ordered_qty || 0);
-    const remaining = Math.max(0, effectiveStock - orderedQty);
-    const stockLimitEnabled = effectiveStock > 0;
-    const closedByStock = isReady ? remaining <= 0 : stockLimitEnabled && remaining <= 0;
-    const closed = p.order_accept_status === "CLOSED" || expired || closedByStock;
+  const total = countRows.reduce((acc, product) => {
+    const { closed } = isClosedProduct(product, now);
     return closed ? acc : acc + 1;
   }, 0);
 
-  const totalEffective = random ? orderedMapped.length : total;
-
-  return NextResponse.json({ items: orderedMapped, total: totalEffective, page, limit: take });
+  return NextResponse.json({
+    items: orderedMapped,
+    total: random ? orderedMapped.length : total,
+    page,
+    limit: take,
+  });
 }

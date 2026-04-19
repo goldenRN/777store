@@ -53,6 +53,7 @@ export default function FulfillmentPage() {
   const [deliveryFee, setDeliveryFee] = useState<number>(0);
   const [deliverySaving, setDeliverySaving] = useState(false);
   const [deliveryPaymentMethod, setDeliveryPaymentMethod] = useState<"QPAY" | "BANK">("QPAY");
+  const [showBankApps, setShowBankApps] = useState(false);
   const [qpay, setQpay] = useState<{
     orderId: number;
     qr_image?: string | null;
@@ -74,6 +75,7 @@ export default function FulfillmentPage() {
     setDeliveryKhorooId("");
     setDeliveryFee(0);
     setDeliveryPaymentMethod("QPAY");
+    setShowBankApps(false);
     setQpay(null);
   };
 
@@ -631,6 +633,34 @@ export default function FulfillmentPage() {
                       Төлбөр төлөгдвөл автоматаар “Хүргэлтэнд бүртгэгдсэн” рүү шилжинэ.
                     </div>
                   </div>
+                  {qpay.deeplinks && qpay.deeplinks.length > 0 && (
+                    <div className="mt-4 border-t pt-4">
+                      <button
+                        type="button"
+                        onClick={() => setShowBankApps((v) => !v)}
+                        className="w-full rounded-full bg-black px-4 py-2 text-xs font-semibold text-white"
+                      >
+                        Банкны апп-аар төлөх
+                      </button>
+                      {showBankApps && (
+                        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          {qpay.deeplinks.map((bank) => (
+                            <a
+                              key={bank.link}
+                              href={bank.link}
+                              className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs hover:bg-gray-50"
+                            >
+                              {bank.logo ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={bank.logo} alt={bank.name} className="h-5 w-5" />
+                              ) : null}
+                              <span>{bank.description || bank.name}</span>
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

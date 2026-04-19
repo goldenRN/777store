@@ -1,4 +1,6 @@
 import { Suspense } from "react";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 import LoginPageClient from "./LoginPageClient";
 
 function LoginFallback() {
@@ -16,8 +18,12 @@ function LoginFallback() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<LoginFallback />}>
-      <LoginPageClient />
-    </Suspense>
+    <div className="min-h-screen bg-[var(--sky-50)]">
+      <Header />
+      <Suspense fallback={<LoginFallback />}>
+        <LoginPageClient />
+      </Suspense>
+      <Footer />
+    </div>
   );
 }

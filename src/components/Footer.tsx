@@ -1,24 +1,8 @@
-"use client";
-
-import { useEffect, useState } from "react";
 import Image from "next/image";
+import { getStoreInfo } from "@/lib/siteData";
 
-export default function Footer() {
-  const [storeInfo, setStoreInfo] = useState<{
-    working_hours?: string;
-    phone?: string;
-    email?: string;
-    facebook_url?: string;
-    instagram_url?: string;
-    address?: string;
-  } | null>(null);
-
-  useEffect(() => {
-    fetch("/api/store-info")
-      .then((r) => r.json())
-      .then((data) => setStoreInfo(data))
-      .catch(() => null);
-  }, []);
+export default async function Footer() {
+  const storeInfo = await getStoreInfo();
 
   return (
     <footer className="mt-10 border-t-[3px] border-[var(--accent-2)] bg-white text-black shadow-[0_-6px_20px_rgba(0,0,0,0.08)]">

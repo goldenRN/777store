@@ -15,6 +15,7 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
   const [savingItemId, setSavingItemId] = useState<number | null>(null);
   const [variantOptionsByProduct, setVariantOptionsByProduct] = useState<Record<number, any[]>>({});
   const [selectedVariantByItem, setSelectedVariantByItem] = useState<Record<number, number | "">>({});
+  const [showBankApps, setShowBankApps] = useState(false);
 
   const fetchDetail = async () => {
     setLoading(true);
@@ -258,6 +259,33 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
                         {invoiceInfo?.invoice_status && (
                           <div className="mt-1 text-[11px] text-gray-500">
                             QPay төлөв: {invoiceInfo.invoice_status}
+                          </div>
+                        )}
+                        {Array.isArray(order.qpay_deeplink) && order.qpay_deeplink.length > 0 && (
+                          <div className="mt-4">
+                            <button
+                              type="button"
+                              onClick={() => setShowBankApps((v) => !v)}
+                              className="w-full rounded-full bg-black px-4 py-2 text-xs font-semibold text-white"
+                            >
+                              Банкны апп-аар төлөх
+                            </button>
+                            {showBankApps && (
+                              <div className="mt-3 grid grid-cols-1 gap-2">
+                                {order.qpay_deeplink.map((bank: any) => (
+                                  <a
+                                    key={String(bank?.link || bank?.name)}
+                                    href={String(bank?.link || "#")}
+                                    className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs"
+                                  >
+                                    {bank?.logo ? (
+                                      <img src={String(bank.logo)} alt={String(bank?.name || "Bank")} className="h-5 w-5" />
+                                    ) : null}
+                                    <span>{String(bank?.description || bank?.name || "Апп")}</span>
+                                  </a>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
