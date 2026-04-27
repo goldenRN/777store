@@ -1,45 +1,40 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { getActorHeaders } from "@/lib/actorHeaders";
-import { ChevronDown, ChevronUp, Eye } from "lucide-react";
+import { Eye } from "lucide-react";
 import OrderDetailsModal from "../order/OrderDetailsModal";
 import AdminTableSearchBar from "@/components/admin/AdminTableSearchBar";
 import Image from "next/image";
 
-type ProductSummary = {
+type FulfillmentItem = {
+  item_id: number;
+  order_id: number;
   product_id: number | null;
   product_name: string;
   product_description: string;
   image_url: string | null;
-  total_qty: number;
-  order_ids: number[];
-  buyers: { order_id: number; name: string; phone: string; qty: number; order_status: string }[];
-  variants_confirmed: {
-    variant_id: number;
-    label: string;
-    stock: number | null;
-    ordered_qty: number;
-    remaining_qty: number | null;
-  }[];
-  variants_inferred: {
-    variant_id: number;
-    label: string;
-    stock: number | null;
-    inferred_qty: number;
-    remaining_after_inferred: number | null;
-    inferred_by: "image" | "price";
-  }[];
+  qty: number;
+  unit_price: number;
+  order_status: string;
+  item_status: string;
+  buyer_name: string;
+  buyer_phone: string;
+  created_at: string | null;
+  variant_label: string | null;
+  variant_confirmed: boolean;
+  inferred_by: "image" | "price" | null;
 };
 
 export default function FulfillmentPage() {
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [statusOptions, setStatusOptions] = useState<string[]>([]);
   const [phoneInput, setPhoneInput] = useState("");
   const [phoneApplied, setPhoneApplied] = useState("");
-  const [items, setItems] = useState<ProductSummary[]>([]);
+  const [items, setItems] = useState<FulfillmentItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [canViewVariants, setCanViewVariants] = useState(false);
+  const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
   const [deliveryPickOpen, setDeliveryPickOpen] = useState(false);
   const [deliveryOpen, setDeliveryOpen] = useState(false);
   const [deliveryOrderId, setDeliveryOrderId] = useState<number | null>(null);
@@ -104,8 +99,8 @@ export default function FulfillmentPage() {
       url.searchParams.set("payment", "PAID");
       const res = await fetch(url.toString(), { headers: { ...getActorHeaders() } });
       const json = await res.json();
-      setItems(json.items || []);
-      setCanViewVariants(Boolean(json?.can_view_variants));
+      setItems(Array.isArray(json.raw_items) ? json.raw_items : []);
+      setSelectedItemIds([]);
     } catch (err) {
       console.error(err);
     } finally {
@@ -113,20 +108,25 @@ export default function FulfillmentPage() {
     }
   };
 
-  const updateStatus = async (orderIds: number[], status: string) => {
-    await Promise.all(
-      orderIds.map((id) =>
-        fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/orders/${id}/status`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", ...getActorHeaders() },
-          body: JSON.stringify({ status }),
-        })
-      )
-    );
-    fetchOrders(phoneApplied);
+  const updateStatus = async (itemIds: number[], status: string) => {
+    if (!itemIds.length) return;
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/orders/items/bulk-status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...getActorHeaders() },
+      body: JSON.stringify({ itemIds, status }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(json?.message || "Төлөв шинэчлэхэд алдаа гарлаа");
+      return;
+    }
+    await fetchOrders(phoneApplied);
   };
 
-  const openDeliveryForOrders = (orderIds: number[], buyers: ProductSummary["buyers"]) => {
+  const openDeliveryForOrders = (
+    orderIds: number[],
+    buyers: { order_id: number; name: string; phone: string; order_status: string }[]
+  ) => {
     const unique = Array.from(new Set(orderIds.filter((x) => Number.isFinite(Number(x))))) as number[];
     if (unique.length === 0) return;
 
@@ -156,6 +156,78 @@ export default function FulfillmentPage() {
       setDeliveryPickOpen(true);
     }
   };
+
+  const effectiveStatus = (item: FulfillmentItem) => String(item.item_status || item.order_status || "").trim();
+
+  const filteredItems = useMemo(() => {
+    if (statusFilter === "ALL") return items;
+    return items.filter((item) => effectiveStatus(item) === statusFilter);
+  }, [items, statusFilter]);
+
+  const selectedRows = useMemo(
+    () => filteredItems.filter((item) => selectedItemIds.includes(item.item_id)),
+    [filteredItems, selectedItemIds]
+  );
+
+  const selectedOrderIds = useMemo(
+    () => Array.from(new Set(selectedRows.map((item) => item.order_id))),
+    [selectedRows]
+  );
+
+  const selectedBuyers = useMemo(
+    () =>
+      selectedOrderIds.map((orderId) => {
+        const row = selectedRows.find((item) => item.order_id === orderId);
+        return {
+          order_id: orderId,
+          name: row?.buyer_name || "-",
+          phone: row?.buyer_phone || phoneApplied || "-",
+          order_status: row?.order_status || "",
+        };
+      }),
+    [phoneApplied, selectedOrderIds, selectedRows]
+  );
+
+  const toggleItem = (itemId: number) => {
+    setSelectedItemIds((prev) =>
+      prev.includes(itemId) ? prev.filter((id) => id !== itemId) : [...prev, itemId]
+    );
+  };
+
+  const toggleAll = () => {
+    if (selectedItemIds.length === filteredItems.length) {
+      setSelectedItemIds([]);
+      return;
+    }
+    setSelectedItemIds(filteredItems.map((item) => item.item_id));
+  };
+
+  useEffect(() => {
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/status`, {
+      headers: { ...getActorHeaders() },
+    })
+      .then((r) => r.json())
+      .then((json) => {
+        const names = Array.isArray(json)
+          ? json.map((item: { name?: string }) => String(item?.name || "").trim()).filter(Boolean)
+          : [];
+        setStatusOptions(["ALL", ...names]);
+      })
+      .catch(() =>
+        setStatusOptions([
+          "ALL",
+          "Хүлээгдэж байгаа",
+          "Бараа ирсэн",
+          "Хүргэлтэнд бүртгэгдсэн",
+          "Бараа олгосон",
+          "Буцаагдсан",
+        ])
+      );
+  }, []);
+
+  useEffect(() => {
+    setSelectedItemIds([]);
+  }, [statusFilter]);
 
   useEffect(() => {
     if (!deliveryOpen) return;
@@ -273,180 +345,159 @@ export default function FulfillmentPage() {
     <div className="w-full p-4 md:p-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
         <h1 className="text-2xl font-semibold">Бараа олгох</h1>
-        <AdminTableSearchBar
-          value={phoneInput}
-          onValueChange={setPhoneInput}
-          placeholder="Утасны дугаар"
-          debounceMs={3000}
-          loading={loading}
-          onSearch={() => {
-            setPhoneApplied(phoneInput);
-            fetchOrders(phoneInput);
-          }}
-          onRefresh={() => fetchOrders(phoneApplied)}
-          showSearchButton
-          searchButtonLabel="Хайх"
-        />
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <AdminTableSearchBar
+            value={phoneInput}
+            onValueChange={setPhoneInput}
+            placeholder="Утасны дугаар"
+            debounceMs={3000}
+            loading={loading}
+            onSearch={() => {
+              setPhoneApplied(phoneInput);
+              fetchOrders(phoneInput);
+            }}
+            onRefresh={() => fetchOrders(phoneApplied)}
+            showSearchButton
+            searchButtonLabel="Хайх"
+          />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="h-10 rounded-lg border bg-white px-3 text-sm"
+          >
+            {statusOptions.map((status) => (
+              <option key={status} value={status}>
+                {status === "ALL" ? "Бүх төлөв" : status}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      <div className="overflow-x-auto bg-white rounded shadow">
+      <div className="overflow-x-auto rounded-2xl bg-white shadow">
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
+              <th className="p-3 text-left">
+                <input
+                  type="checkbox"
+                  checked={filteredItems.length > 0 && selectedItemIds.length === filteredItems.length}
+                  onChange={toggleAll}
+                />
+              </th>
               <th className="p-3 text-left">Зураг</th>
               <th className="p-3 text-left">Барааны нэр</th>
-              <th className="p-3 text-left">Тайлбар</th>
-              <th className="p-3 text-left">Захиалсан тоо</th>
-              <th className="p-3 text-left">Үйлдэл</th>
+              <th className="p-3 text-left">Төрөл</th>
+              <th className="p-3 text-left">Төлөв</th>
+              <th className="p-3 text-left">Тоо</th>
+              <th className="p-3 text-left">Захиалга</th>
+              <th className="p-3 text-left">Үзэх</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} className="p-4 text-center">Уншиж байна...</td></tr>
-            ) : items.length === 0 ? (
-              <tr><td colSpan={5} className="p-4 text-center">Мэдээлэл алга</td></tr>
+              <tr>
+                <td colSpan={8} className="p-4 text-center">Уншиж байна...</td>
+              </tr>
+            ) : filteredItems.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="p-4 text-center">Мэдээлэл алга</td>
+              </tr>
             ) : (
-              items.map((p) => {
-                const rowKey = `${p.product_id ?? "x"}-${p.product_name}`;
-                const isOpen = !!expanded[rowKey];
+              filteredItems.map((item) => {
+                const statusText = effectiveStatus(item) || "-";
                 return (
-                  <React.Fragment key={rowKey}>
-                    <tr className="border-t">
-                      <td className="p-3">
-                        <div className="h-12 w-12 rounded overflow-hidden border bg-gray-100">
-                          <img
-                            src={p.image_url || "/logo.png"}
-                            alt={p.product_name}
-                            className="h-full w-full object-cover"
-                            onError={(e) => {
-                              (e.currentTarget as HTMLImageElement).src = "/logo.png";
-                            }}
-                          />
-                        </div>
-                      </td>
-                      <td className="p-3 font-medium">{p.product_name}</td>
-                      <td className="p-3 text-sm text-gray-600">
-                        <span className="line-clamp-2">{p.product_description || "-"}</span>
-                      </td>
-                      <td className="p-3">{p.total_qty}</td>
-                      <td className="p-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          {canViewVariants && (
-                            <button
-                              onClick={() => setExpanded((prev) => ({ ...prev, [rowKey]: !prev[rowKey] }))}
-                              className="h-9 w-9 rounded border bg-white flex items-center justify-center"
-                              title="Төрлүүд"
-                            >
-                              {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                            </button>
+                  <tr key={item.item_id} className="border-t">
+                    <td className="p-3 align-top">
+                      <input
+                        type="checkbox"
+                        checked={selectedItemIds.includes(item.item_id)}
+                        onChange={() => toggleItem(item.item_id)}
+                      />
+                    </td>
+                    <td className="p-3 align-top">
+                      <div className="h-12 w-12 overflow-hidden rounded border bg-gray-100">
+                        <img
+                          src={item.image_url || "/logo.png"}
+                          alt={item.product_name}
+                          className="h-full w-full object-cover"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = "/logo.png";
+                          }}
+                        />
+                      </div>
+                    </td>
+                    <td className="p-3 align-top font-medium">
+                      <div>{item.product_name}</div>
+                      <div className="mt-1 text-xs text-gray-500">{item.buyer_name} • {item.buyer_phone}</div>
+                    </td>
+                    <td className="p-3 align-top text-xs text-gray-600">
+                      {item.variant_label ? (
+                        <div>
+                          <div>{item.variant_label}</div>
+                          {!item.variant_confirmed && item.inferred_by && (
+                            <div className="mt-1 text-[11px] text-amber-600">
+                              {item.inferred_by === "image" ? "Зураг" : "Үнэ"}-ээр таамагласан
+                            </div>
                           )}
-                          <button
-                            onClick={() => setSelected(p.order_ids[0] ?? null)}
-                            className="h-9 w-9 rounded border bg-white flex items-center justify-center"
-                            title="Харах"
-                            style={{ display: "none" }}
-                          >
-                            <Eye size={16} />
-                          </button>
-                          <button
-                            onClick={() => openDeliveryForOrders(p.order_ids, p.buyers)}
-                            className="px-2 py-1 text-xs rounded bg-blue-600 text-white"
-                          >
-                            Хүргэлтэнд
-                          </button>
-                          <button
-                            onClick={() => updateStatus(p.order_ids, "Бараа олгосон")}
-                            className="px-2 py-1 text-xs rounded bg-green-600 text-white"
-                          >
-                            Олгосон
-                          </button>
-                          <button
-                            onClick={() => updateStatus(p.order_ids, "Буцаагдсан")}
-                            className="px-2 py-1 text-xs rounded bg-gray-600 text-white"
-                          >
-                            Буцаах
-                          </button>
                         </div>
-                      </td>
-                    </tr>
-                    {canViewVariants && isOpen && (
-                      <tr className="border-t bg-gray-50">
-                        <td colSpan={5} className="p-3">
-                          <div className="grid gap-4">
-                            <div>
-                              <div className="text-xs font-semibold mb-2">Баталгаатай (variant_id)</div>
-                              {p.variants_confirmed && p.variants_confirmed.length > 0 ? (
-                                <div className="overflow-auto rounded border bg-white">
-                                  <table className="min-w-full text-xs">
-                                    <thead className="bg-gray-100">
-                                      <tr>
-                                        <th className="px-3 py-2 text-left">Төрөл</th>
-                                        <th className="px-3 py-2 text-left">Захиалга авах тоо</th>
-                                        <th className="px-3 py-2 text-left">Захиалсан</th>
-                                        <th className="px-3 py-2 text-left">Үлдэгдэл</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {p.variants_confirmed.map((v) => (
-                                        <tr key={`c-${v.variant_id}`} className="border-t">
-                                          <td className="px-3 py-2">{v.label}</td>
-                                          <td className="px-3 py-2">{v.stock != null ? v.stock : "-"}</td>
-                                          <td className="px-3 py-2">{v.ordered_qty}</td>
-                                          <td className="px-3 py-2">
-                                            {v.remaining_qty != null ? v.remaining_qty : "-"}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              ) : (
-                                <div className="text-xs text-gray-500">Төрөл мэдээлэл алга.</div>
-                              )}
-                            </div>
-                            <div>
-                              <div className="text-xs font-semibold mb-2">Таамагласан</div>
-                              {p.variants_inferred && p.variants_inferred.length > 0 ? (
-                                <div className="overflow-auto rounded border bg-white">
-                                  <table className="min-w-full text-xs">
-                                    <thead className="bg-gray-100">
-                                      <tr>
-                                        <th className="px-3 py-2 text-left">Төрөл</th>
-                                        <th className="px-3 py-2 text-left">Таамагласан захиалсан</th>
-                                        <th className="px-3 py-2 text-left">Боломжит үлдэгдэл</th>
-                                        <th className="px-3 py-2 text-left">Таамаглал</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {p.variants_inferred.map((v) => (
-                                        <tr key={`i-${v.variant_id}-${v.inferred_by}`} className="border-t">
-                                          <td className="px-3 py-2">{v.label}</td>
-                                          <td className="px-3 py-2">{v.inferred_qty}</td>
-                                          <td className="px-3 py-2">
-                                            {v.remaining_after_inferred != null ? v.remaining_after_inferred : "-"}
-                                          </td>
-                                          <td className="px-3 py-2">
-                                            {v.inferred_by === "image" ? "Зураг" : "Үнэ"}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              ) : (
-                                <div className="text-xs text-gray-500">Таамагласан өгөгдөл алга.</div>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                    <td className="p-3 align-top">
+                      <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">
+                        {statusText}
+                      </span>
+                    </td>
+                    <td className="p-3 align-top">{item.qty}</td>
+                    <td className="p-3 align-top text-xs text-gray-500">#{item.order_id}</td>
+                    <td className="p-3 align-top">
+                      <button
+                        onClick={() => setSelected(item.order_id)}
+                        className="flex h-9 w-9 items-center justify-center rounded border bg-white"
+                        title="Харах"
+                      >
+                        <Eye size={16} />
+                      </button>
+                    </td>
+                  </tr>
                 );
               })
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-4 rounded-2xl bg-white p-4 shadow">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="text-sm text-gray-600">
+            Сонгосон бараа: <span className="font-semibold text-black">{selectedItemIds.length}</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => openDeliveryForOrders(selectedOrderIds, selectedBuyers)}
+              disabled={selectedItemIds.length === 0}
+              className="rounded-full bg-blue-600 px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Хүргэлтээр авсан
+            </button>
+            <button
+              onClick={() => updateStatus(selectedItemIds, "Бараа олгосон")}
+              disabled={selectedItemIds.length === 0}
+              className="rounded-full bg-green-600 px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Ирж авсан
+            </button>
+            <button
+              onClick={() => updateStatus(selectedItemIds, "Буцаагдсан")}
+              disabled={selectedItemIds.length === 0}
+              className="rounded-full bg-gray-700 px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Буцаасан
+            </button>
+          </div>
+        </div>
       </div>
 
       {selected && (

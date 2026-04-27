@@ -21,7 +21,10 @@ export type CartItem = {
 
 type CartContextValue = {
   items: CartItem[];
+  // Number of unique cart rows/products.
   count: number;
+  // Sum of all quantities across cart rows.
+  quantityCount: number;
   total: number;
   addItem: (item: Omit<CartItem, "qty">, qty?: number) => void;
   removeItem: (id: number, variantId?: number | null) => void;
@@ -145,12 +148,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const clear = () => setItems([]);
 
-  const count = useMemo(() => items.reduce((sum, i) => sum + i.qty, 0), [items]);
+  const count = useMemo(() => items.length, [items]);
+  const quantityCount = useMemo(() => items.reduce((sum, i) => sum + i.qty, 0), [items]);
   const total = useMemo(() => items.reduce((sum, i) => sum + i.price * i.qty, 0), [items]);
 
   const value: CartContextValue = {
     items,
     count,
+    quantityCount,
     total,
     addItem,
     removeItem,

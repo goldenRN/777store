@@ -51,6 +51,7 @@ type StoredUser = {
 type FlatOrderItem = OrderItem & {
   orderId: string;
   orderStatus: string;
+  deliveryMethod?: string | null;
   createdAt: string;
   total: number;
   effectiveStatus: string;
@@ -71,7 +72,6 @@ function OrdersPageContent() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [statusOptions, setStatusOptions] = useState<{ id: number; name: string }[]>([]);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-  const [pickDeliveryOpen, setPickDeliveryOpen] = useState(false);
   const [deliveryOpen, setDeliveryOpen] = useState(false);
   const [deliveryName, setDeliveryName] = useState("");
   const [deliveryPhone, setDeliveryPhone] = useState("");
@@ -160,32 +160,46 @@ function OrdersPageContent() {
   };
 
   const isArrivedStatus = (status?: string | null) => {
-    const s = String(status || "").toLowerCase();
-    return s.includes("бараа ирсэн") || s.includes("arrived");
+    const s = String(status || "").trim().toLowerCase();
+    return s.includes("ирсэн") || s.includes("arrived");
+  };
+
+  const getEffectiveItemStatus = (orderStatus?: string | null, itemStatus?: string | null) => {
+    const item = String(itemStatus || "").trim();
+    const itemNorm = item.toLowerCase();
+    const order = String(orderStatus || "").trim();
+    if (isArrivedStatus(item)) return "Бараа ирсэн";
+    if (
+      itemNorm.includes("хүргэлт") ||
+      itemNorm.includes("shipping") ||
+      itemNorm.includes("олгосон") ||
+      itemNorm.includes("handed") ||
+      itemNorm.includes("буца") ||
+      itemNorm.includes("return")
+    ) {
+      return item;
+    }
+    if (isArrivedStatus(order)) return "Бараа ирсэн";
+    return item || order;
+  };
+
+  const canRequestDeliveryForStatus = (order: Order | null, statusOverride?: string | null) => {
+    if (!order) return false;
+    const status = String(statusOverride ?? order.status ?? "").trim().toLowerCase();
+    return status.includes("ирсэн") && !status.includes("олгосон") && !status.includes("хүргэлт");
   };
 
   const isArrived = (o: Order | null) => {
     if (!o) return false;
-    if (isArrivedStatus(o.status)) return true;
-    return o.items.some((item) => isArrivedStatus(item.status));
+    if (canRequestDeliveryForStatus(o)) return true;
+    return o.items.some((item) => canRequestDeliveryForStatus(o, item.status));
   };
 
-  const eligibleDeliveryOrders = useMemo(() => {
-    return orders.filter((o) => {
-      const arrived = isArrived(o);
-      if (!arrived) return false;
-      return o.delivery_method !== "delivery";
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders]);
-
-  const openDeliveryFlow = async () => {
-    if (!eligibleDeliveryOrders.length) return;
-    if (eligibleDeliveryOrders.length === 1) {
-      await loadDetail(eligibleDeliveryOrders[0]!.id, { openDelivery: true });
-      return;
-    }
-    setPickDeliveryOpen(true);
+  const deliveryActionLabel = (order: Order | null) => {
+    if (!order) return "Хүргэлтээр авах";
+    return String(order.delivery_method || "").trim().toLowerCase() === "delivery"
+      ? "Хүргэлтийг үргэлжлүүлэх"
+      : "Хүргэлтээр авах";
   };
 
   useEffect(() => {
@@ -327,11 +341,12 @@ function OrdersPageContent() {
     return orders.flatMap((order) =>
       order.items
         .map((item) => {
-          const effectiveStatus = String(item.status || order.status || "").trim();
+          const effectiveStatus = getEffectiveItemStatus(order.status, item.status);
           return {
             ...item,
             orderId: order.id,
             orderStatus: order.status,
+            deliveryMethod: order.delivery_method ?? null,
             createdAt: order.createdAt,
             total: order.total,
             effectiveStatus,
@@ -429,6 +444,14 @@ function OrdersPageContent() {
                     </div>
                     <div className="mt-3 flex justify-end">
                       <div className="flex flex-wrap items-center gap-2">
+                        {canRequestDeliveryForStatus(o) && (
+                          <button
+                            onClick={() => loadDetail(o.id, { openDelivery: true })}
+                            className="rounded-full bg-black px-4 py-2 text-xs font-semibold text-white"
+                          >
+                            {deliveryActionLabel(o)}
+                          </button>
+                        )}
                         <button
                           onClick={() => loadDetail(o.id)}
                           className="rounded-full border px-4 py-2 text-xs font-semibold"
@@ -481,11 +504,19 @@ function OrdersPageContent() {
                       </div>
                     </div>
                   </div>
-                  <div className="mt-3 flex items-center justify-between">
+                  <div className="mt-3 flex items-center justify-between gap-3">
                     <span className="rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-700">
                       {getStatusLabel(it.effectiveStatus, statusOptions)}
                     </span>
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 justify-end">
+                      {canRequestDeliveryForStatus({ id: it.orderId, status: it.orderStatus, total: it.total, createdAt: it.createdAt, items: [], delivery_method: it.deliveryMethod ?? null } as Order, it.effectiveStatus) && String(it.deliveryMethod || "").trim().toLowerCase() !== "delivery" && (
+                        <button
+                          onClick={() => loadDetail(it.orderId, { openDelivery: true })}
+                          className="rounded-full bg-black px-4 py-2 text-xs font-semibold text-white"
+                        >
+                          Хүргэлтээр авах
+                        </button>
+                      )}
                       <button
                         onClick={() => loadDetail(it.orderId)}
                         className="rounded-full border px-4 py-2 text-xs font-semibold"
@@ -496,17 +527,6 @@ function OrdersPageContent() {
                   </div>
                 </div>
               ))}
-            </div>
-          )}
-
-          {eligibleDeliveryOrders.length > 0 && (
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={openDeliveryFlow}
-                className="rounded-full bg-black px-5 py-2.5 text-xs font-semibold text-white"
-              >
-                Хүргэлтэнд бүртгүүлэх
-              </button>
             </div>
           )}
         </div>
@@ -718,44 +738,6 @@ function OrdersPageContent() {
                 )}
               </>
             )}
-          </div>
-        </div>
-      )}
-      {pickDeliveryOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl">
-            <div className="flex items-center justify-between">
-              <div className="text-lg font-bold">Хүргэлтээр авах</div>
-              <button onClick={() => setPickDeliveryOpen(false)} className="text-xl">&times;</button>
-            </div>
-            <div className="mt-2 text-xs text-[var(--gray-500)]">
-              Хүргэлт хүсэх захиалгаа сонгоно уу.
-            </div>
-            <div className="mt-4 max-h-[60vh] space-y-3 overflow-auto pr-1">
-              {eligibleDeliveryOrders.map((o) => (
-                <button
-                  key={o.id}
-                  onClick={async () => {
-                    setPickDeliveryOpen(false);
-                    await loadDetail(o.id, { openDelivery: true });
-                  }}
-                  className="w-full rounded-xl border p-4 text-left hover:bg-[var(--sky-50)]"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold">Захиалга #{o.id}</div>
-                      <div className="mt-1 text-[11px] text-[var(--gray-500)]">
-                        {new Date(o.createdAt).toLocaleString()}
-                      </div>
-                      <div className="mt-1 text-[11px] text-[var(--gray-600)] line-clamp-1">
-                        {o.items.map((x) => x.productName).join(", ")}
-                      </div>
-                    </div>
-                    <div className="text-right text-sm font-semibold">{Number(o.total).toLocaleString()}₮</div>
-                  </div>
-                </button>
-              ))}
-            </div>
           </div>
         </div>
       )}

@@ -16,10 +16,37 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ message: "Invalid itemIds" }, { status: 400 });
   }
 
+  const affectedItems = await prisma.adminOrderItem.findMany({
+    where: { id: { in: numericIds } },
+    select: { id: true, order_id: true },
+  });
+
   await prisma.adminOrderItem.updateMany({
     where: { id: { in: numericIds } },
     data: { status },
   });
+
+  const affectedOrderIds = Array.from(new Set(affectedItems.map((item) => item.order_id)));
+  if (affectedOrderIds.length > 0) {
+    const orders = await prisma.adminOrder.findMany({
+      where: { id: { in: affectedOrderIds } },
+      select: { id: true, items: { select: { status: true } } },
+    });
+
+    await Promise.all(
+      orders.map((order) => {
+        const statuses = order.items.map((item) => String(item.status || "").trim()).filter(Boolean);
+        if (statuses.length === 0) return Promise.resolve();
+        const allDelivered = statuses.every((itemStatus) => itemStatus === "Бараа олгосон");
+        const allReturned = statuses.every((itemStatus) => itemStatus === "Буцаагдсан");
+        if (!allDelivered && !allReturned) return Promise.resolve();
+        return prisma.adminOrder.update({
+          where: { id: order.id },
+          data: { status: allDelivered ? "Бараа олгосон" : "Буцаагдсан" },
+        });
+      })
+    );
+  }
 
   await logAdminAction({
     request,

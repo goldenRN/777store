@@ -47,6 +47,8 @@ export async function PATCH(request: Request) {
     const shippingName = shippingStatus?.name ?? pendingName ?? "Хүргэлтэнд бүртгэгдсэн";
 
     const result = await prisma.$transaction(async (tx) => {
+      const finalItemStatuses = ["Бараа ирсэн", "Хүргэлтэнд бүртгэгдсэн", "Бараа олгосон", "Буцаагдсан"];
+
       const isPreorderType = (type: ProductTypeLike) => {
         if (type?.has_duration === true) return true;
         const name = String(type?.name ?? "").toLowerCase();
@@ -159,6 +161,74 @@ export async function PATCH(request: Request) {
           distinct: ["order_id"],
         });
         const updatedOrders = await updateOrdersIfPreorderArrived(candidateOrders.map((x) => x.order_id));
+
+        const siblingVariants = await tx.adminProductVariant.findMany({
+          where: { product_id: productId },
+          select: {
+            arrived_qty: true,
+            cargo_fee: true,
+            cargo_note: true,
+          },
+        });
+        if (siblingVariants.length > 0) {
+          const allVariantsArrived = siblingVariants.every((variant) => variant.arrived_qty != null);
+          const firstCargoFee = siblingVariants[0]?.cargo_fee ?? null;
+          const firstCargoNote = siblingVariants[0]?.cargo_note ?? null;
+          const uniformCargo = siblingVariants.every(
+            (variant) =>
+              Number(variant.cargo_fee ?? 0) === Number(firstCargoFee ?? 0) &&
+              String(variant.cargo_note ?? "") === String(firstCargoNote ?? "")
+          );
+
+          await tx.adminProduct.update({
+            where: { id: productId },
+            data: {
+              arrival_status: allVariantsArrived ? "Бараа ирсэн" : "Хүлээгдэж буй",
+              arrived_qty: allVariantsArrived
+                ? siblingVariants.reduce((sum, variant) => sum + Math.max(0, Number(variant.arrived_qty ?? 0)), 0)
+                : null,
+              ...(allVariantsArrived && uniformCargo
+                ? {
+                    cargo_fee: firstCargoFee != null ? Number(firstCargoFee) : null,
+                    cargo_note: firstCargoNote || null,
+                  }
+                : {}),
+            },
+          });
+
+          if (allVariantsArrived) {
+            await tx.adminOrderItem.updateMany({
+              where: {
+                product_id: productId,
+                status: { notIn: finalItemStatuses },
+                order: {
+                  is: {
+                    deleted_at: null,
+                    payment_status: "PAID",
+                  },
+                },
+              },
+              data: { status: "Бараа ирсэн" },
+            });
+
+            const allProductOrders = await tx.adminOrderItem.findMany({
+              where: {
+                product_id: productId,
+                status: "Бараа ирсэн",
+                order: {
+                  is: {
+                    deleted_at: null,
+                    payment_status: "PAID",
+                  },
+                },
+              },
+              select: { order_id: true },
+              distinct: ["order_id"],
+            });
+            await updateOrdersIfPreorderArrived(allProductOrders.map((x) => x.order_id));
+          }
+        }
+
         return { kind: "variant" as const, updatedCount: updated.count, updatedOrders };
       }
 

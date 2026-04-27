@@ -8,6 +8,14 @@ const requireAdmin = (request: NextRequest) => {
   const role = normRole(request.headers.get("x-actor-role"));
   return role === "SUPER_ADMIN" || role === "ADMIN";
 };
+const isDeliveryInvoiceSender = (senderInvoiceNo?: string | null, orderId?: number) => {
+  const raw = String(senderInvoiceNo || "").trim().toUpperCase();
+  if (!raw) return false;
+  if (orderId && (raw.startsWith(`DELIVERY-${orderId}-`) || raw.startsWith(`DELIVERY-ADMIN-${orderId}-`))) {
+    return true;
+  }
+  return raw.startsWith("DELIVERY-") || raw.startsWith("DELIVERY_ADMIN-") || raw.startsWith("DELIVERY-ADMIN-");
+};
 
 export async function POST(
   request: NextRequest,
@@ -57,15 +65,25 @@ export async function POST(
     return NextResponse.json({ message: "Захиалга олдсонгүй" }, { status: 404 });
   }
 
-  if (order.delivery_method === "delivery") {
-    return NextResponse.json({ message: "Энэ захиалга аль хэдийн хүргэлтээр байна." }, { status: 400 });
+  const statusNorm = String(order.status || "").toLowerCase();
+  const isShippingOrDelivered =
+    statusNorm.includes("хүргэлт") ||
+    statusNorm.includes("хүргэгд") ||
+    statusNorm.includes("shipping") ||
+    statusNorm.includes("delivered");
+
+  if (order.delivery_method === "delivery" && isShippingOrDelivered) {
+    return NextResponse.json({ message: "Энэ захиалга аль хэдийн хүргэлтэнд бүртгэгдсэн байна." }, { status: 400 });
   }
 
   // Only allow delivery for ready goods or orders that are already "arrived".
-  const statusNorm = String(order.status || "").toLowerCase();
   const isArrived = statusNorm.includes("бараа ирсэн") || statusNorm.includes("arrived");
+  const hasArrivedItems = (order.items || []).some((item) => {
+    const itemStatus = String(item.status || "").toLowerCase();
+    return itemStatus.includes("бараа ирсэн") || itemStatus.includes("arrived");
+  });
   const isReady = String(order.order_kind || "") === "ready";
-  if (!isArrived && !isReady) {
+  if (!isArrived && !hasArrivedItems && !isReady) {
     return NextResponse.json(
       { message: "Одоогоор хүргэлт хүсэх боломжгүй (Бараа ирсэн үед хүргэлтэнд шилжинэ)." },
       { status: 409 }
@@ -81,6 +99,24 @@ export async function POST(
   }
 
   const deliveryFee = Math.max(0, Number(khoroo.fee || 0));
+
+  const existingDeliveryInvoice =
+    order.delivery_method === "delivery" &&
+    isDeliveryInvoiceSender(order.qpay_sender_invoice_no, order.id) &&
+    order.qpay_invoice_id &&
+    order.qpay_qr_text &&
+    order.qpay_qr_image &&
+    order.payment_expires_at &&
+    new Date(order.payment_expires_at) > new Date()
+      ? {
+          invoice_id: order.qpay_invoice_id,
+          qr_text: order.qpay_qr_text,
+          qr_image: order.qpay_qr_image,
+          short_url: order.qpay_short_url,
+          deeplinks: Array.isArray(order.qpay_deeplink) ? order.qpay_deeplink : [],
+          expires_at: order.payment_expires_at.toISOString(),
+        }
+      : null;
 
   // Save delivery info on the order.
   await prisma.adminOrder.update({
@@ -98,6 +134,14 @@ export async function POST(
       delivery_fee: deliveryFee,
     },
   });
+
+  if (existingDeliveryInvoice) {
+    return NextResponse.json({
+      id: order.id,
+      delivery_fee: deliveryFee,
+      qpay: existingDeliveryInvoice,
+    });
+  }
 
   await logAdminAction({
     request,
@@ -184,6 +228,18 @@ export async function POST(
 
   try {
     const invoice = await createInvoice(invoicePayload);
+    await prisma.adminOrder.update({
+      where: { id: order.id },
+      data: {
+        qpay_invoice_id: invoice.invoice_id,
+        qpay_sender_invoice_no: senderInvoiceNo,
+        qpay_qr_text: invoice.qr_text ?? null,
+        qpay_qr_image: invoice.qr_image ?? null,
+        qpay_short_url: invoice.qPay_shortUrl ?? null,
+        qpay_deeplink: invoice.qPay_deeplink ?? [],
+        payment_expires_at: expiresAt,
+      },
+    });
     return NextResponse.json({
       id: order.id,
       delivery_fee: deliveryFee,
@@ -204,4 +260,3 @@ export async function POST(
     );
   }
 }
-

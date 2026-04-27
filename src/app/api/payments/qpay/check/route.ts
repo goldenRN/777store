@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { paymentCheck } from "@/lib/qpay";
 
+const isDeliveryInvoiceSender = (senderInvoiceNo?: string | null) => {
+  const raw = String(senderInvoiceNo || "").trim().toUpperCase();
+  return raw.startsWith("DELIVERY-") || raw.startsWith("DELIVERY_ADMIN-") || raw.startsWith("DELIVERY-ADMIN-");
+};
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const orderId = Number(searchParams.get("orderId"));
@@ -50,9 +55,11 @@ export async function GET(request: NextRequest) {
     const statusNorm = String(order.status || "").toLowerCase();
     const isArrived =
       statusNorm.includes("бараа ирсэн") || statusNorm.includes("arrived");
+    const isDeliveryInvoice = isDeliveryInvoiceSender(order.qpay_sender_invoice_no);
     const shouldShip =
-      order.delivery_method === "delivery" &&
-      (order.order_kind === "ready" || isArrived);
+      isDeliveryInvoice ||
+      (order.delivery_method === "delivery" &&
+        (order.order_kind === "ready" || isArrived));
     const nextStatus = shouldShip ? shippingName : pendingName;
     const shouldBackfillOrderedQty =
       order.payment_status !== "PAID" && String(order.order_kind || "") === "preorder";

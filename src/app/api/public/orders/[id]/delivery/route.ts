@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createInvoice } from "@/lib/qpay";
 
+const isDeliveryInvoiceSender = (senderInvoiceNo?: string | null, orderId?: number) => {
+  const raw = String(senderInvoiceNo || "").trim().toUpperCase();
+  if (!raw) return false;
+  if (orderId && (raw.startsWith(`DELIVERY-${orderId}-`) || raw.startsWith(`DELIVERY-ADMIN-${orderId}-`))) {
+    return true;
+  }
+  return raw.startsWith("DELIVERY-") || raw.startsWith("DELIVERY_ADMIN-") || raw.startsWith("DELIVERY-ADMIN-");
+};
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -50,8 +59,15 @@ export async function POST(
     return NextResponse.json({ message: "Захиалгын бараа олдсонгүй" }, { status: 400 });
   }
 
-  if (order.delivery_method === "delivery") {
-    return NextResponse.json({ message: "Энэ захиалга аль хэдийн хүргэлтээр байна." }, { status: 400 });
+  const statusNorm = String(order.status || "").toLowerCase();
+  const isShippingOrDelivered =
+    statusNorm.includes("хүргэлт") ||
+    statusNorm.includes("хүргэгд") ||
+    statusNorm.includes("shipping") ||
+    statusNorm.includes("delivered");
+
+  if (order.delivery_method === "delivery" && isShippingOrDelivered) {
+    return NextResponse.json({ message: "Энэ захиалга аль хэдийн хүргэлтэнд бүртгэгдсэн байна." }, { status: 400 });
   }
 
   const productIds = Array.from(
@@ -63,16 +79,14 @@ export async function POST(
         include: { type: true },
       })
     : [];
-  const isPreorderType = (type: any) => {
+  const isPreorderType = (type: { has_duration?: boolean | null; name?: string | null } | null | undefined) => {
     if (type?.has_duration === true) return true;
     const name = String(type?.name ?? "").toLowerCase();
     if (name.includes("захиал") || name.includes("урьдчил") || name.includes("preorder")) return true;
     if (name.includes("лайв") || name.includes("live")) return true;
     return false;
   };
-  const preorderProductIds = new Set<number>(
-    products.filter((p) => isPreorderType((p as any).type)).map((p) => p.id)
-  );
+  const preorderProductIds = new Set<number>(products.filter((p) => isPreorderType(p.type)).map((p) => p.id));
 
   // Require full arrival (only for preorder items) before allowing delivery request.
   const preorderItems = items.filter((it) => it.product_id == null || preorderProductIds.has(it.product_id));
@@ -98,6 +112,24 @@ export async function POST(
 
   const deliveryFee = Math.max(0, Number(khoroo.fee || 0));
 
+  const existingDeliveryInvoice =
+    order.delivery_method === "delivery" &&
+    isDeliveryInvoiceSender(order.qpay_sender_invoice_no, order.id) &&
+    order.qpay_invoice_id &&
+    order.qpay_qr_text &&
+    order.qpay_qr_image &&
+    order.payment_expires_at &&
+    new Date(order.payment_expires_at) > new Date()
+      ? {
+          invoice_id: order.qpay_invoice_id,
+          qr_text: order.qpay_qr_text,
+          qr_image: order.qpay_qr_image,
+          short_url: order.qpay_short_url,
+          deeplinks: Array.isArray(order.qpay_deeplink) ? order.qpay_deeplink : [],
+          expires_at: order.payment_expires_at.toISOString(),
+        }
+      : null;
+
   // Save delivery info on the order.
   await prisma.adminOrder.update({
     where: { id: order.id },
@@ -114,6 +146,14 @@ export async function POST(
       delivery_fee: deliveryFee,
     },
   });
+
+  if (existingDeliveryInvoice) {
+    return NextResponse.json({
+      id: order.id,
+      delivery_fee: deliveryFee,
+      qpay: existingDeliveryInvoice,
+    });
+  }
 
   // If delivery fee is 0, no payment is required -> move to shipping right away.
   if (deliveryFee <= 0) {
@@ -186,8 +226,18 @@ export async function POST(
 
   try {
     const invoice = await createInvoice(invoicePayload);
-    // Do NOT overwrite the original order's qpay fields (the main order is already PAID).
-    // We rely on QPay webhook callback with orderId to move the order into "Хүргэлтэнд".
+    await prisma.adminOrder.update({
+      where: { id: order.id },
+      data: {
+        qpay_invoice_id: invoice.invoice_id,
+        qpay_sender_invoice_no: senderInvoiceNo,
+        qpay_qr_text: invoice.qr_text ?? null,
+        qpay_qr_image: invoice.qr_image ?? null,
+        qpay_short_url: invoice.qPay_shortUrl ?? null,
+        qpay_deeplink: invoice.qPay_deeplink ?? [],
+        payment_expires_at: expiresAt,
+      },
+    });
     return NextResponse.json({
       id: order.id,
       delivery_fee: deliveryFee,

@@ -4,6 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { createInvoice } from "@/lib/qpay";
 import { getBulkUnitPrice } from "@/lib/bulkPricing";
 
+const isArrivedStatus = (value?: string | null) => {
+  const status = String(value || "").trim().toLowerCase();
+  return status.includes("ирсэн") || status.includes("arrived");
+};
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get("userId");
@@ -35,6 +40,10 @@ export async function GET(request: NextRequest) {
     where: { id: { in: productIds } },
     include: { variants: { include: { images: true } } },
   });
+  const productMap = new Map(products.map((product) => [product.id, product]));
+  const productCargoFeeById = new Map<number, number>(
+    products.map((p) => [p.id, Number(p.cargo_fee ?? 0)])
+  );
 
   const normalizeImage = (url?: string | null) => {
     const raw = String(url || "").trim();
@@ -92,6 +101,50 @@ export async function GET(request: NextRequest) {
     variantPriceIndex.set(p.id, byPrice);
   }
 
+  const getEffectiveItemStatus = (orderStatus: string | null | undefined, item: any) => {
+    const explicitStatus = String(item.status ?? "").trim();
+    const explicitStatusNorm = explicitStatus.toLowerCase();
+    if (isArrivedStatus(explicitStatus)) return "Бараа ирсэн";
+    if (explicitStatusNorm.includes("хүргэлт") || explicitStatusNorm.includes("shipping")) return explicitStatus;
+    if (
+      explicitStatusNorm.includes("олгосон") ||
+      explicitStatusNorm.includes("handed") ||
+      explicitStatusNorm.includes("буца") ||
+      explicitStatusNorm.includes("return")
+    ) {
+      return explicitStatus;
+    }
+
+    const productId = item.product_id ?? null;
+    if (!productId) return explicitStatus;
+    const byId = variantByProduct.get(productId) ?? new Map();
+    const confirmedId = (item as any)?.variant_id ? Number((item as any).variant_id) : null;
+    const directVariant = confirmedId && byId.has(confirmedId) ? byId.get(confirmedId) : null;
+    if (directVariant?.arrived_qty != null) return "Бараа ирсэн";
+
+    const normImage = normalizeImage(item.image_url ?? null);
+    if (normImage) {
+      const candidates = variantImageIndex.get(productId)?.get(normImage) ?? [];
+      if (candidates.length === 1 && byId.has(candidates[0])) {
+        const inferred = byId.get(candidates[0]);
+        if (inferred?.arrived_qty != null) return "Бараа ирсэн";
+      }
+    }
+
+    if (item.price != null) {
+      const candidates = variantPriceIndex.get(productId)?.get(Number(item.price)) ?? [];
+      if (candidates.length === 1 && byId.has(candidates[0])) {
+        const inferred = byId.get(candidates[0]);
+        if (inferred?.arrived_qty != null) return "Бараа ирсэн";
+      }
+    }
+
+    const product = productMap.get(productId);
+    if (isArrivedStatus(product?.arrival_status)) return "Бараа ирсэн";
+    if (isArrivedStatus(orderStatus)) return "Бараа ирсэн";
+    return explicitStatus;
+  };
+
   const mapped = orders.map((o) => ({
     id: o.id,
     status: o.status,
@@ -136,7 +189,30 @@ export async function GET(request: NextRequest) {
         }
         return null;
       })(),
-      status: it.status ?? null,
+      cargoFee: (() => {
+        const productId = it.product_id ?? null;
+        if (!productId) return 0;
+        const byId = variantByProduct.get(productId) ?? new Map();
+        const confirmedId = (it as any)?.variant_id ? Number((it as any).variant_id) : null;
+        if (confirmedId && byId.has(confirmedId)) {
+          return Number(byId.get(confirmedId)?.cargo_fee ?? productCargoFeeById.get(productId) ?? 0);
+        }
+        const normImage = normalizeImage(it.image_url ?? null);
+        if (normImage) {
+          const candidates = variantImageIndex.get(productId)?.get(normImage) ?? [];
+          if (candidates.length === 1 && byId.has(candidates[0])) {
+            return Number(byId.get(candidates[0])?.cargo_fee ?? productCargoFeeById.get(productId) ?? 0);
+          }
+        }
+        if (it.price != null) {
+          const candidates = variantPriceIndex.get(productId)?.get(Number(it.price)) ?? [];
+          if (candidates.length === 1 && byId.has(candidates[0])) {
+            return Number(byId.get(candidates[0])?.cargo_fee ?? productCargoFeeById.get(productId) ?? 0);
+          }
+        }
+        return Number(productCargoFeeById.get(productId) ?? 0);
+      })(),
+      status: getEffectiveItemStatus(o.status, it) || null,
     })),
   }));
 

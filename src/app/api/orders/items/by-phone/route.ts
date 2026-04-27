@@ -1,6 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+const isArrivedStatus = (value?: string | null) => {
+  const status = String(value || "").trim().toLowerCase();
+  return status.includes("ирсэн") || status.includes("arrived");
+};
+
+const isFinalOrderFlowStatus = (value?: string | null) => {
+  const status = String(value || "").trim().toLowerCase();
+  return (
+    status.includes("ирсэн") ||
+    status.includes("arrived") ||
+    status.includes("хүргэлт") ||
+    status.includes("shipping") ||
+    status.includes("олгосон") ||
+    status.includes("handed") ||
+    status.includes("буца") ||
+    status.includes("return")
+  );
+};
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const phone = (searchParams.get("phone") ?? "").trim();
@@ -13,7 +32,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ items: [] });
   }
 
-  const whereOrder: Record<string, unknown> = { phone1: phone };
+  const matchedUsers = await prisma.user.findMany({
+    where: { phone },
+    select: { id: true },
+  });
+  const matchedUserIds = matchedUsers.map((user) => user.id).filter(Boolean);
+
+  const whereOrder: Record<string, unknown> = {
+    OR: [
+      { phone1: phone },
+      { phone2: phone },
+      { delivery_phone: phone },
+      ...(matchedUserIds.length > 0 ? [{ user_id: { in: matchedUserIds } }] : []),
+    ],
+  };
   if (payment === "PAID") {
     whereOrder.payment_status = "PAID";
   } else if (payment === "UNPAID") {
@@ -21,11 +53,18 @@ export async function GET(request: NextRequest) {
   }
   whereOrder.deleted_at = null;
 
-  const items = await prisma.adminOrderItem.findMany({
-    where: { order: whereOrder },
-    include: { order: true },
+  const orders = await prisma.adminOrder.findMany({
+    where: whereOrder,
+    include: { items: true },
     orderBy: { id: "desc" },
   });
+
+  const items = orders.flatMap((order) =>
+    order.items.map((item) => ({
+      ...item,
+      order,
+    }))
+  );
 
   const productIds = Array.from(
     new Set(items.map((it) => it.product_id).filter((id) => id != null))
@@ -74,6 +113,7 @@ export async function GET(request: NextRequest) {
         description: p.description ?? "",
         image_url: p.images?.[0]?.image_url ?? null,
         stock: p.stock ?? null,
+        arrival_status: p.arrival_status ?? null,
         variants: p.variants ?? [],
       },
     ])
@@ -117,6 +157,7 @@ export async function GET(request: NextRequest) {
       product_description: string;
       image_url: string | null;
       total_qty: number;
+      item_ids: number[];
       order_ids: number[];
       buyers: { order_id: number; name: string; phone: string; qty: number; order_status: string }[];
       variants_confirmed: {
@@ -146,6 +187,7 @@ export async function GET(request: NextRequest) {
       product_description: productMeta?.description ?? "",
       image_url: productMeta?.image_url ?? it.image_url ?? null,
       total_qty: 0,
+      item_ids: [],
       order_ids: [],
       buyers: [],
       variants_confirmed: [],
@@ -153,6 +195,9 @@ export async function GET(request: NextRequest) {
     };
 
     existing.total_qty += it.quantity;
+    if (!existing.item_ids.includes(it.id)) {
+      existing.item_ids.push(it.id);
+    }
     if (!existing.order_ids.includes(it.order_id)) {
       existing.order_ids.push(it.order_id);
     }
@@ -253,5 +298,72 @@ export async function GET(request: NextRequest) {
     return canViewVariants ? payload : { ...payload, variants_confirmed: [], variants_inferred: [] };
   });
 
-  return NextResponse.json({ items: result, can_view_variants: canViewVariants });
+  const rawItems = items.map((it) => {
+    const productMeta = it.product_id ? productMap.get(it.product_id) : null;
+    const productId = it.product_id ?? null;
+    const byId = productId ? variantByProduct.get(productId) ?? new Map() : new Map();
+    const confirmedVariantId = (it as any)?.variant_id ? Number((it as any).variant_id) : null;
+
+    let variantLabel: string | null = null;
+    let variantConfirmed = false;
+    let inferredBy: "image" | "price" | null = null;
+    let matchedVariant: any | null = null;
+
+    if (confirmedVariantId && byId.has(confirmedVariantId)) {
+      matchedVariant = byId.get(confirmedVariantId);
+      variantLabel = getVariantLabel(matchedVariant);
+      variantConfirmed = true;
+    } else if (productId) {
+      const normImage = normalizeImage(it.image_url ?? null);
+      if (normImage) {
+        const candidates = variantImageIndex.get(productId)?.get(normImage) ?? [];
+        if (candidates.length === 1 && byId.has(candidates[0])) {
+          matchedVariant = byId.get(candidates[0]);
+          variantLabel = getVariantLabel(matchedVariant);
+          inferredBy = "image";
+        }
+      }
+      if (!variantLabel && it.price != null) {
+        const candidates = variantPriceIndex.get(productId)?.get(Number(it.price)) ?? [];
+        if (candidates.length === 1 && byId.has(candidates[0])) {
+          matchedVariant = byId.get(candidates[0]);
+          variantLabel = getVariantLabel(matchedVariant);
+          inferredBy = "price";
+        }
+      }
+    }
+
+    const explicitStatus = String(it.status ?? "").trim();
+    let effectiveItemStatus = explicitStatus;
+    if (!isFinalOrderFlowStatus(explicitStatus)) {
+      if (matchedVariant?.arrived_qty != null) {
+        effectiveItemStatus = "Бараа ирсэн";
+      } else if (isArrivedStatus(productMeta?.arrival_status)) {
+        effectiveItemStatus = "Бараа ирсэн";
+      } else if (isArrivedStatus(it.order?.status ?? "")) {
+        effectiveItemStatus = "Бараа ирсэн";
+      }
+    }
+
+    return {
+      item_id: it.id,
+      order_id: it.order_id,
+      product_id: it.product_id ?? null,
+      product_name: it.product_name,
+      product_description: productMeta?.description ?? "",
+      image_url: productMeta?.image_url ?? it.image_url ?? null,
+      qty: it.quantity,
+      unit_price: it.price,
+      order_status: it.order?.status ?? "",
+      item_status: effectiveItemStatus,
+      buyer_name: it.order?.name ?? "",
+      buyer_phone: it.order?.phone1 ?? "",
+      created_at: it.order?.created_at ?? null,
+      variant_label: variantLabel,
+      variant_confirmed: variantConfirmed,
+      inferred_by: inferredBy,
+    };
+  });
+
+  return NextResponse.json({ items: result, raw_items: rawItems, can_view_variants: canViewVariants });
 }
