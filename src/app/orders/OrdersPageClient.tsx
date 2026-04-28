@@ -672,16 +672,16 @@ function OrdersPageContent() {
         </div>
       {selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
-            <div className="flex items-center justify-between">
+          <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b bg-white px-6 py-4">
               <div className="text-lg font-bold">Захиалга #{selected.id}</div>
               <button onClick={() => setSelected(null)} className="text-xl">&times;</button>
             </div>
             {detailLoading ? (
-              <div className="mt-4 text-sm text-[var(--gray-500)]">Уншиж байна...</div>
+              <div className="px-6 py-4 text-sm text-[var(--gray-500)]">Уншиж байна...</div>
             ) : (
-              <>
-                <div className="mt-2 text-xs text-[var(--gray-500)]">
+              <div className="overflow-y-auto px-6 py-4">
+                <div className="text-xs text-[var(--gray-500)]">
                   {new Date(selected.createdAt).toLocaleString()}
                 </div>
                 <div className="mt-4 space-y-3">
@@ -916,7 +916,7 @@ function OrdersPageContent() {
                     )}
                   </div>
                 )}
-              </>
+              </div>
             )}
           </div>
         </div>
