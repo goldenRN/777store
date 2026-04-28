@@ -7,6 +7,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 type QPayInfo = {
   orderId: number;
   orderItemId: number;
+  cargo_fee?: number;
+  delivery_fee?: number;
+  total_fee?: number;
   qr_image?: string | null;
   qr_text?: string | null;
   short_url?: string | null;
@@ -33,6 +36,7 @@ type OrderItem = {
   delivery_khoroo_name?: string | null;
   delivery_zone?: string | null;
   delivery_fee?: number;
+  cargoFee?: number;
   return_note?: string | null;
 };
 
@@ -221,6 +225,9 @@ function OrdersPageContent() {
     return selected.items.find((item) => Number(item.id) === Number(selectedDeliveryItemId)) ?? null;
   }, [selected, selectedDeliveryItemId]);
 
+  const currentCargoFee = Number(currentSelectedDeliveryItem?.cargoFee || 0);
+  const currentDeliveryTotalFee = Number(deliveryFee || 0) + currentCargoFee;
+
   const deliveryActionLabel = (item?: OrderItem | null) => {
     if (!item) return "Хүргэлтээр авах";
     return String(item.delivery_method || "").trim().toLowerCase() === "delivery"
@@ -334,6 +341,13 @@ function OrdersPageContent() {
         setQpay({
           orderId: Number(selected.id),
           orderItemId: Number(json.orderItemId ?? selectedDeliveryItemId),
+          cargo_fee: Number(json.cargo_fee ?? currentCargoFee ?? 0),
+          delivery_fee: Number(json.delivery_fee ?? deliveryFee ?? 0),
+          total_fee: Number(
+            json.total_fee ??
+              Number(json.delivery_fee ?? deliveryFee ?? 0) +
+                Number(json.cargo_fee ?? currentCargoFee ?? 0)
+          ),
           qr_image: json.qpay.qr_image,
           qr_text: json.qpay.qr_text,
           short_url: json.qpay.short_url,
@@ -583,6 +597,11 @@ function OrdersPageContent() {
                             Төрөл: {it.variantLabel.label}
                           </div>
                         )}
+                        {isArrivedStatus(it.effectiveStatus) && Number(it.cargoFee || 0) > 0 && (
+                          <div className="mt-1 text-[11px] font-medium text-amber-700">
+                            Карго: {Number(it.cargoFee || 0).toLocaleString()}₮
+                          </div>
+                        )}
                         {it.return_note && (
                           <div className="mt-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-700">
                             Буцаалтын тайлбар: {it.return_note}
@@ -699,6 +718,11 @@ function OrdersPageContent() {
                             Төлөв: {getStatusLabel(it.status, statusOptions)}
                           </div>
                         )}
+                        {Number(it.cargoFee || 0) > 0 && (
+                          <div className="mt-1 text-[10px] font-medium text-amber-700">
+                            Карго: {Number(it.cargoFee || 0).toLocaleString()}₮
+                          </div>
+                        )}
                         {it.return_note && (
                           <div className="mt-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-700">
                             Буцаалтын тайлбар: {it.return_note}
@@ -711,11 +735,6 @@ function OrdersPageContent() {
                     </div>
                   ))}
                 </div>
-                <div className="mt-4 flex items-center justify-between text-sm font-semibold">
-                  <div>Нийт дүн</div>
-                  <div>{Number(selected.total).toLocaleString()}₮</div>
-                </div>
-
                 {currentSelectedDeliveryItem &&
                   canRequestDeliveryForStatus(
                     selected,
@@ -774,6 +793,20 @@ function OrdersPageContent() {
                             <span className="font-semibold text-red-600">{deliveryFee.toLocaleString()}₮</span>
                           </div>
                         )}
+                        {currentCargoFee > 0 && (
+                          <div className="rounded-lg border bg-white px-3 py-2">
+                            Карго:{" "}
+                            <span className="font-semibold text-amber-600">{currentCargoFee.toLocaleString()}₮</span>
+                          </div>
+                        )}
+                        {currentDeliveryTotalFee > 0 && (
+                          <div className="rounded-lg border bg-white px-3 py-2">
+                            Төлөх нийт дүн:{" "}
+                            <span className="font-semibold text-red-600">
+                              {currentDeliveryTotalFee.toLocaleString()}₮
+                            </span>
+                          </div>
+                        )}
 
                         <input
                           value={deliveryName}
@@ -810,6 +843,20 @@ function OrdersPageContent() {
                       <div className="mt-3 rounded-xl border bg-white p-3">
                         <div className="text-xs font-semibold">Хүргэлтийн төлбөр төлөх (QPay)</div>
                         <div className="mt-3 flex flex-col items-center gap-3">
+                          <div className="w-full rounded-lg border bg-[var(--sky-50)] px-3 py-2 text-xs text-[var(--gray-700)]">
+                            <div className="flex items-center justify-between gap-3">
+                              <span>Хүргэлт</span>
+                              <span className="font-semibold">{Number(qpay.delivery_fee || 0).toLocaleString()}₮</span>
+                            </div>
+                            <div className="mt-1 flex items-center justify-between gap-3">
+                              <span>Карго</span>
+                              <span className="font-semibold">{Number(qpay.cargo_fee || 0).toLocaleString()}₮</span>
+                            </div>
+                            <div className="mt-2 flex items-center justify-between gap-3 border-t pt-2 text-sm font-bold text-red-600">
+                              <span>Нийт төлөх</span>
+                              <span>{Number(qpay.total_fee || 0).toLocaleString()}₮</span>
+                            </div>
+                          </div>
                           {qpay.qr_image ? (
                             <Image
                               src={`data:image/png;base64,${qpay.qr_image}`}

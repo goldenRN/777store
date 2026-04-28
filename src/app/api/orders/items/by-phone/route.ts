@@ -114,6 +114,7 @@ export async function GET(request: NextRequest) {
         image_url: p.images?.[0]?.image_url ?? null,
         stock: p.stock ?? null,
         arrival_status: p.arrival_status ?? null,
+        cargo_fee: p.cargo_fee ?? null,
         variants: p.variants ?? [],
       },
     ])
@@ -345,6 +346,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const cargoFee = Number(matchedVariant?.cargo_fee ?? productMeta?.cargo_fee ?? 0);
+
     return {
       item_id: it.id,
       order_id: it.order_id,
@@ -359,6 +362,7 @@ export async function GET(request: NextRequest) {
       buyer_name: it.order?.name ?? "",
       buyer_phone: it.order?.phone1 ?? "",
       created_at: it.order?.created_at ?? null,
+      cargo_fee: cargoFee,
       variant_label: variantLabel,
       variant_confirmed: variantConfirmed,
       inferred_by: inferredBy,

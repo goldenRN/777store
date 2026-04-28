@@ -158,6 +158,11 @@ export async function POST(
   }
 
   const deliveryFee = Math.max(0, Number(khoroo.fee || 0));
+  const cargoFee = Math.max(
+    0,
+    Number(targetItem.variant?.cargo_fee ?? targetItem.product?.cargo_fee ?? 0)
+  );
+  const totalFee = deliveryFee + cargoFee;
   const existingDeliveryInvoice =
     targetItem.delivery_method === "delivery" &&
     isDeliveryInvoiceSender(targetItem.qpay_sender_invoice_no, order.id, targetItem.id) &&
@@ -201,11 +206,13 @@ export async function POST(
       productId: targetItem.product_id,
       productName: targetItem.product_name,
       delivery_fee: deliveryFee,
+      cargo_fee: cargoFee,
+      total_fee: totalFee,
       qpay: existingDeliveryInvoice,
     });
   }
 
-  if (deliveryFee <= 0) {
+  if (totalFee <= 0) {
     const shippingName = await syncOrderStatusToShipping(order.id, order.status);
     await prisma.adminOrderItem.update({
       where: { id: targetItem.id },
@@ -227,7 +234,9 @@ export async function POST(
         product_name: targetItem.product_name,
         status: shippingName,
         payment_method: "NO_FEE",
-        delivery_fee: 0,
+        delivery_fee: deliveryFee,
+        cargo_fee: cargoFee,
+        total_fee: totalFee,
       },
     });
 
@@ -237,7 +246,9 @@ export async function POST(
       productId: targetItem.product_id,
       productName: targetItem.product_name,
       status: "NO_FEE",
-      delivery_fee: 0,
+      delivery_fee: deliveryFee,
+      cargo_fee: cargoFee,
+      total_fee: totalFee,
     });
   }
 
@@ -273,12 +284,12 @@ export async function POST(
     sender_invoice_no: senderInvoiceNo,
     invoice_receiver_code: receiverCode,
     sender_branch_code: senderBranchCode,
-    invoice_description: `Delivery fee for Order #${order.id} / ${targetItem.product_name} / Item #${targetItem.id} ${deliveryFee}₮`,
+    invoice_description: `Delivery + cargo for Order #${order.id} / ${targetItem.product_name} / Item #${targetItem.id} ${totalFee}₮`,
     enable_expiry: !disableExpiry,
     ...(disableExpiry ? {} : { expiry_date: expiresAt.toISOString() }),
     allow_partial: false,
     allow_exceed: false,
-    amount: deliveryFee,
+    amount: totalFee,
     callback_url: callbackUrl,
     sender_staff_code: senderStaffCode,
     invoice_receiver_data: {
@@ -309,6 +320,8 @@ export async function POST(
       productId: targetItem.product_id,
       productName: targetItem.product_name,
       delivery_fee: deliveryFee,
+      cargo_fee: cargoFee,
+      total_fee: totalFee,
       qpay: {
         invoice_id: invoice.invoice_id,
         qr_text: invoice.qr_text,
@@ -326,6 +339,9 @@ export async function POST(
         orderItemId: targetItem.id,
         productId: targetItem.product_id,
         productName: targetItem.product_name,
+        delivery_fee: deliveryFee,
+        cargo_fee: cargoFee,
+        total_fee: totalFee,
         message: "Хүргэлтийн QPay нэхэмжлэл үүсгэхэд алдаа гарлаа",
       },
       { status: 500 },

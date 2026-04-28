@@ -21,6 +21,7 @@ type FulfillmentItem = {
   buyer_name: string;
   buyer_phone: string;
   created_at: string | null;
+  cargo_fee: number;
   variant_label: string | null;
   variant_confirmed: boolean;
   inferred_by: "image" | "price" | null;
@@ -294,6 +295,11 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
     [selectedRows]
   );
 
+  const selectedCargoTotal = useMemo(
+    () => selectedRows.reduce((sum, item) => sum + Number(item.cargo_fee || 0) * Number(item.qty || 0), 0),
+    [selectedRows]
+  );
+
   const selectedBuyers = useMemo(
     () =>
       selectedOrderIds.map((orderId) => {
@@ -320,6 +326,16 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
       return;
     }
     setSelectedItemIds(filteredItems.map((item) => item.item_id));
+  };
+
+  const handleMarkDelivered = async () => {
+    if (!selectedItemIds.length) return;
+    const message =
+      selectedCargoTotal > 0
+        ? `Сонгосон ${selectedItemIds.length} барааг "Ирж авсан" болгох уу?\nНийт карго: ${selectedCargoTotal.toLocaleString()}₮`
+        : `Сонгосон ${selectedItemIds.length} барааг "Ирж авсан" болгох уу?`;
+    if (!window.confirm(message)) return;
+    await updateStatus(selectedItemIds, "Бараа олгосон");
   };
 
   useEffect(() => {
@@ -681,6 +697,7 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
                   <th className="p-3 text-left">Барааны нэр</th>
                   <th className="p-3 text-left">Төрөл</th>
                   <th className="p-3 text-left">Төлөв</th>
+                  <th className="p-3 text-left">Карго</th>
                   <th className="p-3 text-left">Тоо</th>
                   <th className="p-3 text-left">Захиалга</th>
                   <th className="p-3 text-left">Үзэх</th>
@@ -689,11 +706,11 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="p-4 text-center">Уншиж байна...</td>
+                    <td colSpan={9} className="p-4 text-center">Уншиж байна...</td>
                   </tr>
                 ) : filteredItems.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-4 text-center">Мэдээлэл алга</td>
+                    <td colSpan={9} className="p-4 text-center">Мэдээлэл алга</td>
                   </tr>
                 ) : (
                   filteredItems.map((item) => {
@@ -742,6 +759,20 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
                             {statusText}
                           </span>
                         </td>
+                        <td className="p-3 align-top font-medium">
+                          {Number(item.cargo_fee || 0) > 0 ? (
+                            <div>
+                              <div>{(Number(item.cargo_fee || 0) * Number(item.qty || 0)).toLocaleString()}₮</div>
+                              {Number(item.qty || 0) > 1 && (
+                                <div className="mt-1 text-[11px] font-normal text-gray-500">
+                                  {Number(item.cargo_fee || 0).toLocaleString()}₮ × {item.qty}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
                         <td className="p-3 align-top">{item.qty}</td>
                         <td className="p-3 align-top text-xs text-gray-500">#{item.order_id}</td>
                         <td className="p-3 align-top">
@@ -765,6 +796,8 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="text-sm text-gray-600">
                 Сонгосон бараа: <span className="font-semibold text-black">{selectedItemIds.length}</span>
+                <span className="mx-2 text-gray-300">•</span>
+                Нийт карго: <span className="font-semibold text-black">{selectedCargoTotal.toLocaleString()}₮</span>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
@@ -775,7 +808,7 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
                   Хүргэлтээр авсан
                 </button>
                 <button
-                  onClick={() => updateStatus(selectedItemIds, "Бараа олгосон")}
+                  onClick={handleMarkDelivered}
                   disabled={selectedItemIds.length === 0}
                   className="rounded-full bg-green-600 px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                 >
