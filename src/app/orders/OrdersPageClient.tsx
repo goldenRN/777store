@@ -748,16 +748,14 @@ function OrdersPageContent() {
                           ? ` • ${currentSelectedDeliveryItem.variantLabel.label}`
                           : ""}
                       </div>
-                      {currentSelectedDeliveryItem.delivery_method !== "delivery" && (
-                        <button
-                          onClick={() => setDeliveryOpen((v) => !v)}
-                          className="rounded-full border bg-white px-4 py-2 text-xs font-semibold"
-                        >
-                          {deliveryOpen ? "Болих" : "Хүргэлт хүсэх"}
-                        </button>
-                      )}
+                      <button
+                        onClick={() => setDeliveryOpen((v) => !v)}
+                        className="rounded-full border bg-white px-4 py-2 text-xs font-semibold"
+                      >
+                        {deliveryOpen ? "Болих" : deliveryActionLabel(currentSelectedDeliveryItem)}
+                      </button>
                     </div>
-                    {deliveryOpen && currentSelectedDeliveryItem.delivery_method !== "delivery" && (
+                    {deliveryOpen && (
                       <div className="mt-3 grid gap-2 text-xs">
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                           <select
