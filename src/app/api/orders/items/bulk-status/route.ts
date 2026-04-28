@@ -6,9 +6,15 @@ export async function PATCH(request: NextRequest) {
   const body = await request.json();
   const itemIds = Array.isArray(body?.itemIds) ? body.itemIds : [];
   const status = String(body?.status ?? "").trim();
+  const returnNote = String(body?.returnNote ?? "").trim();
+  const statusNorm = status.toLowerCase();
+  const isReturned = statusNorm.includes("буца");
 
   if (!itemIds.length || !status) {
     return NextResponse.json({ message: "itemIds болон status шаардлагатай" }, { status: 400 });
+  }
+  if (isReturned && !returnNote) {
+    return NextResponse.json({ message: "Буцаалтын тайлбар шаардлагатай" }, { status: 400 });
   }
 
   const numericIds = itemIds.map((id: any) => Number(id)).filter((id: number) => Number.isFinite(id));
@@ -23,7 +29,10 @@ export async function PATCH(request: NextRequest) {
 
   await prisma.adminOrderItem.updateMany({
     where: { id: { in: numericIds } },
-    data: { status },
+    data: {
+      status,
+      ...(isReturned ? { return_note: returnNote } : {}),
+    },
   });
 
   const affectedOrderIds = Array.from(new Set(affectedItems.map((item) => item.order_id)));
@@ -53,7 +62,7 @@ export async function PATCH(request: NextRequest) {
     action: "ORDER_ITEMS_BULK_STATUS",
     entityType: "AdminOrderItem",
     entityId: null,
-    details: { itemIds: numericIds, status },
+    details: { itemIds: numericIds, status, returnNote: isReturned ? returnNote : null },
   });
 
   return NextResponse.json({ success: true, updated: numericIds.length });

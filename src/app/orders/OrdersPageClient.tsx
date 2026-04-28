@@ -1,11 +1,12 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 
 type QPayInfo = {
   orderId: number;
+  orderItemId: number;
   qr_image?: string | null;
   qr_text?: string | null;
   short_url?: string | null;
@@ -14,18 +15,29 @@ type QPayInfo = {
 };
 
 type OrderItem = {
-  id: string;
+  id: number;
   qty: number;
   unitPrice: number;
-  productId: string;
+  productId: number | null;
   productName: string;
   productImage: string | null;
   variantLabel?: { label: string; inferredBy: "image" | "price" | null; confirmed: boolean } | null;
   status?: string | null;
+  delivery_method?: string | null;
+  delivery_name?: string | null;
+  delivery_phone?: string | null;
+  delivery_address?: string | null;
+  delivery_district_id?: number | null;
+  delivery_district_name?: string | null;
+  delivery_khoroo_id?: number | null;
+  delivery_khoroo_name?: string | null;
+  delivery_zone?: string | null;
+  delivery_fee?: number;
+  return_note?: string | null;
 };
 
 type Order = {
-  id: string;
+  id: number;
   status: string;
   total: number;
   createdAt: string;
@@ -49,9 +61,8 @@ type StoredUser = {
 };
 
 type FlatOrderItem = OrderItem & {
-  orderId: string;
+  orderId: number;
   orderStatus: string;
-  deliveryMethod?: string | null;
   createdAt: string;
   total: number;
   effectiveStatus: string;
@@ -60,6 +71,11 @@ type FlatOrderItem = OrderItem & {
 const getStatusLabel = (status: string, statuses: { name: string }[]) => {
   const hit = statuses.find((s) => s.name === status);
   return hit?.name ?? status;
+};
+
+const getStatusTabLabel = (status: string) => {
+  if (status === "Буцаагдсан") return "Буцаасан";
+  return status;
 };
 
 function OrdersPageContent() {
@@ -73,6 +89,7 @@ function OrdersPageContent() {
   const [statusOptions, setStatusOptions] = useState<{ id: number; name: string }[]>([]);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [deliveryOpen, setDeliveryOpen] = useState(false);
+  const [selectedDeliveryItemId, setSelectedDeliveryItemId] = useState<number | null>(null);
   const [deliveryName, setDeliveryName] = useState("");
   const [deliveryPhone, setDeliveryPhone] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
@@ -129,7 +146,12 @@ function OrdersPageContent() {
 
   const loadDetail = async (
     id: string,
-    opts?: { preservePaymentUi?: boolean; preserveDeliveryUi?: boolean; openDelivery?: boolean }
+    opts?: {
+      preservePaymentUi?: boolean;
+      preserveDeliveryUi?: boolean;
+      openDelivery?: boolean;
+      deliveryItemId?: number | null;
+    }
   ) => {
     if (!userId) return;
     setDetailLoading(true);
@@ -139,6 +161,7 @@ function OrdersPageContent() {
       const res = await fetch(url.toString());
       const json = await res.json();
       setSelected(json);
+      setSelectedDeliveryItemId(opts?.deliveryItemId ?? null);
       if (!opts?.preserveDeliveryUi) {
         setDeliveryOpen(Boolean(opts?.openDelivery));
       } else if (opts?.openDelivery) {
@@ -149,11 +172,15 @@ function OrdersPageContent() {
         setCheckMessage("");
         setShowBankApps(false);
       }
-      setDeliveryName(json?.delivery_name || "");
-      setDeliveryPhone(json?.delivery_phone || "");
-      setDeliveryAddress(json?.delivery_address || "");
-      setDeliveryDistrictId(json?.delivery_district_id ?? "");
-      setDeliveryKhorooId(json?.delivery_khoroo_id ?? "");
+      const deliveryItem =
+        (opts?.deliveryItemId != null
+          ? json?.items?.find((item: OrderItem) => Number(item.id) === Number(opts.deliveryItemId))
+          : null) ?? null;
+      setDeliveryName(deliveryItem?.delivery_name || json?.delivery_name || "");
+      setDeliveryPhone(deliveryItem?.delivery_phone || json?.delivery_phone || "");
+      setDeliveryAddress(deliveryItem?.delivery_address || json?.delivery_address || "");
+      setDeliveryDistrictId(deliveryItem?.delivery_district_id ?? json?.delivery_district_id ?? "");
+      setDeliveryKhorooId(deliveryItem?.delivery_khoroo_id ?? json?.delivery_khoroo_id ?? "");
     } finally {
       setDetailLoading(false);
     }
@@ -164,7 +191,7 @@ function OrdersPageContent() {
     return s.includes("ирсэн") || s.includes("arrived");
   };
 
-  const getEffectiveItemStatus = (orderStatus?: string | null, itemStatus?: string | null) => {
+  const getEffectiveItemStatus = useCallback((orderStatus?: string | null, itemStatus?: string | null) => {
     const item = String(itemStatus || "").trim();
     const itemNorm = item.toLowerCase();
     const order = String(orderStatus || "").trim();
@@ -181,7 +208,7 @@ function OrdersPageContent() {
     }
     if (isArrivedStatus(order)) return "Бараа ирсэн";
     return item || order;
-  };
+  }, []);
 
   const canRequestDeliveryForStatus = (order: Order | null, statusOverride?: string | null) => {
     if (!order) return false;
@@ -189,33 +216,34 @@ function OrdersPageContent() {
     return status.includes("ирсэн") && !status.includes("олгосон") && !status.includes("хүргэлт");
   };
 
-  const isArrived = (o: Order | null) => {
-    if (!o) return false;
-    if (canRequestDeliveryForStatus(o)) return true;
-    return o.items.some((item) => canRequestDeliveryForStatus(o, item.status));
-  };
+  const currentSelectedDeliveryItem = useMemo(() => {
+    if (!selected || selectedDeliveryItemId == null) return null;
+    return selected.items.find((item) => Number(item.id) === Number(selectedDeliveryItemId)) ?? null;
+  }, [selected, selectedDeliveryItemId]);
 
-  const deliveryActionLabel = (order: Order | null) => {
-    if (!order) return "Хүргэлтээр авах";
-    return String(order.delivery_method || "").trim().toLowerCase() === "delivery"
+  const deliveryActionLabel = (item?: OrderItem | null) => {
+    if (!item) return "Хүргэлтээр авах";
+    return String(item.delivery_method || "").trim().toLowerCase() === "delivery"
       ? "Хүргэлтийг үргэлжлүүлэх"
       : "Хүргэлтээр авах";
   };
+
+  const arrivedTabKey = "Бараа ирсэн";
 
   useEffect(() => {
     if (!deliveryOpen) return;
     if (!userId) return;
     if (!selected) return;
-    // Pre-fill from last delivery address if this order doesn't have delivery info yet.
+    // Pre-fill from last delivery address if this item doesn't have delivery info yet.
     const fill = async () => {
       try {
         const res = await fetch(`/api/users/${userId}`);
         const json = await res.json();
         const last = json?.lastDelivery ?? null;
         if (last) {
-          if (!deliveryName) setDeliveryName(last.delivery_name || "");
-          if (!deliveryPhone) setDeliveryPhone(last.delivery_phone || "");
-          if (!deliveryAddress) setDeliveryAddress(last.delivery_address || "");
+          if (!deliveryName.trim()) setDeliveryName(last.delivery_name || "");
+          if (!deliveryPhone.trim()) setDeliveryPhone(last.delivery_phone || "");
+          if (!deliveryAddress.trim()) setDeliveryAddress(last.delivery_address || "");
           if (!deliveryDistrictId && last.delivery_district_id) {
             setDeliveryDistrictId(Number(last.delivery_district_id));
           }
@@ -229,7 +257,7 @@ function OrdersPageContent() {
     };
     fill();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deliveryOpen]);
+  }, [deliveryOpen, userId, selected, selectedDeliveryItemId]);
 
   useEffect(() => {
     if (!deliveryOpen) return;
@@ -266,6 +294,10 @@ function OrdersPageContent() {
 
   const requestDelivery = async () => {
     if (!selected || !userId) return;
+    if (selectedDeliveryItemId == null) {
+      alert("Хүргэлт хүсэх бараагаа сонгоно уу.");
+      return;
+    }
     if (!deliveryName.trim() || !deliveryPhone.trim()) {
       alert("Хүргэлтийн нэр, утсаа бүрэн бөглөнө үү.");
       return;
@@ -285,6 +317,7 @@ function OrdersPageContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId,
+          orderItemId: selectedDeliveryItemId,
           deliveryName,
           deliveryPhone,
           deliveryAddress,
@@ -300,6 +333,7 @@ function OrdersPageContent() {
       if (json?.qpay) {
         setQpay({
           orderId: Number(selected.id),
+          orderItemId: Number(json.orderItemId ?? selectedDeliveryItemId),
           qr_image: json.qpay.qr_image,
           qr_text: json.qpay.qr_text,
           short_url: json.qpay.short_url,
@@ -311,7 +345,12 @@ function OrdersPageContent() {
         setCheckMessage("Хүргэлтийн төлбөр 0₮ тул захиалга шууд хүргэлтэнд орлоо.");
       }
       // refresh detail so delivery info appears
-      await loadDetail(selected.id, { preservePaymentUi: true, preserveDeliveryUi: true, openDelivery: true });
+      await loadDetail(String(selected.id), {
+        preservePaymentUi: true,
+        preserveDeliveryUi: true,
+        openDelivery: true,
+        deliveryItemId: selectedDeliveryItemId,
+      });
     } finally {
       setDeliverySaving(false);
     }
@@ -321,7 +360,27 @@ function OrdersPageContent() {
     if (!selected) return;
     setChecking(true);
     try {
-      await loadDetail(String(selected.id), { preservePaymentUi: true, preserveDeliveryUi: true });
+      if (qpay?.orderItemId) {
+        const url = new URL("/api/payments/qpay/check", window.location.origin);
+        url.searchParams.set("orderItemId", String(qpay.orderItemId));
+        const res = await fetch(url.toString());
+        const json = await res.json().catch(() => ({}));
+        const status = String(json?.status || "").toUpperCase();
+        if (status === "PAID") {
+          setCheckMessage("Хүргэлтийн төлбөр амжилттай төлөгдлөө.");
+          setQpay(null);
+        } else if (status === "EXPIRED") {
+          setCheckMessage("Хүргэлтийн нэхэмжлэлийн хугацаа дууссан байна.");
+          setQpay(null);
+        } else if (status === "UNPAID") {
+          setCheckMessage("Төлбөр хийгдээгүй байна. Дахин шалгана уу.");
+        }
+      }
+      await loadDetail(String(selected.id), {
+        preservePaymentUi: true,
+        preserveDeliveryUi: true,
+        deliveryItemId: selectedDeliveryItemId,
+      });
       // refresh list
       if (userId) {
         const url = new URL(`/api/public/orders`, window.location.origin);
@@ -346,7 +405,6 @@ function OrdersPageContent() {
             ...item,
             orderId: order.id,
             orderStatus: order.status,
-            deliveryMethod: order.delivery_method ?? null,
             createdAt: order.createdAt,
             total: order.total,
             effectiveStatus,
@@ -354,7 +412,48 @@ function OrdersPageContent() {
         })
         .filter((item) => item.effectiveStatus === active)
     );
-  }, [orders, active]);
+  }, [orders, active, getEffectiveItemStatus]);
+
+  const footerDeliveryEntries = useMemo<FlatOrderItem[]>(() => {
+    if (active !== arrivedTabKey) return [];
+    const seen = new Set<number>();
+    return filteredItems.filter((item) => {
+      if (seen.has(item.id)) return false;
+      const status = String(item.effectiveStatus || "").trim().toLowerCase();
+      const canRequest =
+        status.includes("ирсэн") &&
+        !status.includes("олгосон") &&
+        !status.includes("хүргэлт");
+      if (!canRequest) return false;
+      seen.add(item.id);
+      return true;
+    });
+  }, [active, filteredItems]);
+
+  const orderedTabs = useMemo(() => {
+    const orderedKeys = [
+      "ALL",
+      "Хүлээгдэж байгаа",
+      "Бараа ирсэн",
+      "Бараа олгосон",
+      "Хүргэлтэнд бүртгэгдсэн",
+      "Буцаагдсан",
+    ];
+    const known = new Set(orderedKeys.filter((key) => key !== "ALL"));
+    const extras = statusOptions
+      .map((s) => s.name)
+      .filter((name) => name && !known.has(name));
+
+    const tabs = orderedKeys.map((key) => {
+      if (key === "ALL") return { key, label: "Бүгд" };
+      return { key, label: getStatusTabLabel(key) };
+    });
+
+    return [
+      ...tabs,
+      ...extras.map((key) => ({ key, label: getStatusTabLabel(key) })),
+    ];
+  }, [statusOptions]);
 
   return (
     <main className="container mx-auto flex-1 px-6 py-10">
@@ -363,8 +462,7 @@ function OrdersPageContent() {
             <div className="text-lg font-bold">Захиалгууд</div>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
-            {[{ key: "ALL", label: "Бүгд" }, ...statusOptions.map((s) => ({ key: s.name, label: s.name }))].map(
-              (tab) => (
+            {orderedTabs.map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => router.push(`/orders?status=${tab.key}`)}
@@ -444,16 +542,8 @@ function OrdersPageContent() {
                     </div>
                     <div className="mt-3 flex justify-end">
                       <div className="flex flex-wrap items-center gap-2">
-                        {canRequestDeliveryForStatus(o) && (
-                          <button
-                            onClick={() => loadDetail(o.id, { openDelivery: true })}
-                            className="rounded-full bg-black px-4 py-2 text-xs font-semibold text-white"
-                          >
-                            {deliveryActionLabel(o)}
-                          </button>
-                        )}
                         <button
-                          onClick={() => loadDetail(o.id)}
+                          onClick={() => loadDetail(String(o.id))}
                           className="rounded-full border px-4 py-2 text-xs font-semibold"
                         >
                           Дэлгэрэнгүй
@@ -493,6 +583,11 @@ function OrdersPageContent() {
                             Төрөл: {it.variantLabel.label}
                           </div>
                         )}
+                        {it.return_note && (
+                          <div className="mt-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+                            Буцаалтын тайлбар: {it.return_note}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="text-right">
@@ -509,16 +604,12 @@ function OrdersPageContent() {
                       {getStatusLabel(it.effectiveStatus, statusOptions)}
                     </span>
                     <div className="flex flex-wrap items-center gap-2 justify-end">
-                      {canRequestDeliveryForStatus({ id: it.orderId, status: it.orderStatus, total: it.total, createdAt: it.createdAt, items: [], delivery_method: it.deliveryMethod ?? null } as Order, it.effectiveStatus) && String(it.deliveryMethod || "").trim().toLowerCase() !== "delivery" && (
-                        <button
-                          onClick={() => loadDetail(it.orderId, { openDelivery: true })}
-                          className="rounded-full bg-black px-4 py-2 text-xs font-semibold text-white"
-                        >
-                          Хүргэлтээр авах
-                        </button>
-                      )}
                       <button
-                        onClick={() => loadDetail(it.orderId)}
+                        onClick={() =>
+                          loadDetail(String(it.orderId), {
+                            deliveryItemId: it.id,
+                          })
+                        }
                         className="rounded-full border px-4 py-2 text-xs font-semibold"
                       >
                         Дэлгэрэнгүй
@@ -527,6 +618,36 @@ function OrdersPageContent() {
                   </div>
                 </div>
               ))}
+              {footerDeliveryEntries.length > 0 && (
+                <div className="rounded-xl border bg-[var(--sky-50)] px-4 py-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="text-sm text-[var(--gray-600)]">
+                      Бараа ирсэн бараа: <span className="font-semibold">{footerDeliveryEntries.length}</span>
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {footerDeliveryEntries.map((item) => {
+                        const variantSuffix = item.variantLabel?.label ? ` • ${item.variantLabel.label}` : "";
+                        return (
+                          <button
+                            key={`${item.orderId}-${item.id}`}
+                            onClick={() =>
+                              loadDetail(String(item.orderId), {
+                                openDelivery: true,
+                                deliveryItemId: item.id,
+                              })
+                            }
+                            className="rounded-full bg-black px-4 py-2 text-xs font-semibold text-white"
+                          >
+                            {footerDeliveryEntries.length === 1
+                              ? deliveryActionLabel(item)
+                              : `#${item.orderId} • ${item.productName}${variantSuffix}`}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -578,6 +699,11 @@ function OrdersPageContent() {
                             Төлөв: {getStatusLabel(it.status, statusOptions)}
                           </div>
                         )}
+                        {it.return_note && (
+                          <div className="mt-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+                            Буцаалтын тайлбар: {it.return_note}
+                          </div>
+                        )}
                       </div>
                       <div className="text-sm font-semibold">
                         {(it.qty * it.unitPrice).toLocaleString()}₮
@@ -590,11 +716,20 @@ function OrdersPageContent() {
                   <div>{Number(selected.total).toLocaleString()}₮</div>
                 </div>
 
-                {isArrived(selected) && (selected.delivery_method !== "delivery" || !!qpay) && (
+                {currentSelectedDeliveryItem &&
+                  canRequestDeliveryForStatus(
+                    selected,
+                    getEffectiveItemStatus(selected.status, currentSelectedDeliveryItem.status),
+                  ) && (
                   <div className="mt-4 rounded-xl border bg-[var(--sky-50)] p-4 text-sm">
                     <div className="flex items-center justify-between gap-3">
-                      <div className="font-semibold">Хүргэлтээр авах</div>
-                      {selected.delivery_method !== "delivery" && (
+                      <div className="font-semibold">
+                        {currentSelectedDeliveryItem.productName}
+                        {currentSelectedDeliveryItem.variantLabel?.label
+                          ? ` • ${currentSelectedDeliveryItem.variantLabel.label}`
+                          : ""}
+                      </div>
+                      {currentSelectedDeliveryItem.delivery_method !== "delivery" && (
                         <button
                           onClick={() => setDeliveryOpen((v) => !v)}
                           className="rounded-full border bg-white px-4 py-2 text-xs font-semibold"
@@ -603,7 +738,7 @@ function OrdersPageContent() {
                         </button>
                       )}
                     </div>
-                    {deliveryOpen && selected.delivery_method !== "delivery" && (
+                    {deliveryOpen && currentSelectedDeliveryItem.delivery_method !== "delivery" && (
                       <div className="mt-3 grid gap-2 text-xs">
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                           <select

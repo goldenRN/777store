@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 
 import { NavMain } from "@/components/nav-main"
 import { NavSecondary } from "@/components/nav-secondary"
@@ -59,6 +60,9 @@ const data = {
       title: "Бараа олгох",
       url: "/admin/fulfillment",
       icon: <MapIcon />,
+      items: [
+        { title: "Олгосон бараа", url: "/admin/fulfillmentLst" },
+      ],
     },
 
     {
@@ -147,13 +151,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <a href="/">
+              <Link href="/">
                 <img src="/logo.png" alt="777 Family Store" className="h-10 w-10" />
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">777 Family store</span>
                   <span className="truncate text-xs">Онлайн дэлгүүр</span>
                 </div>
-              </a>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

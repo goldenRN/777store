@@ -159,8 +159,19 @@ export async function GET(
       id: it.id,
       qty: it.quantity,
       unitPrice: it.price,
+      productId: it.product_id ?? null,
       productName: it.product_name,
       productImage: it.image_url ?? null,
+      delivery_method: it.delivery_method ?? null,
+      delivery_name: it.delivery_name ?? null,
+      delivery_phone: it.delivery_phone ?? null,
+      delivery_address: it.delivery_address ?? null,
+      delivery_district_id: it.delivery_district_id ?? null,
+      delivery_district_name: it.delivery_district_name ?? null,
+      delivery_khoroo_id: it.delivery_khoroo_id ?? null,
+      delivery_khoroo_name: it.delivery_khoroo_name ?? null,
+      delivery_zone: it.delivery_zone ?? null,
+      delivery_fee: it.delivery_fee ?? 0,
       variantLabel: (() => {
         const productId = it.product_id ?? null;
         if (!productId) return null;
@@ -207,6 +218,7 @@ export async function GET(
         }
         return Number(productCargoFeeById.get(productId) ?? 0);
       })(),
+      return_note: it.return_note ?? null,
       status: getEffectiveItemStatus(it) || null,
     })),
   });

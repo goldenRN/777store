@@ -1,39 +1,101 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createInvoice } from "@/lib/qpay";
+import { logAdminAction } from "@/lib/audit";
 
-const isDeliveryInvoiceSender = (senderInvoiceNo?: string | null, orderId?: number) => {
+const normalizeStatus = (value?: string | null) =>
+  String(value || "").trim().toLowerCase();
+
+const isDeliveryInvoiceSender = (
+  senderInvoiceNo?: string | null,
+  orderId?: number,
+  orderItemId?: number,
+) => {
   const raw = String(senderInvoiceNo || "").trim().toUpperCase();
   if (!raw) return false;
-  if (orderId && (raw.startsWith(`DELIVERY-${orderId}-`) || raw.startsWith(`DELIVERY-ADMIN-${orderId}-`))) {
-    return true;
+  if (orderId && orderItemId) {
+    const escapedOrderId = String(orderId).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const escapedOrderItemId = String(orderItemId).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const exactOrProductAware = new RegExp(
+      `^DELIVERY-ITEM-${escapedOrderId}-(?:\\d+-)?${escapedOrderItemId}-`,
+    );
+    if (exactOrProductAware.test(raw)) return true;
   }
-  return raw.startsWith("DELIVERY-") || raw.startsWith("DELIVERY_ADMIN-") || raw.startsWith("DELIVERY-ADMIN-");
+  return raw.startsWith("DELIVERY-ITEM-");
 };
+
+const isShippingOrDelivered = (status?: string | null) => {
+  const normalized = normalizeStatus(status);
+  return (
+    normalized.includes("хүргэлт") ||
+    normalized.includes("хүргэгд") ||
+    normalized.includes("shipping") ||
+    normalized.includes("delivered")
+  );
+};
+
+const isArrivedStatus = (status?: string | null) => {
+  const normalized = normalizeStatus(status);
+  return normalized.includes("ирсэн") || normalized.includes("arrived");
+};
+
+const isReadyType = (type: { has_duration?: boolean | null; name?: string | null } | null | undefined) => {
+  if (!type) return true;
+  if (type.has_duration === true) return false;
+  const name = String(type.name ?? "").toLowerCase();
+  return !(
+    name.includes("захиал") ||
+    name.includes("урьдчил") ||
+    name.includes("preorder") ||
+    name.includes("лайв") ||
+    name.includes("live")
+  );
+};
+
+async function syncOrderStatusToShipping(orderId: number, fallbackStatus: string) {
+  const statuses = await prisma.adminStatus.findMany({ orderBy: { id: "asc" } });
+  const pendingName =
+    statuses.find((s) => s.name.includes("Хүлээгд"))?.name ||
+    statuses[0]?.name ||
+    fallbackStatus;
+  const shippingName =
+    statuses.find((s) => s.name.includes("Хүргэлт"))?.name || pendingName;
+
+  await prisma.adminOrder.update({
+    where: { id: orderId },
+    data: { status: shippingName },
+  });
+
+  return shippingName;
+}
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const resolved = await params;
   const orderId = Number(resolved.id);
   const body = await request.json().catch(() => ({}));
 
   const userId = String(body?.userId ?? "").trim();
+  const orderItemId = Number(body?.orderItemId ?? "");
   const deliveryName = String(body?.deliveryName ?? "").trim();
   const deliveryPhone = String(body?.deliveryPhone ?? "").trim();
   const deliveryAddress = String(body?.deliveryAddress ?? "").trim();
   const deliveryDistrictId = Number(body?.deliveryDistrictId ?? "");
   const deliveryKhorooId = Number(body?.deliveryKhorooId ?? "");
 
-  if (!orderId || !userId) {
-    return NextResponse.json({ message: "orderId, userId шаардлагатай" }, { status: 400 });
+  if (!orderId || !userId || !Number.isFinite(orderItemId)) {
+    return NextResponse.json(
+      { message: "orderId, userId, orderItemId шаардлагатай" },
+      { status: 400 },
+    );
   }
 
   if (!deliveryName || !deliveryPhone || !deliveryAddress) {
     return NextResponse.json(
       { message: "Хүргэлтийн нэр, утас, нэмэлт хаяг шаардлагатай" },
-      { status: 400 }
+      { status: 400 },
     );
   }
   if (!Number.isFinite(deliveryDistrictId) || !Number.isFinite(deliveryKhorooId)) {
@@ -47,58 +109,43 @@ export async function POST(
       payment_status: "PAID",
       deleted_at: null,
     },
-    include: { items: true },
+    include: {
+      items: {
+        include: {
+          product: { include: { type: true } },
+          variant: true,
+        },
+      },
+    },
   });
 
   if (!order) {
     return NextResponse.json({ message: "Захиалга олдсонгүй" }, { status: 404 });
   }
 
-  const items = order.items || [];
-  if (items.length === 0) {
-    return NextResponse.json({ message: "Захиалгын бараа олдсонгүй" }, { status: 400 });
-  }
-
-  const statusNorm = String(order.status || "").toLowerCase();
-  const isShippingOrDelivered =
-    statusNorm.includes("хүргэлт") ||
-    statusNorm.includes("хүргэгд") ||
-    statusNorm.includes("shipping") ||
-    statusNorm.includes("delivered");
-
-  if (order.delivery_method === "delivery" && isShippingOrDelivered) {
-    return NextResponse.json({ message: "Энэ захиалга аль хэдийн хүргэлтэнд бүртгэгдсэн байна." }, { status: 400 });
-  }
-
-  const productIds = Array.from(
-    new Set(items.map((it) => it.product_id).filter((x): x is number => x != null))
-  );
-  const products = productIds.length
-    ? await prisma.adminProduct.findMany({
-        where: { id: { in: productIds } },
-        include: { type: true },
-      })
-    : [];
-  const isPreorderType = (type: { has_duration?: boolean | null; name?: string | null } | null | undefined) => {
-    if (type?.has_duration === true) return true;
-    const name = String(type?.name ?? "").toLowerCase();
-    if (name.includes("захиал") || name.includes("урьдчил") || name.includes("preorder")) return true;
-    if (name.includes("лайв") || name.includes("live")) return true;
-    return false;
-  };
-  const preorderProductIds = new Set<number>(products.filter((p) => isPreorderType(p.type)).map((p) => p.id));
-
-  // Require full arrival (only for preorder items) before allowing delivery request.
-  const preorderItems = items.filter((it) => it.product_id == null || preorderProductIds.has(it.product_id));
-  const allArrived =
-    preorderItems.length > 0
-      ? preorderItems.every((it) => String(it.status || "").toLowerCase().includes("бараа ирсэн"))
-      : items.every((it) => String(it.status || "").toLowerCase().includes("бараа ирсэн"));
-
-  if (!allArrived) {
+  const targetItem = order.items.find((item) => item.id === orderItemId);
+  if (!targetItem) {
     return NextResponse.json(
-      { message: "Бараа бүрэн ирээгүй байна. Бараа ирсний дараа хүргэлт бүртгэнэ үү." },
-      { status: 409 }
+      { message: "Хүргэлт хүссэн бараа олдсонгүй" },
+      { status: 404 },
+    );
+  }
+
+  if (
+    targetItem.delivery_method === "delivery" &&
+    isShippingOrDelivered(targetItem.status)
+  ) {
+    return NextResponse.json(
+      { message: "Энэ бараа аль хэдийн хүргэлтэнд бүртгэгдсэн байна." },
+      { status: 400 },
+    );
+  }
+
+  const itemIsReady = isReadyType(targetItem.product?.type);
+  if (!itemIsReady && !isArrivedStatus(targetItem.status)) {
+    return NextResponse.json(
+      { message: "Энэ бараа хараахан ирээгүй байна. Бараа ирсний дараа хүргэлт хүснэ үү." },
+      { status: 409 },
     );
   }
 
@@ -111,28 +158,28 @@ export async function POST(
   }
 
   const deliveryFee = Math.max(0, Number(khoroo.fee || 0));
-
   const existingDeliveryInvoice =
-    order.delivery_method === "delivery" &&
-    isDeliveryInvoiceSender(order.qpay_sender_invoice_no, order.id) &&
-    order.qpay_invoice_id &&
-    order.qpay_qr_text &&
-    order.qpay_qr_image &&
-    order.payment_expires_at &&
-    new Date(order.payment_expires_at) > new Date()
+    targetItem.delivery_method === "delivery" &&
+    isDeliveryInvoiceSender(targetItem.qpay_sender_invoice_no, order.id, targetItem.id) &&
+    targetItem.qpay_invoice_id &&
+    targetItem.qpay_qr_text &&
+    targetItem.qpay_qr_image &&
+    targetItem.payment_expires_at &&
+    new Date(targetItem.payment_expires_at) > new Date()
       ? {
-          invoice_id: order.qpay_invoice_id,
-          qr_text: order.qpay_qr_text,
-          qr_image: order.qpay_qr_image,
-          short_url: order.qpay_short_url,
-          deeplinks: Array.isArray(order.qpay_deeplink) ? order.qpay_deeplink : [],
-          expires_at: order.payment_expires_at.toISOString(),
+          invoice_id: targetItem.qpay_invoice_id,
+          qr_text: targetItem.qpay_qr_text,
+          qr_image: targetItem.qpay_qr_image,
+          short_url: targetItem.qpay_short_url,
+          deeplinks: Array.isArray(targetItem.qpay_deeplink)
+            ? targetItem.qpay_deeplink
+            : [],
+          expires_at: targetItem.payment_expires_at.toISOString(),
         }
       : null;
 
-  // Save delivery info on the order.
-  await prisma.adminOrder.update({
-    where: { id: order.id },
+  await prisma.adminOrderItem.update({
+    where: { id: targetItem.id },
     data: {
       delivery_method: "delivery",
       delivery_name: deliveryName,
@@ -150,41 +197,55 @@ export async function POST(
   if (existingDeliveryInvoice) {
     return NextResponse.json({
       id: order.id,
+      orderItemId: targetItem.id,
+      productId: targetItem.product_id,
+      productName: targetItem.product_name,
       delivery_fee: deliveryFee,
       qpay: existingDeliveryInvoice,
     });
   }
 
-  // If delivery fee is 0, no payment is required -> move to shipping right away.
   if (deliveryFee <= 0) {
-    const statuses = await prisma.adminStatus.findMany({ orderBy: { id: "asc" } });
-    const pendingName =
-      statuses.find((s) => s.name.includes("Хүлээгд"))?.name ||
-      statuses[0]?.name ||
-      order.status;
-    const shippingName = statuses.find((s) => s.name.includes("Хүргэлт"))?.name || pendingName;
-
-    await prisma.adminOrder.update({
-      where: { id: order.id },
+    const shippingName = await syncOrderStatusToShipping(order.id, order.status);
+    await prisma.adminOrderItem.update({
+      where: { id: targetItem.id },
       data: {
         status: shippingName,
-        items: {
-          updateMany: {
-            where: { order_id: order.id },
-            data: { status: shippingName },
-          },
-        },
+        delivery_paid_at: new Date(),
       },
     });
 
-    return NextResponse.json({ id: order.id, status: "NO_FEE", delivery_fee: 0 });
+    await logAdminAction({
+      request,
+      action: "ORDER_ITEM_DELIVERY_REGISTERED",
+      entityType: "AdminOrderItem",
+      entityId: targetItem.id,
+      details: {
+        order_id: order.id,
+        item_id: targetItem.id,
+        product_id: targetItem.product_id,
+        product_name: targetItem.product_name,
+        status: shippingName,
+        payment_method: "NO_FEE",
+        delivery_fee: 0,
+      },
+    });
+
+    return NextResponse.json({
+      id: order.id,
+      orderItemId: targetItem.id,
+      productId: targetItem.product_id,
+      productName: targetItem.product_name,
+      status: "NO_FEE",
+      delivery_fee: 0,
+    });
   }
 
-  // QPay invoice create for delivery fee only.
   const invoiceCode = process.env.QPAY_INVOICE_CODE;
   const receiverCode = process.env.QPAY_RECEIVER_CODE || "83";
   const callbackBase =
-    process.env.QPAY_CALLBACK_URL || `${process.env.NEXT_PUBLIC_API_URL || ""}/api/payments/qpay/webhook`;
+    process.env.QPAY_CALLBACK_URL ||
+    `${process.env.NEXT_PUBLIC_API_URL || ""}/api/payments/qpay/webhook`;
   const callbackToken = process.env.QPAY_WEBHOOK_TOKEN;
   const senderBranchCode = process.env.QPAY_SENDER_BRANCH_CODE;
   const senderStaffCode = process.env.QPAY_SENDER_STAFF_CODE || "online";
@@ -192,15 +253,18 @@ export async function POST(
   if (!invoiceCode) {
     return NextResponse.json({
       id: order.id,
+      orderItemId: targetItem.id,
       message: "QPAY_INVOICE_CODE тохируулга хийгдээгүй байна",
     });
   }
 
-  const senderInvoiceNo = `DELIVERY-${order.id}-${Date.now()}`;
-  const callbackUrl = `${callbackBase}?orderId=${order.id}${callbackToken ? `&token=${callbackToken}` : ""}`;
+  const senderInvoiceNo = `DELIVERY-ITEM-${order.id}-${targetItem.product_id ?? 0}-${targetItem.id}-${Date.now()}`;
+  const callbackUrl = `${callbackBase}?orderId=${order.id}&orderItemId=${targetItem.id}${callbackToken ? `&token=${callbackToken}` : ""}`;
 
   const expireMinutesRaw = Number(process.env.QPAY_INVOICE_EXPIRE_MINUTES ?? 60);
-  const expireMinutes = Number.isFinite(expireMinutesRaw) ? Math.max(1, expireMinutesRaw) : 60;
+  const expireMinutes = Number.isFinite(expireMinutesRaw)
+    ? Math.max(1, expireMinutesRaw)
+    : 60;
   const expiresAt = new Date(Date.now() + expireMinutes * 60 * 1000);
   const disableExpiry = process.env.QPAY_DISABLE_EXPIRY_DATE === "true";
 
@@ -209,7 +273,7 @@ export async function POST(
     sender_invoice_no: senderInvoiceNo,
     invoice_receiver_code: receiverCode,
     sender_branch_code: senderBranchCode,
-    invoice_description: `Delivery fee for Order #${order.id} ${deliveryFee}₮`,
+    invoice_description: `Delivery fee for Order #${order.id} / ${targetItem.product_name} / Item #${targetItem.id} ${deliveryFee}₮`,
     enable_expiry: !disableExpiry,
     ...(disableExpiry ? {} : { expiry_date: expiresAt.toISOString() }),
     allow_partial: false,
@@ -226,8 +290,8 @@ export async function POST(
 
   try {
     const invoice = await createInvoice(invoicePayload);
-    await prisma.adminOrder.update({
-      where: { id: order.id },
+    await prisma.adminOrderItem.update({
+      where: { id: targetItem.id },
       data: {
         qpay_invoice_id: invoice.invoice_id,
         qpay_sender_invoice_no: senderInvoiceNo,
@@ -238,8 +302,12 @@ export async function POST(
         payment_expires_at: expiresAt,
       },
     });
+
     return NextResponse.json({
       id: order.id,
+      orderItemId: targetItem.id,
+      productId: targetItem.product_id,
+      productName: targetItem.product_name,
       delivery_fee: deliveryFee,
       qpay: {
         invoice_id: invoice.invoice_id,
@@ -251,10 +319,16 @@ export async function POST(
       },
     });
   } catch (err) {
-    console.error("QPay invoice error (delivery):", err);
+    console.error("QPay invoice error (delivery item):", err);
     return NextResponse.json(
-      { id: order.id, message: "Хүргэлтийн QPay нэхэмжлэл үүсгэхэд алдаа гарлаа" },
-      { status: 500 }
+      {
+        id: order.id,
+        orderItemId: targetItem.id,
+        productId: targetItem.product_id,
+        productName: targetItem.product_name,
+        message: "Хүргэлтийн QPay нэхэмжлэл үүсгэхэд алдаа гарлаа",
+      },
+      { status: 500 },
     );
   }
 }

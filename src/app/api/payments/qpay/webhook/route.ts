@@ -2,16 +2,25 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { paymentGet } from "@/lib/qpay";
 import crypto from "crypto";
+import { logAdminAction } from "@/lib/audit";
 
-const isDeliveryInvoiceSender = (senderInvoiceNo?: string | null) => {
-  const raw = String(senderInvoiceNo || "").trim().toUpperCase();
-  return raw.startsWith("DELIVERY-") || raw.startsWith("DELIVERY_ADMIN-") || raw.startsWith("DELIVERY-ADMIN-");
-};
+async function getShippingStatusName(fallbackStatus: string) {
+  const statuses = await prisma.adminStatus.findMany({ orderBy: { id: "asc" } });
+  const pendingName =
+    statuses.find((s) => s.name.includes("Хүлээгд"))?.name ||
+    statuses[0]?.name ||
+    fallbackStatus;
+  return (
+    statuses.find((s) => s.name.includes("Хүргэлт"))?.name || pendingName
+  );
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const paymentId = searchParams.get("qpay_payment_id") || searchParams.get("payment_id");
+  const paymentId =
+    searchParams.get("qpay_payment_id") || searchParams.get("payment_id");
   const orderIdParam = searchParams.get("orderId");
+  const orderItemIdParam = searchParams.get("orderItemId");
   const token = searchParams.get("token");
   const expectedToken = process.env.QPAY_WEBHOOK_TOKEN;
   const signatureSecret = process.env.QPAY_WEBHOOK_SIGNATURE_SECRET;
@@ -49,10 +58,70 @@ export async function GET(request: NextRequest) {
   try {
     const payment = await paymentGet(paymentId);
     const invoiceId = payment.object_id;
-    const order =
-      orderIdParam
-        ? await prisma.adminOrder.findUnique({ where: { id: Number(orderIdParam) } })
-        : await prisma.adminOrder.findFirst({ where: { qpay_invoice_id: invoiceId } });
+    const orderItemId = Number(orderItemIdParam);
+
+    if (Number.isFinite(orderItemId) && orderItemId > 0) {
+      const item = await prisma.adminOrderItem.findUnique({
+        where: { id: orderItemId },
+        include: { order: true },
+      });
+
+      if (item?.order?.deleted_at) {
+        return new NextResponse("SUCCESS");
+      }
+
+      const matchedItem =
+        item && item.qpay_invoice_id === invoiceId
+          ? item
+          : await prisma.adminOrderItem.findFirst({
+              where: { qpay_invoice_id: invoiceId },
+              include: { order: true },
+            });
+
+      if (matchedItem && payment.payment_status === "PAID") {
+        const shippingName = await getShippingStatusName(
+          matchedItem.order?.status || matchedItem.status,
+        );
+        const wasUnpaid = !matchedItem.qpay_payment_id;
+        await prisma.$transaction([
+          prisma.adminOrder.update({
+            where: { id: matchedItem.order_id },
+            data: { status: shippingName },
+          }),
+          prisma.adminOrderItem.update({
+            where: { id: matchedItem.id },
+            data: {
+              status: shippingName,
+              qpay_payment_id: payment.payment_id,
+              delivery_paid_at: new Date(),
+            },
+          }),
+        ]);
+        if (wasUnpaid) {
+          await logAdminAction({
+            request,
+            action: "ORDER_ITEM_DELIVERY_REGISTERED",
+            entityType: "AdminOrderItem",
+            entityId: matchedItem.id,
+            details: {
+              order_id: matchedItem.order_id,
+              item_id: matchedItem.id,
+              product_id: matchedItem.product_id,
+              product_name: matchedItem.product_name,
+              status: shippingName,
+              payment_method: "QPAY",
+              delivery_fee: matchedItem.delivery_fee ?? 0,
+            },
+          });
+        }
+      }
+
+      return new NextResponse("SUCCESS");
+    }
+
+    const order = orderIdParam
+      ? await prisma.adminOrder.findUnique({ where: { id: Number(orderIdParam) } })
+      : await prisma.adminOrder.findFirst({ where: { qpay_invoice_id: invoiceId } });
 
     if (order?.deleted_at) {
       return new NextResponse("SUCCESS");
@@ -69,11 +138,9 @@ export async function GET(request: NextRequest) {
       const statusNorm = String(order.status || "").toLowerCase();
       const isArrived =
         statusNorm.includes("бараа ирсэн") || statusNorm.includes("arrived");
-      const isDeliveryInvoice = isDeliveryInvoiceSender(order.qpay_sender_invoice_no);
       const shouldShip =
-        isDeliveryInvoice ||
-        (order.delivery_method === "delivery" &&
-          (order.order_kind === "ready" || isArrived));
+        order.delivery_method === "delivery" &&
+        (order.order_kind === "ready" || isArrived);
       const nextStatus = shouldShip ? shippingName : pendingName;
       const shouldBackfillOrderedQty =
         order.payment_status !== "PAID" && String(order.order_kind || "") === "preorder";
@@ -84,13 +151,13 @@ export async function GET(request: NextRequest) {
         });
         if (items.length > 0) {
           const productIds = Array.from(
-            new Set(items.map((it) => it.product_id).filter((x): x is number => x != null))
+            new Set(items.map((it) => it.product_id).filter((x): x is number => x != null)),
           );
           const products = await prisma.adminProduct.findMany({
             where: { id: { in: productIds } },
             include: { type: true },
           });
-          const isPreorderProduct = (p: any) => {
+          const isPreorderProduct = (p: { type?: { has_duration?: boolean | null; name?: string | null } | null }) => {
             const type = p?.type ?? null;
             if (type?.has_duration === true) return true;
             const name = String(type?.name ?? "").toLowerCase();
@@ -99,15 +166,17 @@ export async function GET(request: NextRequest) {
             return false;
           };
           const preorderProductIds = new Set<number>(
-            products.filter((p) => isPreorderProduct(p)).map((p) => p.id)
+            products.filter((p) => isPreorderProduct(p)).map((p) => p.id),
           );
-          const preorderItems = items.filter((it) => it.product_id != null && preorderProductIds.has(it.product_id));
+          const preorderItems = items.filter(
+            (it) => it.product_id != null && preorderProductIds.has(it.product_id),
+          );
           if (preorderItems.length > 0) {
             const productUpdates = preorderItems.map((it) =>
               prisma.adminProduct.update({
                 where: { id: it.product_id as number },
                 data: { ordered_qty: { increment: it.quantity } },
-              })
+              }),
             );
             const variantUpdates = preorderItems
               .filter((it) => it.variant_id != null)
@@ -115,7 +184,7 @@ export async function GET(request: NextRequest) {
                 prisma.adminProductVariant.update({
                   where: { id: it.variant_id as number },
                   data: { ordered_qty: { increment: it.quantity } },
-                })
+                }),
               );
             await prisma.$transaction([...productUpdates, ...variantUpdates]);
           }

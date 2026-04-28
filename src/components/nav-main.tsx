@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import {
   Collapsible,
   CollapsibleContent,
@@ -19,6 +20,18 @@ import {
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
 import { ChevronRightIcon } from "lucide-react"
+import { useSearchParams } from "next/navigation"
+
+const matchesUrl = (targetUrl: string, pathname: string, searchParams: URLSearchParams) => {
+  const [targetPath, targetQuery = ""] = targetUrl.split("?")
+  if (targetPath !== pathname) return false
+  if (!targetQuery) return true
+  const targetParams = new URLSearchParams(targetQuery)
+  for (const [key, value] of targetParams.entries()) {
+    if (searchParams.get(key) !== value) return false
+  }
+  return true
+}
 
 export function NavMain({
   items,
@@ -35,14 +48,17 @@ export function NavMain({
   }[]
 }) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const initialOpen = useMemo(() => {
     const map: Record<string, boolean> = {}
     items.forEach((item) => {
-      const match = item.items?.some((sub) => sub.url === pathname) || item.url === pathname
+      const match =
+        item.items?.some((sub) => matchesUrl(sub.url, pathname, searchParams)) ||
+        matchesUrl(item.url, pathname, searchParams)
       map[item.title] = Boolean(match || item.isActive)
     })
     return map
-  }, [items, pathname])
+  }, [items, pathname, searchParams])
 
   const [openMap, setOpenMap] = useState<Record<string, boolean>>(initialOpen)
 
@@ -50,18 +66,25 @@ export function NavMain({
     setOpenMap((prev) => {
       const next = { ...prev }
       items.forEach((item) => {
-        const match = item.items?.some((sub) => sub.url === pathname) || item.url === pathname
+        const match =
+          item.items?.some((sub) => matchesUrl(sub.url, pathname, searchParams)) ||
+          matchesUrl(item.url, pathname, searchParams)
         if (match) next[item.title] = true
       })
       return next
     })
-  }, [items, pathname])
+  }, [items, pathname, searchParams])
 
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Удирдах хэсэг</SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => (
+          (() => {
+            const childActive = item.items?.some((sub) => matchesUrl(sub.url, pathname, searchParams)) ?? false
+            const selfActive = matchesUrl(item.url, pathname, searchParams)
+            const isActive = childActive || selfActive
+            return (
           <Collapsible
             key={item.title}
             asChild
@@ -74,11 +97,16 @@ export function NavMain({
             }
           >
             <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip={item.title}>
-                <a href={item.url}>
+              <SidebarMenuButton
+                asChild
+                tooltip={item.title}
+                isActive={isActive}
+                className={isActive ? "bg-[#fef0ef] text-[#c61d14] font-semibold shadow-sm" : ""}
+              >
+                <Link href={item.url}>
                   {item.icon}
                   <span>{item.title}</span>
-                </a>
+                </Link>
               </SidebarMenuButton>
               {item.items?.length ? (
                 <>
@@ -93,10 +121,18 @@ export function NavMain({
                     <SidebarMenuSub>
                       {item.items?.map((subItem) => (
                         <SidebarMenuSubItem key={subItem.title}>
-                          <SidebarMenuSubButton asChild>
-                            <a href={subItem.url}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={matchesUrl(subItem.url, pathname, searchParams)}
+                            className={
+                              matchesUrl(subItem.url, pathname, searchParams)
+                                ? "bg-[#fef0ef] text-[#c61d14] font-semibold"
+                                : ""
+                            }
+                          >
+                            <Link href={subItem.url}>
                               <span>{subItem.title}</span>
-                            </a>
+                            </Link>
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
                       ))}
@@ -106,6 +142,8 @@ export function NavMain({
               ) : null}
             </SidebarMenuItem>
           </Collapsible>
+            )
+          })()
         ))}
       </SidebarMenu>
     </SidebarGroup>

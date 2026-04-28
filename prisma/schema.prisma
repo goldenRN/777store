@@ -387,6 +387,26 @@ model AdminOrderItem {
   price        Int
   image_url    String?
   status       String     @default("pending")
+  delivery_method String?
+  delivery_name String?
+  delivery_phone String?
+  delivery_address String?
+  delivery_district_id Int?
+  delivery_district_name String?
+  delivery_khoroo_id Int?
+  delivery_khoroo_name String?
+  delivery_zone String?
+  delivery_fee Int        @default(0)
+  qpay_invoice_id String?
+  qpay_payment_id String?
+  qpay_sender_invoice_no String?
+  qpay_qr_text String?
+  qpay_qr_image String?
+  qpay_short_url String?
+  qpay_deeplink Json?
+  payment_expires_at DateTime?
+  delivery_paid_at DateTime?
+  return_note String?
   order        AdminOrder @relation(fields: [order_id], references: [id], onDelete: Cascade)
   product      AdminProduct? @relation(fields: [product_id], references: [id], onDelete: SetNull)
   variant      AdminProductVariant? @relation(fields: [variant_id], references: [id], onDelete: SetNull)
