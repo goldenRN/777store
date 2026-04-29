@@ -25,14 +25,17 @@ export async function saveFile(file: File, folder = "uploads"): Promise<SavedFil
   const hash = createHash("sha256").update(buffer).digest("hex");
   const ext = path.extname(file.name || "") || ".bin";
   const extLower = ext.toLowerCase();
-  const safeName = `${hash}${ext}`;
+  const heicLikeExts = [".heic", ".heif"];
+  const optimizableImageExts = [".jpg", ".jpeg", ".png", ".webp", ...heicLikeExts];
+  const outputExt = heicLikeExts.includes(extLower) ? ".jpg" : extLower;
+  const safeName = `${hash}${outputExt}`;
   const filePath = path.join(uploadDir, safeName);
 
   try {
     await access(filePath);
   } catch {
     let wroteOptimized = false;
-    const isImage = [".jpg", ".jpeg", ".png", ".webp"].includes(extLower);
+    const isImage = optimizableImageExts.includes(extLower);
     if (isImage) {
       try {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -45,7 +48,7 @@ export async function saveFile(file: File, folder = "uploads"): Promise<SavedFil
           }
           // Do NOT embed ICC metadata: some iOS decoders behave poorly with profiles.
           const resized = pipeline.resize({ width: 1600, withoutEnlargement: true });
-          if (extLower === ".jpg" || extLower === ".jpeg") {
+          if (extLower === ".jpg" || extLower === ".jpeg" || heicLikeExts.includes(extLower)) {
             await writeFile(
               filePath,
               await resized.jpeg({ quality: 78, progressive: false, mozjpeg: false }).toBuffer()
@@ -68,7 +71,7 @@ export async function saveFile(file: File, folder = "uploads"): Promise<SavedFil
     }
   }
 
-  const isImage = [".jpg", ".jpeg", ".png", ".webp"].includes(extLower);
+  const isImage = optimizableImageExts.includes(extLower);
   if (isImage) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires

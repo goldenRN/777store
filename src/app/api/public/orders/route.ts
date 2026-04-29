@@ -9,6 +9,34 @@ const isArrivedStatus = (value?: string | null) => {
   return status.includes("ирсэн") || status.includes("arrived");
 };
 
+const getReserveWindowStart = (now: Date) => {
+  const reserveMinutesRaw = Number(process.env.QPAY_INVOICE_EXPIRE_MINUTES ?? 60);
+  const reserveMinutes = Number.isFinite(reserveMinutesRaw) ? Math.max(1, reserveMinutesRaw) : 60;
+  return new Date(now.getTime() - reserveMinutes * 60 * 1000);
+};
+
+async function deleteExpiredUnpaidOrders(
+  db: Pick<typeof prisma, "adminOrder">,
+  now: Date,
+  reserveWindowStart: Date,
+) {
+  await db.adminOrder.deleteMany({
+    where: {
+      deleted_at: null,
+      payment_status: "UNPAID",
+      OR: [
+        { payment_expires_at: { not: null, lte: now } },
+        {
+          AND: [
+            { payment_expires_at: null },
+            { created_at: { lte: reserveWindowStart } },
+          ],
+        },
+      ],
+    },
+  });
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get("userId");
@@ -262,9 +290,9 @@ export async function POST(request: NextRequest) {
   }
 
   const now = new Date();
-  const reserveMinutesRaw = Number(process.env.QPAY_INVOICE_EXPIRE_MINUTES ?? 60);
-  const reserveMinutes = Number.isFinite(reserveMinutesRaw) ? Math.max(1, reserveMinutesRaw) : 60;
-  const reserveWindowStart = new Date(now.getTime() - reserveMinutes * 60 * 1000);
+  const reserveWindowStart = getReserveWindowStart(now);
+
+  await deleteExpiredUnpaidOrders(prisma, now, reserveWindowStart);
 
   const normalizeType = (name?: string | null) => {
     const t = (name || "").toLowerCase();
@@ -314,6 +342,8 @@ export async function POST(request: NextRequest) {
   const created = await (async () => {
     try {
       return await prisma.$transaction(async (tx) => {
+        await deleteExpiredUnpaidOrders(tx, now, reserveWindowStart);
+
         type CartLine = {
           productId: number;
           variantId: number | null;
@@ -421,6 +451,109 @@ export async function POST(request: NextRequest) {
           else grouped.set(key, { productId: line.productId, variantId: line.variantId, qty: line.qty });
         }
 
+        const createItems = cartLines.map((line) => {
+          const p = productById.get(line.productId) ?? null;
+          const v = line.variantId ? variantById.get(line.variantId)?.variant ?? null : null;
+          const vPrice = v?.price != null ? Number(v.price) : null;
+          const basePrice =
+            p?.discount_price != null && Number(p.discount_price) > 0
+              ? Number(p.discount_price)
+              : p?.price != null
+              ? Number(p.price)
+              : 0;
+          const bulkPrices = p ? (p as any).bulk_prices ?? null : null;
+          const unitPrice =
+            vPrice != null && vPrice > 0 ? vPrice : getBulkUnitPrice(basePrice, line.qty, bulkPrices);
+
+          return {
+            product_id: line.productId,
+            variant_id: line.variantId,
+            product_name: String(p?.name ?? line.clientName ?? "Бараа"),
+            quantity: line.qty,
+            price: Math.max(0, unitPrice),
+            image_url: line.clientImageUrl,
+            status: defaultStatus,
+          };
+        });
+
+        const itemsTotal = createItems.reduce(
+          (sum, it) => sum + Math.max(1, it.quantity) * Math.max(0, it.price),
+          0
+        );
+
+        let delivery_fee = 0;
+        let delivery_district_name: string | null = null;
+        let delivery_khoroo_name: string | null = null;
+        let delivery_zone: string | null = null;
+        if (deliveryMethod === "delivery" && hasReadyDb) {
+          const khoroo = await tx.adminDeliveryKhoroo.findUnique({
+            where: { id: deliveryKhorooId as number },
+            include: { district: true },
+          });
+          if (!khoroo || khoroo.district_id !== deliveryDistrictId) {
+            throw new CheckoutError("Дүүрэг/хороо буруу байна.", 400);
+          }
+          delivery_fee = Math.max(0, Number(khoroo.fee || 0));
+          delivery_district_name = khoroo.district?.name ?? null;
+          delivery_khoroo_name = khoroo.name ?? null;
+          delivery_zone = khoroo.zone ?? null;
+        }
+
+        const total = itemsTotal + delivery_fee;
+
+        const buildSignature = (
+          rows: Array<{
+            product_id: number | null;
+            variant_id: number | null;
+            quantity: number;
+            price: number;
+          }>,
+        ) =>
+          [...rows]
+            .map((row) => ({
+              product_id: Number(row.product_id ?? 0),
+              variant_id: row.variant_id == null ? null : Number(row.variant_id),
+              quantity: Math.max(1, Number(row.quantity || 0)),
+              price: Math.max(0, Number(row.price || 0)),
+            }))
+            .sort((a, b) => {
+              if (a.product_id !== b.product_id) return a.product_id - b.product_id;
+              if ((a.variant_id ?? -1) !== (b.variant_id ?? -1)) return (a.variant_id ?? -1) - (b.variant_id ?? -1);
+              if (a.quantity !== b.quantity) return a.quantity - b.quantity;
+              return a.price - b.price;
+            })
+            .map((row) => `${row.product_id}:${row.variant_id ?? "x"}:${row.quantity}:${row.price}`)
+            .join("|");
+
+        const requestedSignature = buildSignature(createItems);
+        const reusableCandidates = await tx.adminOrder.findMany({
+          where: {
+            user_id: userId,
+            deleted_at: null,
+            payment_status: "UNPAID",
+            NOT: [{ status: "Цуцлагдсан" }],
+            OR: [
+              { payment_expires_at: { gt: now } },
+              { payment_expires_at: null, created_at: { gt: reserveWindowStart } },
+            ],
+          },
+          include: { items: true },
+          orderBy: { created_at: "desc" },
+        });
+
+        const reusableOrder = reusableCandidates.find((candidate) => {
+          if (candidate.order_kind !== safeOrderKind) return false;
+          if ((candidate.delivery_method || null) !== (hasReadyDb ? deliveryMethod : null)) return false;
+          if (Number(candidate.delivery_fee ?? 0) !== Number(hasReadyDb && deliveryMethod === "delivery" ? delivery_fee : 0)) return false;
+          if (Number(candidate.total ?? 0) !== Number(total)) return false;
+          if ((candidate.delivery_name || null) !== (hasReadyDb && deliveryMethod === "delivery" ? deliveryName : null)) return false;
+          if ((candidate.delivery_phone || null) !== (hasReadyDb && deliveryMethod === "delivery" ? deliveryPhone : null)) return false;
+          if ((candidate.delivery_address || null) !== (hasReadyDb && deliveryMethod === "delivery" ? deliveryAddress : null)) return false;
+          if (Number(candidate.delivery_district_id ?? 0) !== Number(hasReadyDb && deliveryMethod === "delivery" ? deliveryDistrictId : 0)) return false;
+          if (Number(candidate.delivery_khoroo_id ?? 0) !== Number(hasReadyDb && deliveryMethod === "delivery" ? deliveryKhorooId : 0)) return false;
+          return buildSignature(candidate.items) === requestedSignature;
+        });
+
         const orderActiveOrPaid: Prisma.AdminOrderWhereInput = {
           deleted_at: null,
           OR: [
@@ -433,7 +566,10 @@ export async function POST(request: NextRequest) {
               ],
             },
           ],
-          NOT: [{ status: "Цуцлагдсан" }],
+          NOT: [
+            { status: "Цуцлагдсан" },
+            ...(reusableOrder ? [{ id: reusableOrder.id }] : []),
+          ],
         };
 
         const variantReservedRows =
@@ -527,55 +663,28 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        const createItems = cartLines.map((line) => {
-          const p = productById.get(line.productId) ?? null;
-          const v = line.variantId ? variantById.get(line.variantId)?.variant ?? null : null;
-          const vPrice = v?.price != null ? Number(v.price) : null;
-          const basePrice =
-            p?.discount_price != null && Number(p.discount_price) > 0
-              ? Number(p.discount_price)
-              : p?.price != null
-              ? Number(p.price)
-              : 0;
-          const bulkPrices = p ? (p as any).bulk_prices ?? null : null;
-          const unitPrice =
-            vPrice != null && vPrice > 0 ? vPrice : getBulkUnitPrice(basePrice, line.qty, bulkPrices);
-
-          return {
-            product_id: line.productId,
-            variant_id: line.variantId,
-            product_name: String(p?.name ?? line.clientName ?? "Бараа"),
-            quantity: line.qty,
-            price: Math.max(0, unitPrice),
-            image_url: line.clientImageUrl,
-            status: defaultStatus,
-          };
-        });
-
-        const itemsTotal = createItems.reduce(
-          (sum, it) => sum + Math.max(1, it.quantity) * Math.max(0, it.price),
-          0
-        );
-
-        let delivery_fee = 0;
-        let delivery_district_name: string | null = null;
-        let delivery_khoroo_name: string | null = null;
-        let delivery_zone: string | null = null;
-        if (deliveryMethod === "delivery" && hasReadyDb) {
-          const khoroo = await tx.adminDeliveryKhoroo.findUnique({
-            where: { id: deliveryKhorooId as number },
-            include: { district: true },
+        if (reusableOrder) {
+          return tx.adminOrder.update({
+            where: { id: reusableOrder.id },
+            data: {
+              name,
+              phone1: phone,
+              order_kind: safeOrderKind,
+              delivery_method: hasReadyDb ? deliveryMethod : null,
+              delivery_name: hasReadyDb && deliveryMethod === "delivery" ? deliveryName : null,
+              delivery_phone: hasReadyDb && deliveryMethod === "delivery" ? deliveryPhone : null,
+              delivery_address: hasReadyDb && deliveryMethod === "delivery" ? deliveryAddress : null,
+              delivery_district_id: hasReadyDb && deliveryMethod === "delivery" ? deliveryDistrictId : null,
+              delivery_district_name: hasReadyDb && deliveryMethod === "delivery" ? delivery_district_name : null,
+              delivery_khoroo_id: hasReadyDb && deliveryMethod === "delivery" ? deliveryKhorooId : null,
+              delivery_khoroo_name: hasReadyDb && deliveryMethod === "delivery" ? delivery_khoroo_name : null,
+              delivery_zone: hasReadyDb && deliveryMethod === "delivery" ? delivery_zone : null,
+              delivery_fee: hasReadyDb && deliveryMethod === "delivery" ? delivery_fee : 0,
+              total,
+            },
+            include: { items: true },
           });
-          if (!khoroo || khoroo.district_id !== deliveryDistrictId) {
-            throw new CheckoutError("Дүүрэг/хороо буруу байна.", 400);
-          }
-          delivery_fee = Math.max(0, Number(khoroo.fee || 0));
-          delivery_district_name = khoroo.district?.name ?? null;
-          delivery_khoroo_name = khoroo.name ?? null;
-          delivery_zone = khoroo.zone ?? null;
         }
-
-        const total = itemsTotal + delivery_fee;
 
         return tx.adminOrder.create({
           data: {
@@ -610,6 +719,45 @@ export async function POST(request: NextRequest) {
   })();
 
   if (created instanceof NextResponse) return created;
+
+  const currentOrder = await prisma.adminOrder.findUnique({
+    where: { id: created.id },
+    select: {
+      id: true,
+      total: true,
+      qpay_invoice_id: true,
+      qpay_sender_invoice_no: true,
+      qpay_qr_text: true,
+      qpay_qr_image: true,
+      qpay_short_url: true,
+      qpay_deeplink: true,
+      payment_expires_at: true,
+    },
+  });
+
+  const existingActiveInvoice =
+    currentOrder?.qpay_invoice_id &&
+    currentOrder.qpay_qr_text &&
+    currentOrder.qpay_qr_image &&
+    currentOrder.payment_expires_at &&
+    new Date(currentOrder.payment_expires_at) > new Date()
+      ? {
+          invoice_id: currentOrder.qpay_invoice_id,
+          qr_text: currentOrder.qpay_qr_text,
+          qr_image: currentOrder.qpay_qr_image,
+          short_url: currentOrder.qpay_short_url,
+          deeplinks: Array.isArray(currentOrder.qpay_deeplink) ? currentOrder.qpay_deeplink : [],
+          expires_at: currentOrder.payment_expires_at.toISOString(),
+        }
+      : null;
+
+  if (existingActiveInvoice) {
+    return NextResponse.json({
+      id: currentOrder?.id ?? created.id,
+      reused: true,
+      qpay: existingActiveInvoice,
+    });
+  }
 
   // QPay invoice create
   const invoiceCode = process.env.QPAY_INVOICE_CODE;
