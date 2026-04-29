@@ -235,7 +235,8 @@ export async function POST(request: NextRequest) {
   }
 
   const orderIds = Array.from(new Set(sortedItems.map((item) => item.order_id))).sort((a, b) => a - b);
-  const senderInvoiceNo = `DELIVERY-BATCH-USER-${userId}-${Date.now()}`;
+  const firstItem = sortedItems[0];
+  const senderInvoiceNo = `DLB-${orderIds[0] ?? 0}-${firstItem?.product_id ?? 0}-${firstItem?.id ?? 0}-${Date.now()}`;
   const callbackUrl = `${callbackBase}?orderItemId=${sortedItems[0].id}${callbackToken ? `&token=${callbackToken}` : ""}`;
   const expireMinutesRaw = Number(process.env.QPAY_INVOICE_EXPIRE_MINUTES ?? 60);
   const expireMinutes = Number.isFinite(expireMinutesRaw) ? Math.max(1, expireMinutesRaw) : 60;
@@ -247,7 +248,7 @@ export async function POST(request: NextRequest) {
     sender_invoice_no: senderInvoiceNo,
     invoice_receiver_code: receiverCode,
     sender_branch_code: senderBranchCode,
-    invoice_description: `Delivery + cargo for orders ${orderIds.join(", ")} (${sortedItems.length} items) ${totalFee}₮`,
+    invoice_description: `Delivery batch #${orderIds[0] ?? 0} / ${sortedItems.length} items / ${totalFee}₮`,
     enable_expiry: !disableExpiry,
     ...(disableExpiry ? {} : { expiry_date: expiresAt.toISOString() }),
     allow_partial: false,
@@ -314,9 +315,11 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("QPay invoice error (delivery batch):", error);
+    const reason =
+      error instanceof Error && error.message ? error.message : "Тодорхойгүй алдаа";
     return NextResponse.json(
       {
-        message: "Нэгтгэсэн хүргэлтийн QPay нэхэмжлэл үүсгэхэд алдаа гарлаа",
+        message: `Нэгтгэсэн хүргэлтийн QPay нэхэмжлэл үүсгэхэд алдаа гарлаа. ${reason}`,
       },
       { status: 500 },
     );
