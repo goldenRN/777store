@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createInvoice } from "@/lib/qpay";
 import { logAdminAction } from "@/lib/audit";
+import { buildDeliverySourceKey, upsertDeliveryOrderFromItems } from "@/lib/deliveryOrders";
 
 const normalizeStatus = (value?: string | null) =>
   String(value || "").trim().toLowerCase();
@@ -221,13 +222,34 @@ export async function POST(
 
   if (totalFee <= 0) {
     const shippingName = await syncOrderStatusToShipping(order.id, order.status);
+    const paidAt = new Date();
     await prisma.adminOrderItem.update({
       where: { id: targetItem.id },
       data: {
         status: shippingName,
-        delivery_paid_at: new Date(),
+        delivery_paid_at: paidAt,
       },
     });
+
+    const refreshedItem = await prisma.adminOrderItem.findUnique({
+      where: { id: targetItem.id },
+      include: { order: true, product: true, variant: true },
+    });
+    if (refreshedItem) {
+      await prisma.$transaction(async (tx) => {
+        await upsertDeliveryOrderFromItems(tx, {
+          sourceKey: buildDeliverySourceKey({ itemIds: [refreshedItem.id] }),
+          items: [refreshedItem],
+          status: shippingName,
+          paymentStatus: "PAID",
+          paymentProvider: "NO_FEE",
+          deliveryFee,
+          cargoFee,
+          totalFee,
+          paidAt,
+        });
+      });
+    }
 
     await logAdminAction({
       request,

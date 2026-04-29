@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createInvoice } from "@/lib/qpay";
 import { logAdminAction } from "@/lib/audit";
+import { buildDeliverySourceKey, upsertDeliveryOrderFromItems } from "@/lib/deliveryOrders";
 import {
   getDeliveryStatusNames,
   isArrivedDeliveryStatus,
@@ -172,17 +173,39 @@ export async function POST(request: NextRequest) {
 
   if (totalFee <= 0) {
     const names = await getDeliveryStatusNames(sortedItems[0].order.status || sortedItems[0].status);
+    const paidAt = new Date();
     await prisma.$transaction(
       sortedItems.map((item) =>
         prisma.adminOrderItem.update({
           where: { id: item.id },
           data: {
             status: names.shipping,
-            delivery_paid_at: new Date(),
+            delivery_paid_at: paidAt,
           },
         }),
       ),
     );
+
+    const refreshedItems = await prisma.adminOrderItem.findMany({
+      where: { id: { in: sortedItems.map((item) => item.id) } },
+      include: { order: true, product: true, variant: true },
+    });
+    await prisma.$transaction(async (tx) => {
+      await upsertDeliveryOrderFromItems(tx, {
+        sourceKey: buildDeliverySourceKey({
+          itemIds: refreshedItems.map((item) => item.id),
+        }),
+        items: refreshedItems,
+        status: names.shipping,
+        paymentStatus: "PAID",
+        paymentProvider: "NO_FEE",
+        deliveryFee,
+        cargoFee,
+        totalFee,
+        paidAt,
+      });
+    });
+
     await recomputeOrderStatusesFromItems(sortedItems.map((item) => item.order_id));
 
     for (const item of sortedItems) {

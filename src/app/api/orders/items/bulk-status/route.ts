@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { logAdminAction } from "@/lib/audit";
+import { syncDeliveryOrdersByOrderItemIdsWithPrisma } from "@/lib/deliveryOrders";
 
 export async function PATCH(request: NextRequest) {
   const body = await request.json();
@@ -33,6 +34,11 @@ export async function PATCH(request: NextRequest) {
       status,
       ...(isReturned ? { return_note: returnNote } : {}),
     },
+  });
+
+  await syncDeliveryOrdersByOrderItemIdsWithPrisma(numericIds, {
+    status,
+    returnNote: isReturned ? returnNote : null,
   });
 
   const affectedOrderIds = Array.from(new Set(affectedItems.map((item) => item.order_id)));

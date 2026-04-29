@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createInvoice } from "@/lib/qpay";
 import { logAdminAction } from "@/lib/audit";
+import { buildDeliverySourceKey, upsertDeliveryOrderFromItems } from "@/lib/deliveryOrders";
 
 const normRole = (v?: string | null) =>
   String(v || "").toUpperCase().replace(/\s+/g, "_");
@@ -249,6 +250,7 @@ export async function POST(
 
   const shippingName = await getShippingStatusName(order.status);
   if (paymentMethod === "BANK" || totalFee <= 0) {
+    const paidAt = new Date();
     await prisma.$transaction([
       prisma.adminOrder.update({
         where: { id: order.id },
@@ -258,10 +260,30 @@ export async function POST(
         where: { id: targetItem.id },
         data: {
           status: shippingName,
-          delivery_paid_at: new Date(),
+          delivery_paid_at: paidAt,
         },
       }),
     ]);
+
+    const refreshedItem = await prisma.adminOrderItem.findUnique({
+      where: { id: targetItem.id },
+      include: { order: true, product: true, variant: true },
+    });
+    if (refreshedItem) {
+      await prisma.$transaction(async (tx) => {
+        await upsertDeliveryOrderFromItems(tx, {
+          sourceKey: buildDeliverySourceKey({ itemIds: [refreshedItem.id] }),
+          items: [refreshedItem],
+          status: shippingName,
+          paymentStatus: "PAID",
+          paymentProvider: paymentMethod,
+          deliveryFee,
+          cargoFee,
+          totalFee,
+          paidAt,
+        });
+      });
+    }
 
     await logAdminAction({
       request,

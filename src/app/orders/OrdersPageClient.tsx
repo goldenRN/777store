@@ -60,6 +60,42 @@ type Order = {
   items: OrderItem[];
 };
 
+type DeliveryOrderItem = {
+  id: number;
+  orderId: number;
+  orderItemId: number;
+  productId: number | null;
+  variantId: number | null;
+  productName: string;
+  variantLabel?: string | null;
+  qty: number;
+  unitPrice: number;
+  productImage: string | null;
+  cargoFee?: number;
+  status?: string | null;
+  return_note?: string | null;
+};
+
+type DeliveryOrder = {
+  id: number;
+  sourceOrderId?: number | null;
+  status: string;
+  payment_status?: string | null;
+  name: string;
+  phone: string;
+  address?: string | null;
+  district_id?: number | null;
+  district_name?: string | null;
+  khoroo_id?: number | null;
+  khoroo_name?: string | null;
+  zone?: string | null;
+  delivery_fee?: number;
+  cargo_fee?: number;
+  total: number;
+  createdAt: string;
+  items: DeliveryOrderItem[];
+};
+
 type StoredUser = {
   id?: string;
   role?: string | null;
@@ -88,8 +124,10 @@ function OrdersPageContent() {
   const searchParams = useSearchParams();
   const active = searchParams.get("status") || "ALL";
   const [orders, setOrders] = useState<Order[]>([]);
+  const [deliveryOrders, setDeliveryOrders] = useState<DeliveryOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Order | null>(null);
+  const [selectedDeliveryOrder, setSelectedDeliveryOrder] = useState<DeliveryOrder | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [statusOptions, setStatusOptions] = useState<{ id: number; name: string }[]>([]);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
@@ -147,12 +185,22 @@ function OrdersPageContent() {
       router.push("/login");
       return;
     }
-    const url = new URL(`/api/public/orders`, window.location.origin);
-    url.searchParams.set("userId", userId);
-    fetch(url.toString())
-      .then((r) => r.json())
-      .then((json) => setOrders(json.items || []))
-      .finally(() => setLoading(false));
+    Promise.all([
+      (async () => {
+        const url = new URL(`/api/public/orders`, window.location.origin);
+        url.searchParams.set("userId", userId);
+        const res = await fetch(url.toString());
+        const json = await res.json().catch(() => ({}));
+        setOrders(Array.isArray(json.items) ? json.items : []);
+      })(),
+      (async () => {
+        const url = new URL(`/api/public/delivery-orders`, window.location.origin);
+        url.searchParams.set("userId", userId);
+        const res = await fetch(url.toString());
+        const json = await res.json().catch(() => ({}));
+        setDeliveryOrders(Array.isArray(json.items) ? json.items : []);
+      })(),
+    ]).finally(() => setLoading(false));
   }, [userId, active, router]);
 
   const loadDetail = async (
@@ -171,6 +219,7 @@ function OrdersPageContent() {
       url.searchParams.set("userId", userId);
       const res = await fetch(url.toString());
       const json = await res.json();
+      setSelectedDeliveryOrder(null);
       setSelected(json);
       setSelectedDeliveryItemId(opts?.deliveryItemId ?? null);
       if (!opts?.preserveDeliveryUi) {
@@ -192,6 +241,23 @@ function OrdersPageContent() {
       setDeliveryAddress(deliveryItem?.delivery_address || json?.delivery_address || "");
       setDeliveryDistrictId(deliveryItem?.delivery_district_id ?? json?.delivery_district_id ?? "");
       setDeliveryKhorooId(deliveryItem?.delivery_khoroo_id ?? json?.delivery_khoroo_id ?? "");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const loadDeliveryDetail = async (id: number) => {
+    if (!userId) return;
+    setDetailLoading(true);
+    try {
+      const url = new URL(`/api/public/delivery-orders/${id}`, window.location.origin);
+      url.searchParams.set("userId", userId);
+      const res = await fetch(url.toString());
+      const json = await res.json().catch(() => null);
+      if (res.ok && json) {
+        setSelected(null);
+        setSelectedDeliveryOrder(json);
+      }
     } finally {
       setDetailLoading(false);
     }
@@ -402,15 +468,7 @@ function OrdersPageContent() {
         preserveDeliveryUi: true,
         deliveryItemId: selectedDeliveryItemId,
       });
-      // refresh list
-      if (userId) {
-        const url = new URL(`/api/public/orders`, window.location.origin);
-        url.searchParams.set("userId", userId);
-        fetch(url.toString())
-          .then((r) => r.json())
-          .then((j) => setOrders(j.items || []))
-          .catch(() => null);
-      }
+      await refreshOrders();
     } finally {
       setChecking(false);
     }
@@ -492,11 +550,14 @@ function OrdersPageContent() {
 
   const refreshOrders = async () => {
     if (!userId) return;
-    const url = new URL(`/api/public/orders`, window.location.origin);
-    url.searchParams.set("userId", userId);
-    const res = await fetch(url.toString());
-    const json = await res.json().catch(() => ({}));
-    setOrders(json.items || []);
+    const [ordersRes, deliveryRes] = await Promise.all([
+      fetch(new URL(`/api/public/orders?userId=${userId}`, window.location.origin).toString()),
+      fetch(new URL(`/api/public/delivery-orders?userId=${userId}`, window.location.origin).toString()),
+    ]);
+    const ordersJson = await ordersRes.json().catch(() => ({}));
+    const deliveryJson = await deliveryRes.json().catch(() => ({}));
+    setOrders(Array.isArray(ordersJson.items) ? ordersJson.items : []);
+    setDeliveryOrders(Array.isArray(deliveryJson.items) ? deliveryJson.items : []);
   };
 
   const requestGroupedDelivery = async () => {
@@ -520,18 +581,37 @@ function OrdersPageContent() {
 
     setGroupDeliverySaving(true);
     try {
-      const res = await fetch("/api/public/orders/delivery-batch", {
+      const isSingleItem = footerDeliveryEntries.length === 1;
+      const singleItem = isSingleItem ? footerDeliveryEntries[0] : null;
+      const endpoint =
+        isSingleItem && singleItem
+          ? `/api/public/orders/${singleItem.orderId}/delivery`
+          : "/api/public/orders/delivery-batch";
+      const payload =
+        isSingleItem && singleItem
+          ? {
+              userId,
+              orderItemId: singleItem.id,
+              deliveryName,
+              deliveryPhone,
+              deliveryAddress,
+              deliveryDistrictId,
+              deliveryKhorooId,
+            }
+          : {
+              userId,
+              orderItemIds: footerDeliveryEntries.map((item) => item.id),
+              deliveryName,
+              deliveryPhone,
+              deliveryAddress,
+              deliveryDistrictId,
+              deliveryKhorooId,
+            };
+
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId,
-          orderItemIds: footerDeliveryEntries.map((item) => item.id),
-          deliveryName,
-          deliveryPhone,
-          deliveryAddress,
-          deliveryDistrictId,
-          deliveryKhorooId,
-        }),
+        body: JSON.stringify(payload),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -540,11 +620,13 @@ function OrdersPageContent() {
       }
       if (json?.qpay) {
         setGroupQpay({
-          orderId: Number(footerDeliveryEntries[0]?.orderId || 0),
-          orderItemId: Number(json.orderItemId ?? footerDeliveryEntries[0]?.id ?? 0),
+          orderId: Number(singleItem?.orderId ?? footerDeliveryEntries[0]?.orderId ?? 0),
+          orderItemId: Number(json.orderItemId ?? singleItem?.id ?? footerDeliveryEntries[0]?.id ?? 0),
           orderItemIds: Array.isArray(json.orderItemIds)
             ? json.orderItemIds.map((value: unknown) => Number(value)).filter((value: number) => Number.isFinite(value))
-            : footerDeliveryEntries.map((item) => item.id),
+            : singleItem
+              ? [singleItem.id]
+              : footerDeliveryEntries.map((item) => item.id),
           cargo_fee: Number(json.cargo_fee ?? groupedCargoTotal ?? 0),
           delivery_fee: Number(json.delivery_fee ?? deliveryFee ?? 0),
           total_fee: Number(json.total_fee ?? groupedDeliveryTotalFee ?? 0),
@@ -611,6 +693,13 @@ function OrdersPageContent() {
       ...extras.map((key) => ({ key, label: getStatusTabLabel(key) })),
     ];
   }, [statusOptions]);
+
+  const shippingDeliveryOrders = useMemo(() => {
+    if (active !== "Хүргэлтэнд бүртгэгдсэн") return [];
+    return deliveryOrders.filter(
+      (order) => String(order.status || "").trim() === "Хүргэлтэнд бүртгэгдсэн",
+    );
+  }, [active, deliveryOrders]);
 
   return (
     <main className="container mx-auto flex-1 px-6 py-10">
@@ -709,6 +798,84 @@ function OrdersPageContent() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )
+          ) : active === "Хүргэлтэнд бүртгэгдсэн" ? (
+            shippingDeliveryOrders.length === 0 ? (
+              <div className="mt-6 text-sm text-[var(--gray-500)]">Одоогоор хүргэлтэнд бүртгэгдсэн захиалга байхгүй.</div>
+            ) : (
+              <div className="mt-6 space-y-4">
+                {shippingDeliveryOrders.map((deliveryOrder) => {
+                  const firstItem = deliveryOrder.items[0];
+                  const itemCount = deliveryOrder.items.length;
+                  const quantityTotal = deliveryOrder.items.reduce(
+                    (sum, item) => sum + Math.max(1, Number(item.qty || 0)),
+                    0,
+                  );
+                  return (
+                    <div key={`delivery-${deliveryOrder.id}`} className="rounded-xl border p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="flex flex-1 items-start gap-3">
+                          <div className="relative h-14 w-14 overflow-hidden rounded-lg bg-[var(--sky-100)]">
+                            {firstItem?.productImage ? (
+                              <Image
+                                src={resolveImageUrl(firstItem.productImage)}
+                                alt={firstItem.productName}
+                                fill
+                                className="object-cover"
+                                unoptimized
+                              />
+                            ) : null}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-semibold">
+                              Хүргэлтийн захиалга #{deliveryOrder.id}
+                            </div>
+                            <div className="mt-1 text-xs text-[var(--gray-500)]">
+                              {itemCount} мөр • Нийт {quantityTotal}ш бараа
+                            </div>
+                            {firstItem && (
+                              <div className="mt-1 text-xs text-[var(--gray-500)]">
+                                Эхний бараа: {firstItem.productName}
+                                {firstItem.variantLabel ? ` / ${firstItem.variantLabel}` : ""}
+                              </div>
+                            )}
+                            <div className="mt-2 flex flex-wrap gap-3 text-[11px]">
+                              <span className="font-medium text-amber-700">
+                                Карго: {Number(deliveryOrder.cargo_fee || 0).toLocaleString()}₮
+                              </span>
+                              <span className="font-medium text-red-600">
+                                Хүргэлт: {Number(deliveryOrder.delivery_fee || 0).toLocaleString()}₮
+                              </span>
+                            </div>
+                            <div className="mt-1 text-[11px] text-[var(--gray-500)]">
+                              {deliveryOrder.district_name || ""} {deliveryOrder.khoroo_name ? `• ${deliveryOrder.khoroo_name}` : ""}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-semibold">
+                            {Number(deliveryOrder.total || 0).toLocaleString()}₮
+                          </div>
+                          <div className="mt-1 text-[11px] text-[var(--gray-500)]">
+                            {new Date(deliveryOrder.createdAt).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <span className="rounded-full bg-sky-100 px-2 py-1 text-[11px] font-semibold text-sky-700">
+                          Хүргэлтэнд бүртгэгдсэн
+                        </span>
+                        <button
+                          onClick={() => loadDeliveryDetail(deliveryOrder.id)}
+                          className="rounded-full border px-4 py-2 text-xs font-semibold"
+                        >
+                          Дэлгэрэнгүй
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )
           ) : filteredItems.length === 0 ? (
@@ -1268,6 +1435,99 @@ function OrdersPageContent() {
                     )}
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {selectedDeliveryOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b bg-white px-6 py-4">
+              <div className="text-lg font-bold">Хүргэлтийн захиалга #{selectedDeliveryOrder.id}</div>
+              <button onClick={() => setSelectedDeliveryOrder(null)} className="text-xl">&times;</button>
+            </div>
+            {detailLoading ? (
+              <div className="px-6 py-4 text-sm text-[var(--gray-500)]">Уншиж байна...</div>
+            ) : (
+              <div className="overflow-y-auto px-6 py-4">
+                <div className="text-xs text-[var(--gray-500)]">
+                  {new Date(selectedDeliveryOrder.createdAt).toLocaleString()}
+                </div>
+                <div className="mt-4 rounded-xl border bg-[var(--sky-50)] p-4 text-sm">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div>
+                      <div className="text-[11px] text-[var(--gray-500)]">Хүлээн авагч</div>
+                      <div className="font-semibold">{selectedDeliveryOrder.name}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] text-[var(--gray-500)]">Утас</div>
+                      <div className="font-semibold">{selectedDeliveryOrder.phone}</div>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <div className="text-[11px] text-[var(--gray-500)]">Хаяг</div>
+                      <div className="font-semibold">
+                        {[selectedDeliveryOrder.district_name, selectedDeliveryOrder.khoroo_name, selectedDeliveryOrder.address]
+                          .filter(Boolean)
+                          .join(" / ")}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
+                    <div className="rounded-lg border bg-white px-3 py-2">
+                      Карго: <span className="font-semibold text-amber-700">{Number(selectedDeliveryOrder.cargo_fee || 0).toLocaleString()}₮</span>
+                    </div>
+                    <div className="rounded-lg border bg-white px-3 py-2">
+                      Хүргэлт: <span className="font-semibold text-red-600">{Number(selectedDeliveryOrder.delivery_fee || 0).toLocaleString()}₮</span>
+                    </div>
+                    <div className="rounded-lg border bg-white px-3 py-2">
+                      Нийт: <span className="font-semibold">{Number(selectedDeliveryOrder.total || 0).toLocaleString()}₮</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  {selectedDeliveryOrder.items.map((it) => (
+                    <div key={`delivery-item-${it.id}`} className="flex flex-col gap-3 rounded-xl border p-3 sm:flex-row sm:items-center">
+                      <div className="relative h-12 w-12 overflow-hidden rounded-lg bg-[var(--sky-100)]">
+                        {it.productImage ? (
+                          <Image
+                            src={resolveImageUrl(it.productImage)}
+                            alt={it.productName}
+                            fill
+                            className="object-cover"
+                            unoptimized
+                          />
+                        ) : null}
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-sm font-semibold">{it.productName}</div>
+                        <div className="text-xs text-[var(--gray-500)]">
+                          {it.qty}ш × {Number(it.unitPrice).toLocaleString()}₮
+                        </div>
+                        {it.variantLabel && (
+                          <div className="mt-1 text-[11px] text-[var(--gray-500)]">Төрөл: {it.variantLabel}</div>
+                        )}
+                        {Number(it.cargoFee || 0) > 0 && (
+                          <div className="mt-1 text-[11px] font-medium text-amber-700">
+                            Карго: {Number(it.cargoFee || 0).toLocaleString()}₮
+                          </div>
+                        )}
+                        {it.return_note && (
+                          <div className="mt-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+                            Буцаалтын тайлбар: {it.return_note}
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-semibold">
+                          {(Math.max(1, Number(it.qty || 0)) * Number(it.unitPrice || 0)).toLocaleString()}₮
+                        </div>
+                        <div className="mt-1 text-[11px] text-[var(--gray-500)]">Эх захиалга #{it.orderId}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

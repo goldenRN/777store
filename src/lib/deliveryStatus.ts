@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { logAdminAction } from "@/lib/audit";
+import { buildDeliverySourceKey, upsertDeliveryOrderFromItems } from "@/lib/deliveryOrders";
 
 export const normalizeDeliveryStatus = (value?: string | null) =>
   String(value || "").trim().toLowerCase();
@@ -154,6 +155,37 @@ export async function markDeliveryInvoiceItemsPaid(params: {
       }),
     ),
   );
+
+  const paidItems = await prisma.adminOrderItem.findMany({
+    where: { qpay_invoice_id: invoiceId },
+    include: {
+      order: true,
+      product: true,
+      variant: true,
+    },
+  });
+
+  await prisma.$transaction(async (tx) => {
+    await upsertDeliveryOrderFromItems(tx, {
+      sourceKey: buildDeliverySourceKey({
+        invoiceId,
+        itemIds: paidItems.map((item) => item.id),
+      }),
+      items: paidItems,
+      status: names.shipping,
+      paymentStatus: "PAID",
+      paymentProvider: "qpay",
+      invoiceId,
+      paymentId: paymentId ?? paidItems[0]?.qpay_payment_id ?? null,
+      senderInvoiceNo: paidItems[0]?.qpay_sender_invoice_no ?? null,
+      qrText: paidItems[0]?.qpay_qr_text ?? null,
+      qrImage: paidItems[0]?.qpay_qr_image ?? null,
+      shortUrl: paidItems[0]?.qpay_short_url ?? null,
+      deeplink: paidItems[0]?.qpay_deeplink ?? null,
+      expiresAt: paidItems[0]?.payment_expires_at ?? null,
+      paidAt: new Date(),
+    });
+  });
 
   await recomputeOrderStatusesFromItems(items.map((item) => item.order_id));
 

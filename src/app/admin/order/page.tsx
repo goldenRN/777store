@@ -79,6 +79,7 @@ export default function AdminOrdersTable() {
   const statusKey = statusFilter.toLowerCase();
   const isPending = statusKey === "pending";
   const isArrivedTab = statusKey === "confirmed";
+  const isShippingTab = statusKey === "shipping" || statusKey === "shipped";
   const openOnly = searchParams.get("openOnly") === "true";
   const deletedOnly = searchParams.get("deleted") === "true";
   // Only some tabs are "product summary" views (pending / openOnly / arrived workflow).
@@ -97,11 +98,15 @@ export default function AdminOrdersTable() {
     try {
       const trimmed = query.trim();
       const base = process.env.NEXT_PUBLIC_API_URL || "";
-      const url = new URL(`${base}/api/orders`, window.location.origin);
+      const useDeliveryOrders = isShippingTab && !deletedOnly;
+      const url = new URL(
+        `${base}${useDeliveryOrders ? "/api/delivery-orders" : "/api/orders"}`,
+        window.location.origin
+      );
       url.searchParams.set("page", String(p));
       url.searchParams.set("limit", String(limit));
       if (trimmed) url.searchParams.set("q", trimmed);
-      if (statusFilter) url.searchParams.set("status", statusFilter);
+      if (statusFilter && !useDeliveryOrders) url.searchParams.set("status", statusFilter);
       if (deletedOnly) url.searchParams.set("deleted", "true");
 
       const res = await fetch(url.toString());
@@ -807,7 +812,14 @@ export default function AdminOrdersTable() {
           : null}
 
       {selected ? (
-        <OrderDetailsModal id={selected.id} onClose={() => { setSelected(null); fetchOrders(page); }} />
+        <OrderDetailsModal
+          id={selected.id}
+          deliveryMode={Boolean(selected.is_delivery_order)}
+          onClose={() => {
+            setSelected(null);
+            fetchOrders(page);
+          }}
+        />
       ) : null}
 
       <ProductDetailModal productDetail={productDetail} onClose={() => setProductDetail(null)} />

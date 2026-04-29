@@ -5,7 +5,15 @@ import { getActorHeaders } from "@/lib/actorHeaders";
 import { getVariantLabel } from "@/lib/variantLabel";
 import { X } from "lucide-react";
 
-export default function OrderDetailsModal({ id, onClose }: { id: number, onClose: () => void }) {
+export default function OrderDetailsModal({
+  id,
+  onClose,
+  deliveryMode = false,
+}: {
+  id: number;
+  onClose: () => void;
+  deliveryMode?: boolean;
+}) {
   const [order, setOrder] = useState<any>(null);
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -22,7 +30,8 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
   const fetchDetail = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/orders/${id}`);
+      const endpoint = deliveryMode ? "/api/delivery-orders" : "/api/orders";
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}${endpoint}/${id}`);
       const json = await res.json();
       setOrder(json.order);
       setItems(json.items);
@@ -35,11 +44,14 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
   useEffect(() => { fetchDetail(); }, [id]);
   useEffect(() => {
     if (!order?.qpay_invoice_id) return;
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/payments/qpay/invoice?orderId=${order.id}`)
+    const invoiceQuery = deliveryMode
+      ? `invoiceId=${encodeURIComponent(order.qpay_invoice_id)}`
+      : `orderId=${order.id}`;
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/payments/qpay/invoice?${invoiceQuery}`)
       .then((r) => r.json())
       .then((data) => setInvoiceInfo(data?.invoice || null))
       .catch(() => setInvoiceInfo(null));
-  }, [order?.qpay_invoice_id, order?.id]);
+  }, [deliveryMode, order?.qpay_invoice_id, order?.id]);
   useEffect(() => {
     fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/status`)
       .then((r) => r.json())
@@ -169,7 +181,9 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
         <div className="relative z-10 w-full max-w-3xl overflow-hidden rounded-lg bg-white shadow-xl max-h-[calc(100vh-1rem)] md:max-h-[calc(100vh-2rem)] flex flex-col">
           <div className="flex items-start justify-between gap-3 border-b px-4 py-3 md:px-6 md:py-4">
             <div>
-              <h3 className="text-base md:text-lg font-semibold">Захиалга #{id}</h3>
+              <h3 className="text-base md:text-lg font-semibold">
+                {deliveryMode ? `Хүргэлтийн захиалга #${id}` : `Захиалга #${id}`}
+              </h3>
               <div className="text-xs text-gray-500">
                 Дэлгэрэнгүй
               </div>

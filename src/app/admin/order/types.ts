@@ -9,6 +9,12 @@ export type Order = {
   status: string;
   created_at: string;
   total: number;
+  is_delivery_order?: boolean;
+  source_order_id?: number | null;
+  delivery_fee?: number | null;
+  cargo_fee?: number | null;
+  item_count?: number | null;
+  quantity_total?: number | null;
   payment_status?: string | null;
   payment_provider?: string | null;
   payment_method_name?: string | null;

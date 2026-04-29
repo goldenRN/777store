@@ -336,6 +336,7 @@ model AdminOrder {
   paid_at   DateTime?
   total      Int              @default(0)
   items      AdminOrderItem[]
+  delivery_orders AdminDeliveryOrder[]
   payment_method AdminPaymentMethod? @relation(fields: [payment_method_id], references: [id], onDelete: SetNull)
   deleted_at DateTime?
   deleted_by_id String?
@@ -407,9 +408,68 @@ model AdminOrderItem {
   payment_expires_at DateTime?
   delivery_paid_at DateTime?
   return_note String?
+  delivery_order_items AdminDeliveryOrderItem[]
   order        AdminOrder @relation(fields: [order_id], references: [id], onDelete: Cascade)
   product      AdminProduct? @relation(fields: [product_id], references: [id], onDelete: SetNull)
   variant      AdminProductVariant? @relation(fields: [variant_id], references: [id], onDelete: SetNull)
+}
+
+model AdminDeliveryOrder {
+  id         Int      @id @default(autoincrement())
+  source_key String   @unique
+  source_order_id Int?
+  user_id    String?
+  name       String
+  phone      String
+  address    String?
+  district_id Int?
+  district_name String?
+  khoroo_id  Int?
+  khoroo_name String?
+  zone       String?
+  status     String   @default("Хүргэлтэнд бүртгэгдсэн")
+  payment_status String? @default("PAID")
+  payment_provider String? @default("qpay")
+  delivery_fee Int    @default(0)
+  cargo_fee  Int      @default(0)
+  total      Int      @default(0)
+  qpay_invoice_id String?
+  qpay_payment_id String?
+  qpay_sender_invoice_no String?
+  qpay_qr_text String?
+  qpay_qr_image String?
+  qpay_short_url String?
+  qpay_deeplink Json?
+  payment_expires_at DateTime?
+  paid_at     DateTime?
+  order       AdminOrder? @relation(fields: [source_order_id], references: [id], onDelete: SetNull)
+  items       AdminDeliveryOrderItem[]
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+}
+
+model AdminDeliveryOrderItem {
+  id         Int      @id @default(autoincrement())
+  delivery_order_id Int
+  order_id   Int
+  order_item_id Int   @unique
+  product_id Int?
+  variant_id Int?
+  product_name String
+  variant_label String?
+  quantity   Int
+  price      Int
+  image_url  String?
+  cargo_fee  Int      @default(0)
+  status     String   @default("Хүргэлтэнд бүртгэгдсэн")
+  return_note String?
+  delivery_order AdminDeliveryOrder @relation(fields: [delivery_order_id], references: [id], onDelete: Cascade)
+  order_item  AdminOrderItem @relation(fields: [order_item_id], references: [id], onDelete: Cascade)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([delivery_order_id])
+  @@index([order_id])
 }
 
 model AdminAuditLog {

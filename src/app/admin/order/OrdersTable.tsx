@@ -91,10 +91,20 @@ export default function OrdersTable({
                   <td className="p-3">{order.id}</td>
                   <td className="p-3">
                     <div className="font-medium">{order.name}</div>
-                    <div className="text-xs text-gray-500">{order.email}</div>
+                    <div className="text-xs text-gray-500">
+                      {order.email || order.source_order_id ? `Эх захиалга #${order.source_order_id}` : ""}
+                    </div>
                   </td>
                   <td className="p-3">{order.phone1}</td>
-                  <td className="p-3">{Number(order.total || 0).toLocaleString()}₮</td>
+                  <td className="p-3">
+                    <div>{Number(order.total || 0).toLocaleString()}₮</div>
+                    {order.is_delivery_order ? (
+                      <div className="mt-1 text-[11px] text-gray-500">
+                        Карго {formatCurrency(order.cargo_fee)} • Хүргэлт {formatCurrency(order.delivery_fee)}
+                        {order.item_count ? ` • ${order.item_count} мөр` : ""}
+                      </div>
+                    ) : null}
+                  </td>
                   <td className="p-3">
                     {order.payment_method_name
                       ? order.payment_method_name
@@ -151,7 +161,7 @@ export default function OrdersTable({
                       >
                         <MoreVertical size={16} />
                       </button>
-                      {!deletedOnly ? (
+                      {!deletedOnly && !order.is_delivery_order ? (
                         <button
                           onClick={() => onDelete(order)}
                           className="flex h-9 w-9 items-center justify-center rounded border bg-white text-red-600 hover:bg-red-50"
