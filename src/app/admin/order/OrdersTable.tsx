@@ -36,6 +36,18 @@ export default function OrdersTable({
 }: OrdersTableProps) {
   const formatCurrency = (value: number | null | undefined) =>
     `${Number(value || 0).toLocaleString()}₮`;
+  const numericSortFields = new Set<keyof Order>([
+    "id",
+    "total",
+    "cargo_fee",
+    "delivery_fee",
+    "item_count",
+    "quantity_total",
+    "source_order_id",
+  ]);
+  const showCargoColumn = orderColumns.some((column) => column.key === "cargo_fee");
+  const showDeliveryFeeColumn = orderColumns.some((column) => column.key === "delivery_fee");
+  const showDeliveryAddressColumn = orderColumns.some((column) => column.key === "delivery_address");
 
   const isShippingOrder = (order: Order) => {
     const normalized = String(order.status || "").trim().toLowerCase();
@@ -45,8 +57,10 @@ export default function OrdersTable({
   const sortedOrders = [...orders].sort((a, b) => {
     const aVal = a[sortField];
     const bVal = b[sortField];
-    if (typeof aVal === "number" && typeof bVal === "number") {
-      return sortOrder === "asc" ? aVal - bVal : bVal - aVal;
+    if (numericSortFields.has(sortField)) {
+      const aNum = Number(aVal ?? 0);
+      const bNum = Number(bVal ?? 0);
+      return sortOrder === "asc" ? aNum - bNum : bNum - aNum;
     }
     return sortOrder === "asc"
       ? String(aVal ?? "").localeCompare(String(bVal ?? ""))
@@ -92,7 +106,9 @@ export default function OrdersTable({
                   <td className="p-3">
                     <div className="font-medium">{order.name}</div>
                     <div className="text-xs text-gray-500">
-                      {order.email || order.source_order_id ? `Эх захиалга #${order.source_order_id}` : ""}
+                      {order.email || (order.source_order_id != null && order.source_order_id > 0)
+                        ? order.email || `Эх захиалга #${order.source_order_id}`
+                        : ""}
                     </div>
                   </td>
                   <td className="p-3">{order.phone1}</td>
@@ -105,6 +121,26 @@ export default function OrdersTable({
                       </div>
                     ) : null}
                   </td>
+                  {showCargoColumn ? (
+                    <td className="p-3">
+                      {order.is_delivery_order ? formatCurrency(order.cargo_fee) : "—"}
+                    </td>
+                  ) : null}
+                  {showDeliveryFeeColumn ? (
+                    <td className="p-3">
+                      {order.is_delivery_order ? formatCurrency(order.delivery_fee) : "—"}
+                    </td>
+                  ) : null}
+                  {showDeliveryAddressColumn ? (
+                    <td className="max-w-[260px] p-3">
+                      <div
+                        className="line-clamp-2 cursor-help text-sm text-gray-700"
+                        title={order.is_delivery_order ? order.delivery_address || "—" : "—"}
+                      >
+                        {order.is_delivery_order ? order.delivery_address || "—" : "—"}
+                      </div>
+                    </td>
+                  ) : null}
                   <td className="p-3">
                     {order.payment_method_name
                       ? order.payment_method_name

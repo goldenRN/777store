@@ -258,20 +258,42 @@ export async function POST(request: NextRequest) {
   }
 
   const orderIds = Array.from(new Set(sortedItems.map((item) => item.order_id))).sort((a, b) => a - b);
-  const firstItem = sortedItems[0];
-  const senderInvoiceNo = `DLB-${orderIds[0] ?? 0}-${firstItem?.product_id ?? 0}-${firstItem?.id ?? 0}-${Date.now()}`;
   const callbackUrl = `${callbackBase}?orderItemId=${sortedItems[0].id}${callbackToken ? `&token=${callbackToken}` : ""}`;
   const expireMinutesRaw = Number(process.env.QPAY_INVOICE_EXPIRE_MINUTES ?? 60);
   const expireMinutes = Number.isFinite(expireMinutesRaw) ? Math.max(1, expireMinutesRaw) : 60;
   const expiresAt = new Date(Date.now() + expireMinutes * 60 * 1000);
   const disableExpiry = process.env.QPAY_DISABLE_EXPIRY_DATE === "true";
 
+  const draftDeliveryOrder = await prisma.$transaction(async (tx) =>
+    upsertDeliveryOrderFromItems(tx, {
+      sourceKey: buildDeliverySourceKey({
+        itemIds: sortedItems.map((item) => item.id),
+      }),
+      items: sortedItems,
+      status: "Хүргэлтийн төлбөр хүлээгдэж буй",
+      paymentStatus: "UNPAID",
+      paymentProvider: "qpay",
+      deliveryFee,
+      cargoFee,
+      totalFee,
+      paidAt: null,
+    }),
+  );
+  if (!draftDeliveryOrder) {
+    return NextResponse.json({ message: "Хүргэлтийн ноорог үүсгэж чадсангүй." }, { status: 500 });
+  }
+  const senderInvoiceNo = `delivery-${draftDeliveryOrder?.id ?? sortedItems[0]?.id ?? 0}`;
+  const senderSourceKey = buildDeliverySourceKey({
+    senderInvoiceNo,
+    itemIds: sortedItems.map((item) => item.id),
+  });
+
   const invoicePayload: Record<string, unknown> = {
     invoice_code: invoiceCode,
     sender_invoice_no: senderInvoiceNo,
     invoice_receiver_code: receiverCode,
     sender_branch_code: senderBranchCode,
-    invoice_description: `Delivery batch #${orderIds[0] ?? 0} / ${sortedItems.length} items / ${totalFee}₮`,
+    invoice_description: `Төлбөр delivery #${draftDeliveryOrder?.id ?? sortedItems[0]?.id ?? 0} ${totalFee}₮`,
     enable_expiry: !disableExpiry,
     ...(disableExpiry ? {} : { expiry_date: expiresAt.toISOString() }),
     allow_partial: false,
@@ -288,22 +310,38 @@ export async function POST(request: NextRequest) {
 
   try {
     const invoice = await createInvoice(invoicePayload);
-    await prisma.$transaction(
-      sortedItems.map((item) =>
-        prisma.adminOrderItem.update({
-          where: { id: item.id },
-          data: {
-            qpay_invoice_id: invoice.invoice_id,
-            qpay_sender_invoice_no: senderInvoiceNo,
-            qpay_qr_text: invoice.qr_text ?? null,
-            qpay_qr_image: invoice.qr_image ?? null,
-            qpay_short_url: invoice.qPay_shortUrl ?? null,
-            qpay_deeplink: invoice.qPay_deeplink ?? [],
-            payment_expires_at: expiresAt,
-          },
-        }),
-      ),
-    );
+    await prisma.$transaction(async (tx) => {
+      await Promise.all(
+        sortedItems.map((item) =>
+          tx.adminOrderItem.update({
+            where: { id: item.id },
+            data: {
+              qpay_invoice_id: invoice.invoice_id,
+              qpay_sender_invoice_no: senderInvoiceNo,
+              qpay_qr_text: invoice.qr_text ?? null,
+              qpay_qr_image: invoice.qr_image ?? null,
+              qpay_short_url: invoice.qPay_shortUrl ?? null,
+              qpay_deeplink: invoice.qPay_deeplink ?? [],
+              payment_expires_at: expiresAt,
+            },
+          }),
+        ),
+      );
+
+      await tx.adminDeliveryOrder.update({
+        where: { id: draftDeliveryOrder.id },
+        data: {
+          source_key: senderSourceKey,
+          qpay_sender_invoice_no: senderInvoiceNo,
+          qpay_invoice_id: invoice.invoice_id,
+          qpay_qr_text: invoice.qr_text ?? null,
+          qpay_qr_image: invoice.qr_image ?? null,
+          qpay_short_url: invoice.qPay_shortUrl ?? null,
+          qpay_deeplink: invoice.qPay_deeplink ?? [],
+          payment_expires_at: expiresAt,
+        },
+      });
+    });
 
     await logAdminAction({
       request,

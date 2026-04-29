@@ -111,8 +111,10 @@ const computeHeaderStatus = (statuses: string[]) => {
 
 export const buildDeliverySourceKey = (params: {
   invoiceId?: string | null;
+  senderInvoiceNo?: string | null;
   itemIds: number[];
 }) => {
+  if (params.senderInvoiceNo) return `sender:${params.senderInvoiceNo}`;
   if (params.invoiceId) return `invoice:${params.invoiceId}`;
   const ids = [...params.itemIds].map(Number).filter(Number.isFinite).sort((a, b) => a - b);
   return `items:${ids.join("-")}`;
@@ -154,7 +156,8 @@ export async function upsertDeliveryOrderFromItems(
     Number(params.cargoFee ?? items.reduce((sum, item) => sum + getItemCargoTotal(item), 0)),
   );
   const totalFee = Math.max(0, Number(params.totalFee ?? deliveryFee + cargoFee));
-  const paidAt = params.paidAt ?? first.delivery_paid_at ?? new Date();
+  const paidAt =
+    params.paidAt === undefined ? first.delivery_paid_at ?? new Date() : params.paidAt;
 
   const deliveryOrder = await tx.adminDeliveryOrder.upsert({
     where: { source_key: params.sourceKey },

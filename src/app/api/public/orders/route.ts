@@ -619,7 +619,7 @@ export async function POST(request: NextRequest) {
   const callbackToken = process.env.QPAY_WEBHOOK_TOKEN;
   const senderBranchCode = process.env.QPAY_SENDER_BRANCH_CODE;
   const senderStaffCode = process.env.QPAY_SENDER_STAFF_CODE || "online";
-  const senderInvoiceNo = String(created.id);
+  const senderInvoiceNo = `order-${created.id}`;
 
   if (!invoiceCode) {
     return NextResponse.json({
@@ -655,7 +655,7 @@ export async function POST(request: NextRequest) {
     sender_invoice_no: senderInvoiceNo,
     invoice_receiver_code: receiverCode,
     sender_branch_code: senderBranchCode,
-    invoice_description: `Order #${created.id} ${created.total}₮${created.delivery_fee ? ` (Delivery ${created.delivery_fee}₮)` : ""}`,
+    invoice_description: `Төлбөр order #${created.id} ${created.total}₮`,
     enable_expiry: !disableExpiry,
     ...(disableExpiry ? {} : { expiry_date: formatExpiry(expiresAtForPayload) }),
     allow_partial: false,

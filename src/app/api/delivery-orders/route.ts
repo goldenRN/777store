@@ -61,6 +61,7 @@ export async function GET(request: NextRequest) {
       total: row.total,
       is_delivery_order: true,
       source_order_id: row.source_order_id,
+      delivery_address: row.address,
       delivery_fee: row.delivery_fee,
       cargo_fee: row.cargo_fee,
       item_count: row.items.length,

@@ -1,6 +1,5 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import type { DeliveryGroupSummary } from "@/lib/adminDeliveryGroups";
 import { getActorHeaders } from "@/lib/actorHeaders";
 import { getVariantLabel } from "@/lib/variantLabel";
 import { X } from "lucide-react";
@@ -19,7 +18,6 @@ export default function OrderDetailsModal({
   const [loading, setLoading] = useState(false);
   const [statusOptions, setStatusOptions] = useState<{ id: number; name: string }[]>([]);
   const [invoiceInfo, setInvoiceInfo] = useState<any>(null);
-  const [deliveryGroups, setDeliveryGroups] = useState<DeliveryGroupSummary[]>([]);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [savingItemId, setSavingItemId] = useState<number | null>(null);
@@ -35,7 +33,6 @@ export default function OrderDetailsModal({
       const json = await res.json();
       setOrder(json.order);
       setItems(json.items);
-      setDeliveryGroups(Array.isArray(json.delivery_groups) ? json.delivery_groups : []);
     } catch (err) {
       console.error(err);
     } finally { setLoading(false); }
@@ -211,20 +208,6 @@ export default function OrderDetailsModal({
                   <div className="rounded-lg border p-3">
                     <div className="text-gray-600">Утас</div>
                     <div className="mt-1 font-medium">{order.phone1} {order.phone2 ? ` / ${order.phone2}` : ''}</div>
-                    {order.delivery_method && (
-                      <div className="mt-2 text-xs text-gray-600">
-                        Хүргэлтийн хэлбэр:{" "}
-                        <span className="font-semibold">
-                          {order.delivery_method === "delivery" ? "Хүргэлт" : "Дэлгүүрээс авах"}
-                        </span>
-                        {order.delivery_method === "delivery" && (
-                          <div className="mt-1 text-[11px] text-gray-500">
-                            Нэр: {order.delivery_name || "-"}, Утас: {order.delivery_phone || "-"}
-                            <div>Хаяг: {order.delivery_address || "-"}</div>
-                          </div>
-                        )}
-                      </div>
-                    )}
                     <div className="mt-3 text-gray-600">Төлөв</div>
                     <div className="mt-1 text-sm text-gray-800">
                       {orderStatusLabels[order.status] || order.status}
@@ -238,7 +221,9 @@ export default function OrderDetailsModal({
 
                 {(order.qpay_qr_image || order.qpay_qr_text || order.qpay_short_url) && (
                   <div className="mt-4 rounded-lg border p-3">
-                    <div className="text-sm font-semibold mb-2">QPay төлбөр</div>
+                    <div className="text-sm font-semibold mb-2">
+                      {deliveryMode ? "Хүргэлтийн QPay төлбөр" : "QPay төлбөр"}
+                    </div>
                     <div className="grid gap-4 md:grid-cols-2">
                       <div className="flex items-center justify-center">
                         {order.qpay_qr_image ? (
@@ -313,75 +298,59 @@ export default function OrderDetailsModal({
                   </div>
                 )}
 
-                {deliveryGroups.length > 0 && (
+                {deliveryMode ? (
                   <div className="mt-4 rounded-lg border p-3">
                     <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <div className="text-sm font-semibold">Хүргэлтийн QPay-д орсон бараанууд</div>
+                        <div className="text-sm font-semibold">Хүргэлтийн бараанууд</div>
                         <div className="text-xs text-gray-500">
-                          Энэ захиалгад хүргэлтээр бүртгэгдсэн {deliveryGroups.reduce((sum, group) => sum + group.itemCount, 0)} мөр байна.
+                          Энэ хүргэлтэнд бүртгэгдсэн {items.length} мөр бараа байна.
                         </div>
                       </div>
                       <div className="text-right text-xs text-gray-600">
-                        <div>Карго: {formatCurrency(deliveryGroups.reduce((sum, group) => sum + group.totalCargo, 0))}</div>
-                        <div>Хүргэлт: {formatCurrency(deliveryGroups.reduce((sum, group) => sum + group.totalDelivery, 0))}</div>
+                        <div>Карго: {formatCurrency(order.cargo_fee)}</div>
+                        <div>Хүргэлт: {formatCurrency(order.delivery_fee)}</div>
+                        <div className="font-semibold text-gray-900">Нийт: {formatCurrency(order.total)}</div>
                       </div>
                     </div>
-
-                    <div className="space-y-3">
-                      {deliveryGroups.map((group) => (
-                        <div key={group.groupKey} className="rounded-xl border border-gray-200 p-3">
-                          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                            <div>
-                              <div className="text-xs font-semibold uppercase tracking-wide text-sky-700">
-                                {group.invoiceId ? "Grouped Delivery QPay" : "Хүргэлтийн бүртгэл"}
-                              </div>
-                              <div className="text-sm font-medium text-gray-900">{group.label}</div>
-                              <div className="text-xs text-gray-500">
-                                {group.orderCount > 1
-                                  ? `${group.orderCount} захиалгын ${group.itemCount} мөр`
-                                  : `${group.itemCount} мөр`}
-                              </div>
+                    <div className="space-y-2">
+                      {items.map((it, i) => (
+                        <div
+                          key={it.id ?? `${it.order_id}-${i}`}
+                          className="flex items-start gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
+                        >
+                          <img
+                            src={resolveImageUrl(it.image_url)}
+                            alt={it.product_name || "Бараа"}
+                            className="h-10 w-10 rounded border object-cover"
+                            loading="lazy"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-medium text-gray-900">
+                              {it.product_name}
+                              {it.variant ? ` · ${variantLabel(it.variant)}` : ""}
                             </div>
-                            <div className="text-right text-xs text-gray-600">
-                              <div>Карго: {formatCurrency(group.totalCargo)}</div>
-                              <div>Хүргэлт: {formatCurrency(group.totalDelivery)}</div>
-                              <div className="font-semibold text-gray-900">Нийт: {formatCurrency(group.totalFee)}</div>
+                            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600">
+                              {it.order_id ? <span>Захиалга #{it.order_id}</span> : null}
+                              <span>Тоо: {it.quantity}ш</span>
+                              <span>Үнэ: {formatCurrency(it.price)}</span>
+                              <span>Карго: {formatCurrency(it.cargo_fee)}</span>
                             </div>
+                            {it.return_note ? (
+                              <div className="mt-1 text-xs text-red-600">Буцаалтын тайлбар: {it.return_note}</div>
+                            ) : null}
                           </div>
-
-                          <div className="space-y-2">
-                            {group.items.map((item) => (
-                              <div key={item.itemId} className="flex items-start gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-                                <img
-                                  src={resolveImageUrl(item.imageUrl)}
-                                  alt={item.productName}
-                                  className="h-10 w-10 rounded border object-cover"
-                                  loading="lazy"
-                                />
-                                <div className="min-w-0 flex-1">
-                                  <div className="text-sm font-medium text-gray-900">
-                                    {item.productName}
-                                    {item.variantLabel ? ` · ${item.variantLabel}` : ""}
-                                  </div>
-                                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600">
-                                    <span>Захиалга #{item.orderId}</span>
-                                    <span>Тоо: {item.quantity}ш</span>
-                                    <span>Карго: {formatCurrency(item.cargoFee)}</span>
-                                    {item.deliveryFee > 0 ? <span>Хүргэлт: {formatCurrency(item.deliveryFee)}</span> : null}
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
+                          <div className="rounded-full bg-sky-100 px-2 py-1 text-[11px] font-semibold text-sky-700">
+                            {it.status || "Хүргэлтэнд бүртгэгдсэн"}
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
-                )}
+                ) : null}
 
                 <div className="mt-4">
-                  <h4 className="font-semibold">Захиалга</h4>
+                  <h4 className="font-semibold">{deliveryMode ? "Хүргэлтийн мөрүүд" : "Захиалга"}</h4>
                   <div className="mt-2 overflow-x-auto rounded-lg border">
                     <table className="min-w-[720px] w-full text-sm bg-white">
                       <thead>
@@ -409,7 +378,7 @@ export default function OrderDetailsModal({
                                 <div className="leading-snug">
                                   <div className="flex items-center gap-2">
                                     <div className="font-medium">{it.product_name}</div>
-                                    {isSuperAdmin && it.product_id ? (
+                                    {!deliveryMode && isSuperAdmin && it.product_id ? (
                                       <button
                                         type="button"
                                         onClick={() => openVariantEditor(it)}
@@ -436,7 +405,7 @@ export default function OrderDetailsModal({
                                       {variantLabel(it.variant)}
                                     </div>
                                   ) : null}
-                                  {editingItemId === it.id && (
+                                  {!deliveryMode && editingItemId === it.id && (
                                     <div className="mt-2 flex items-center gap-2">
                                       <select
                                         className="h-9 rounded border px-2 text-xs"
@@ -479,10 +448,12 @@ export default function OrderDetailsModal({
                             <td className="py-2 px-3">{Number(it.price).toLocaleString()}₮</td>
                             <td className="py-2 px-3">{(it.quantity * Number(it.price)).toLocaleString()}₮</td>
                             <td className="py-2 px-3 text-sm text-gray-800">
-                              {orderStatusLabels[order.status] ||
-                                itemStatusLabels[it.status] ||
-                                it.status ||
-                                order.status}
+                              {deliveryMode
+                                ? it.status || order.status
+                                : orderStatusLabels[order.status] ||
+                                  itemStatusLabels[it.status] ||
+                                  it.status ||
+                                  order.status}
                             </td>
                           </tr>
                         ))}

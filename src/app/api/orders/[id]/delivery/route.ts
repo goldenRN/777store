@@ -22,6 +22,7 @@ const isDeliveryInvoiceSender = (
 ) => {
   const raw = String(senderInvoiceNo || "").trim().toUpperCase();
   if (!raw) return false;
+  if (raw.startsWith("DELIVERY-")) return true;
   if (orderId && orderItemId && productId) {
     const escapedOrderId = String(orderId).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const escapedProductId = String(productId).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -332,8 +333,6 @@ export async function POST(
     });
   }
 
-  const senderInvoiceNo =
-    `DELIVERY-ADMIN-ITEM-${order.id}-${targetItem.product_id ?? 0}-${targetItem.id}-${Date.now()}`;
   const callbackUrl = `${callbackBase}?orderId=${order.id}&orderItemId=${targetItem.id}${callbackToken ? `&token=${callbackToken}` : ""}`;
 
   const expireMinutesRaw = Number(process.env.QPAY_INVOICE_EXPIRE_MINUTES ?? 60);
@@ -343,12 +342,36 @@ export async function POST(
   const expiresAt = new Date(Date.now() + expireMinutes * 60 * 1000);
   const disableExpiry = process.env.QPAY_DISABLE_EXPIRY_DATE === "true";
 
+  const draftDeliveryOrder = await prisma.$transaction(async (tx) =>
+    upsertDeliveryOrderFromItems(tx, {
+      sourceKey: buildDeliverySourceKey({
+        itemIds: [targetItem.id],
+      }),
+      items: [targetItem],
+      status: "Хүргэлтийн төлбөр хүлээгдэж буй",
+      paymentStatus: "UNPAID",
+      paymentProvider: "qpay",
+      deliveryFee,
+      cargoFee,
+      totalFee,
+      paidAt: null,
+    }),
+  );
+  if (!draftDeliveryOrder) {
+    return NextResponse.json({ message: "Хүргэлтийн ноорог үүсгэж чадсангүй." }, { status: 500 });
+  }
+  const senderInvoiceNo = `delivery-${draftDeliveryOrder?.id ?? targetItem.id}`;
+  const senderSourceKey = buildDeliverySourceKey({
+    senderInvoiceNo,
+    itemIds: [targetItem.id],
+  });
+
   const invoicePayload: Record<string, unknown> = {
     invoice_code: invoiceCode,
     sender_invoice_no: senderInvoiceNo,
     invoice_receiver_code: receiverCode,
     sender_branch_code: senderBranchCode,
-    invoice_description: `Delivery + cargo for Order #${order.id} / ${targetItem.product_name} / Item #${targetItem.id} ${totalFee}₮`,
+    invoice_description: `Төлбөр delivery #${draftDeliveryOrder?.id ?? targetItem.id} ${totalFee}₮`,
     enable_expiry: !disableExpiry,
     ...(disableExpiry ? {} : { expiry_date: expiresAt.toISOString() }),
     allow_partial: false,
@@ -365,17 +388,33 @@ export async function POST(
 
   try {
     const invoice = await createInvoice(invoicePayload);
-    await prisma.adminOrderItem.update({
-      where: { id: targetItem.id },
-      data: {
-        qpay_invoice_id: invoice.invoice_id,
-        qpay_sender_invoice_no: senderInvoiceNo,
-        qpay_qr_text: invoice.qr_text ?? null,
-        qpay_qr_image: invoice.qr_image ?? null,
-        qpay_short_url: invoice.qPay_shortUrl ?? null,
-        qpay_deeplink: invoice.qPay_deeplink ?? [],
-        payment_expires_at: expiresAt,
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.adminOrderItem.update({
+        where: { id: targetItem.id },
+        data: {
+          qpay_invoice_id: invoice.invoice_id,
+          qpay_sender_invoice_no: senderInvoiceNo,
+          qpay_qr_text: invoice.qr_text ?? null,
+          qpay_qr_image: invoice.qr_image ?? null,
+          qpay_short_url: invoice.qPay_shortUrl ?? null,
+          qpay_deeplink: invoice.qPay_deeplink ?? [],
+          payment_expires_at: expiresAt,
+        },
+      });
+
+      await tx.adminDeliveryOrder.update({
+        where: { id: draftDeliveryOrder.id },
+        data: {
+          source_key: senderSourceKey,
+          qpay_sender_invoice_no: senderInvoiceNo,
+          qpay_invoice_id: invoice.invoice_id,
+          qpay_qr_text: invoice.qr_text ?? null,
+          qpay_qr_image: invoice.qr_image ?? null,
+          qpay_short_url: invoice.qPay_shortUrl ?? null,
+          qpay_deeplink: invoice.qPay_deeplink ?? [],
+          payment_expires_at: expiresAt,
+        },
+      });
     });
     return NextResponse.json({
       id: order.id,

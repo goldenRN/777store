@@ -168,6 +168,7 @@ export async function markDeliveryInvoiceItemsPaid(params: {
   await prisma.$transaction(async (tx) => {
     await upsertDeliveryOrderFromItems(tx, {
       sourceKey: buildDeliverySourceKey({
+        senderInvoiceNo: paidItems[0]?.qpay_sender_invoice_no ?? null,
         invoiceId,
         itemIds: paidItems.map((item) => item.id),
       }),

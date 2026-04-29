@@ -510,6 +510,13 @@ export default function AdminOrdersTable() {
       { key: "name", label: "Захиалагч" },
       { key: "phone1", label: "Утас" },
       { key: "total", label: "Нийт" },
+      ...(isShippingTab
+        ? ([
+            { key: "cargo_fee", label: "Карго" },
+            { key: "delivery_fee", label: "Хүргэлтийн төлбөр" },
+            { key: "delivery_address", label: "Хүргэлтийн хаяг", sortable: false },
+          ] as OrderColumn[])
+        : []),
       { key: "payment_method_name", label: "Төлбөрийн төрөл", sortable: false },
       { key: "payment_status", label: "Төлбөр", sortable: false },
       { key: "created_at", label: "Огноо" },
@@ -522,7 +529,7 @@ export default function AdminOrdersTable() {
       );
     }
     return cols;
-  }, [deletedOnly]);
+  }, [deletedOnly, isShippingTab]);
 
   const orderColSpan = orderColumns.length + 1;
 

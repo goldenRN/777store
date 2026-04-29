@@ -11,6 +11,7 @@ export type Order = {
   total: number;
   is_delivery_order?: boolean;
   source_order_id?: number | null;
+  delivery_address?: string | null;
   delivery_fee?: number | null;
   cargo_fee?: number | null;
   item_count?: number | null;
