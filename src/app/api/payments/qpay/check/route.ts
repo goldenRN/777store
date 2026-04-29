@@ -1,21 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { paymentCheck } from "@/lib/qpay";
-import { logAdminAction } from "@/lib/audit";
-
-const normalizeStatus = (value?: string | null) =>
-  String(value || "").trim().toLowerCase();
-
-async function getShippingStatusName(fallbackStatus: string) {
-  const statuses = await prisma.adminStatus.findMany({ orderBy: { id: "asc" } });
-  const pendingName =
-    statuses.find((s) => s.name.includes("Хүлээгд"))?.name ||
-    statuses[0]?.name ||
-    fallbackStatus;
-  return (
-    statuses.find((s) => s.name.includes("Хүргэлт"))?.name || pendingName
-  );
-}
+import {
+  getDeliveryStatusNames,
+  markDeliveryInvoiceItemsPaid,
+  normalizeDeliveryStatus,
+} from "@/lib/deliveryStatus";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -55,40 +45,11 @@ export async function GET(request: NextRequest) {
     const rows = Array.isArray(res?.rows) ? res.rows : [];
     const paidRow = rows.find((r: { payment_status?: string }) => r.payment_status === "PAID");
     if (paidRow) {
-      const shippingName = await getShippingStatusName(item.order?.status || item.status);
-      const wasUnpaid = !item.qpay_payment_id;
-      await prisma.$transaction([
-        prisma.adminOrder.update({
-          where: { id: item.order_id },
-          data: { status: shippingName },
-        }),
-        prisma.adminOrderItem.update({
-          where: { id: item.id },
-          data: {
-            status: shippingName,
-            qpay_payment_id:
-              (paidRow as { payment_id?: string | null }).payment_id ?? null,
-            delivery_paid_at: new Date(),
-          },
-        }),
-      ]);
-      if (wasUnpaid) {
-        await logAdminAction({
-          request,
-          action: "ORDER_ITEM_DELIVERY_REGISTERED",
-          entityType: "AdminOrderItem",
-          entityId: item.id,
-          details: {
-            order_id: item.order_id,
-            item_id: item.id,
-            product_id: item.product_id,
-            product_name: item.product_name,
-            status: shippingName,
-            payment_method: "QPAY",
-            delivery_fee: item.delivery_fee ?? 0,
-          },
-        });
-      }
+      await markDeliveryInvoiceItemsPaid({
+        invoiceId: item.qpay_invoice_id,
+        paymentId: (paidRow as { payment_id?: string | null }).payment_id ?? null,
+        request,
+      });
       return NextResponse.json({
         status: "PAID",
         ...(debug ? { raw: res } : {}),
@@ -134,20 +95,14 @@ export async function GET(request: NextRequest) {
   const rows = Array.isArray(res?.rows) ? res.rows : [];
   const paidRow = rows.find((r: { payment_status?: string }) => r.payment_status === "PAID");
   if (paidRow) {
-    const statuses = await prisma.adminStatus.findMany({ orderBy: { id: "asc" } });
-    const pendingName =
-      statuses.find((s) => s.name.includes("Хүлээгд"))?.name ||
-      statuses[0]?.name ||
-      order.status;
-    const shippingName =
-      statuses.find((s) => s.name.includes("Хүргэлт"))?.name || pendingName;
-    const statusNorm = normalizeStatus(order.status);
+    const statuses = await getDeliveryStatusNames(order.status);
+    const statusNorm = normalizeDeliveryStatus(order.status);
     const isArrived =
       statusNorm.includes("бараа ирсэн") || statusNorm.includes("arrived");
     const shouldShip =
       order.delivery_method === "delivery" &&
       (order.order_kind === "ready" || isArrived);
-    const nextStatus = shouldShip ? shippingName : pendingName;
+    const nextStatus = shouldShip ? statuses.shipping : statuses.pending;
     const shouldBackfillOrderedQty =
       order.payment_status !== "PAID" && String(order.order_kind || "") === "preorder";
     if (shouldBackfillOrderedQty) {

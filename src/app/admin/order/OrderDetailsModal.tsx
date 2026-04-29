@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
+import type { DeliveryGroupSummary } from "@/lib/adminDeliveryGroups";
 import { getActorHeaders } from "@/lib/actorHeaders";
 import { getVariantLabel } from "@/lib/variantLabel";
 import { X } from "lucide-react";
@@ -10,6 +11,7 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
   const [loading, setLoading] = useState(false);
   const [statusOptions, setStatusOptions] = useState<{ id: number; name: string }[]>([]);
   const [invoiceInfo, setInvoiceInfo] = useState<any>(null);
+  const [deliveryGroups, setDeliveryGroups] = useState<DeliveryGroupSummary[]>([]);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [savingItemId, setSavingItemId] = useState<number | null>(null);
@@ -24,6 +26,7 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
       const json = await res.json();
       setOrder(json.order);
       setItems(json.items);
+      setDeliveryGroups(Array.isArray(json.delivery_groups) ? json.delivery_groups : []);
     } catch (err) {
       console.error(err);
     } finally { setLoading(false); }
@@ -109,6 +112,9 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
     if (url.startsWith("/")) return url;
     return `/${url}`;
   };
+
+  const formatCurrency = (value: number | null | undefined) =>
+    `${Number(value || 0).toLocaleString()}₮`;
 
   const variantsForProduct = (productId?: number | null) =>
     productId ? variantOptionsByProduct[productId] || [] : [];
@@ -289,6 +295,73 @@ export default function OrderDetailsModal({ id, onClose }: { id: number, onClose
                           </div>
                         )}
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {deliveryGroups.length > 0 && (
+                  <div className="mt-4 rounded-lg border p-3">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold">Хүргэлтийн QPay-д орсон бараанууд</div>
+                        <div className="text-xs text-gray-500">
+                          Энэ захиалгад хүргэлтээр бүртгэгдсэн {deliveryGroups.reduce((sum, group) => sum + group.itemCount, 0)} мөр байна.
+                        </div>
+                      </div>
+                      <div className="text-right text-xs text-gray-600">
+                        <div>Карго: {formatCurrency(deliveryGroups.reduce((sum, group) => sum + group.totalCargo, 0))}</div>
+                        <div>Хүргэлт: {formatCurrency(deliveryGroups.reduce((sum, group) => sum + group.totalDelivery, 0))}</div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {deliveryGroups.map((group) => (
+                        <div key={group.groupKey} className="rounded-xl border border-gray-200 p-3">
+                          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <div className="text-xs font-semibold uppercase tracking-wide text-sky-700">
+                                {group.invoiceId ? "Grouped Delivery QPay" : "Хүргэлтийн бүртгэл"}
+                              </div>
+                              <div className="text-sm font-medium text-gray-900">{group.label}</div>
+                              <div className="text-xs text-gray-500">
+                                {group.orderCount > 1
+                                  ? `${group.orderCount} захиалгын ${group.itemCount} мөр`
+                                  : `${group.itemCount} мөр`}
+                              </div>
+                            </div>
+                            <div className="text-right text-xs text-gray-600">
+                              <div>Карго: {formatCurrency(group.totalCargo)}</div>
+                              <div>Хүргэлт: {formatCurrency(group.totalDelivery)}</div>
+                              <div className="font-semibold text-gray-900">Нийт: {formatCurrency(group.totalFee)}</div>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            {group.items.map((item) => (
+                              <div key={item.itemId} className="flex items-start gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                                <img
+                                  src={resolveImageUrl(item.imageUrl)}
+                                  alt={item.productName}
+                                  className="h-10 w-10 rounded border object-cover"
+                                  loading="lazy"
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-sm font-medium text-gray-900">
+                                    {item.productName}
+                                    {item.variantLabel ? ` · ${item.variantLabel}` : ""}
+                                  </div>
+                                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600">
+                                    <span>Захиалга #{item.orderId}</span>
+                                    <span>Тоо: {item.quantity}ш</span>
+                                    <span>Карго: {formatCurrency(item.cargoFee)}</span>
+                                    {item.deliveryFee > 0 ? <span>Хүргэлт: {formatCurrency(item.deliveryFee)}</span> : null}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

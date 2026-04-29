@@ -2,18 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { paymentGet } from "@/lib/qpay";
 import crypto from "crypto";
-import { logAdminAction } from "@/lib/audit";
-
-async function getShippingStatusName(fallbackStatus: string) {
-  const statuses = await prisma.adminStatus.findMany({ orderBy: { id: "asc" } });
-  const pendingName =
-    statuses.find((s) => s.name.includes("Хүлээгд"))?.name ||
-    statuses[0]?.name ||
-    fallbackStatus;
-  return (
-    statuses.find((s) => s.name.includes("Хүргэлт"))?.name || pendingName
-  );
-}
+import {
+  getDeliveryStatusNames,
+  markDeliveryInvoiceItemsPaid,
+  normalizeDeliveryStatus,
+} from "@/lib/deliveryStatus";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -79,41 +72,11 @@ export async function GET(request: NextRequest) {
             });
 
       if (matchedItem && payment.payment_status === "PAID") {
-        const shippingName = await getShippingStatusName(
-          matchedItem.order?.status || matchedItem.status,
-        );
-        const wasUnpaid = !matchedItem.qpay_payment_id;
-        await prisma.$transaction([
-          prisma.adminOrder.update({
-            where: { id: matchedItem.order_id },
-            data: { status: shippingName },
-          }),
-          prisma.adminOrderItem.update({
-            where: { id: matchedItem.id },
-            data: {
-              status: shippingName,
-              qpay_payment_id: payment.payment_id,
-              delivery_paid_at: new Date(),
-            },
-          }),
-        ]);
-        if (wasUnpaid) {
-          await logAdminAction({
-            request,
-            action: "ORDER_ITEM_DELIVERY_REGISTERED",
-            entityType: "AdminOrderItem",
-            entityId: matchedItem.id,
-            details: {
-              order_id: matchedItem.order_id,
-              item_id: matchedItem.id,
-              product_id: matchedItem.product_id,
-              product_name: matchedItem.product_name,
-              status: shippingName,
-              payment_method: "QPAY",
-              delivery_fee: matchedItem.delivery_fee ?? 0,
-            },
-          });
-        }
+        await markDeliveryInvoiceItemsPaid({
+          invoiceId,
+          paymentId: payment.payment_id,
+          request,
+        });
       }
 
       return new NextResponse("SUCCESS");
@@ -135,13 +98,14 @@ export async function GET(request: NextRequest) {
         order.status;
       const shippingName =
         statuses.find((s) => s.name.includes("Хүргэлт"))?.name || pendingName;
-      const statusNorm = String(order.status || "").toLowerCase();
+      const statusNames = await getDeliveryStatusNames(order.status);
+      const statusNorm = normalizeDeliveryStatus(order.status);
       const isArrived =
         statusNorm.includes("бараа ирсэн") || statusNorm.includes("arrived");
       const shouldShip =
         order.delivery_method === "delivery" &&
         (order.order_kind === "ready" || isArrived);
-      const nextStatus = shouldShip ? shippingName : pendingName;
+      const nextStatus = shouldShip ? statusNames.shipping : statusNames.pending;
       const shouldBackfillOrderedQty =
         order.payment_status !== "PAID" && String(order.order_kind || "") === "preorder";
       if (shouldBackfillOrderedQty) {

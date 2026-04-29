@@ -17,18 +17,20 @@ const isDeliveryInvoiceSender = (
   senderInvoiceNo?: string | null,
   orderId?: number,
   orderItemId?: number,
+  productId?: number | null,
 ) => {
   const raw = String(senderInvoiceNo || "").trim().toUpperCase();
   if (!raw) return false;
-  if (orderId && orderItemId) {
+  if (orderId && orderItemId && productId) {
     const escapedOrderId = String(orderId).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const escapedProductId = String(productId).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const escapedOrderItemId = String(orderItemId).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const itemAwarePattern = new RegExp(
-      `^DELIVERY(?:-ADMIN)?-ITEM-${escapedOrderId}-(?:\\d+-)?${escapedOrderItemId}-`,
+      `^DELIVERY(?:-ADMIN)?-ITEM-${escapedOrderId}-${escapedProductId}-${escapedOrderItemId}-`,
     );
     if (itemAwarePattern.test(raw)) return true;
   }
-  return raw.startsWith("DELIVERY-ITEM-") || raw.startsWith("DELIVERY-ADMIN-ITEM-");
+  return false;
 };
 
 const isShippingOrDelivered = (status?: string | null) => {
@@ -179,6 +181,7 @@ export async function POST(
       targetItem.qpay_sender_invoice_no,
       order.id,
       targetItem.id,
+      targetItem.product_id,
     ) &&
     targetItem.qpay_invoice_id &&
     targetItem.qpay_qr_text &&

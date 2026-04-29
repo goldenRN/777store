@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 type QPayInfo = {
   orderId: number;
   orderItemId: number;
+  orderItemIds?: number[];
   cargo_fee?: number;
   delivery_fee?: number;
   total_fee?: number;
@@ -93,6 +94,7 @@ function OrdersPageContent() {
   const [statusOptions, setStatusOptions] = useState<{ id: number; name: string }[]>([]);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [deliveryOpen, setDeliveryOpen] = useState(false);
+  const [groupDeliveryOpen, setGroupDeliveryOpen] = useState(false);
   const [selectedDeliveryItemId, setSelectedDeliveryItemId] = useState<number | null>(null);
   const [deliveryName, setDeliveryName] = useState("");
   const [deliveryPhone, setDeliveryPhone] = useState("");
@@ -105,6 +107,11 @@ function OrdersPageContent() {
   const [deliverySaving, setDeliverySaving] = useState(false);
   const [showBankApps, setShowBankApps] = useState(false);
   const [qpay, setQpay] = useState<QPayInfo | null>(null);
+  const [groupDeliverySaving, setGroupDeliverySaving] = useState(false);
+  const [groupShowBankApps, setGroupShowBankApps] = useState(false);
+  const [groupQpay, setGroupQpay] = useState<QPayInfo | null>(null);
+  const [groupChecking, setGroupChecking] = useState(false);
+  const [groupCheckMessage, setGroupCheckMessage] = useState("");
   const [checking, setChecking] = useState(false);
   const [checkMessage, setCheckMessage] = useState("");
   const resolveImageUrl = (url?: string | null) => {
@@ -238,9 +245,9 @@ function OrdersPageContent() {
   const arrivedTabKey = "Бараа ирсэн";
 
   useEffect(() => {
-    if (!deliveryOpen) return;
+    if (!deliveryOpen && !groupDeliveryOpen) return;
     if (!userId) return;
-    if (!selected) return;
+    if (!selected && !groupDeliveryOpen) return;
     // Pre-fill from last delivery address if this item doesn't have delivery info yet.
     const fill = async () => {
       try {
@@ -264,19 +271,19 @@ function OrdersPageContent() {
     };
     fill();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deliveryOpen, userId, selected, selectedDeliveryItemId]);
+  }, [deliveryOpen, groupDeliveryOpen, userId, selected, selectedDeliveryItemId]);
 
   useEffect(() => {
-    if (!deliveryOpen) return;
+    if (!deliveryOpen && !groupDeliveryOpen) return;
     if (districts.length > 0) return;
     fetch("/api/public/delivery/districts")
       .then((r) => r.json())
       .then((d) => setDistricts(Array.isArray(d?.items) ? d.items : []))
       .catch(() => setDistricts([]));
-  }, [deliveryOpen, districts.length]);
+  }, [deliveryOpen, groupDeliveryOpen, districts.length]);
 
   useEffect(() => {
-    if (!deliveryOpen) return;
+    if (!deliveryOpen && !groupDeliveryOpen) return;
     if (!deliveryDistrictId) {
       setKhoroos([]);
       setDeliveryKhorooId("");
@@ -287,17 +294,17 @@ function OrdersPageContent() {
       .then((r) => r.json())
       .then((d) => setKhoroos(Array.isArray(d?.items) ? d.items : []))
       .catch(() => setKhoroos([]));
-  }, [deliveryOpen, deliveryDistrictId]);
+  }, [deliveryOpen, groupDeliveryOpen, deliveryDistrictId]);
 
   useEffect(() => {
-    if (!deliveryOpen) return;
+    if (!deliveryOpen && !groupDeliveryOpen) return;
     if (!deliveryKhorooId) {
       setDeliveryFee(0);
       return;
     }
     const k = khoroos.find((x) => Number(x.id) === Number(deliveryKhorooId));
     setDeliveryFee(k?.fee != null ? Number(k.fee) : 0);
-  }, [deliveryOpen, deliveryKhorooId, khoroos]);
+  }, [deliveryOpen, groupDeliveryOpen, deliveryKhorooId, khoroos]);
 
   const requestDelivery = async () => {
     if (!selected || !userId) return;
@@ -443,6 +450,142 @@ function OrdersPageContent() {
       return true;
     });
   }, [active, filteredItems]);
+
+  const groupedCargoTotal = useMemo(
+    () =>
+      footerDeliveryEntries.reduce(
+        (sum, item) =>
+          sum +
+          Math.max(0, Number(item.cargoFee || 0)) * Math.max(1, Number(item.qty || 0)),
+        0,
+      ),
+    [footerDeliveryEntries],
+  );
+  const groupedDeliveryTotalFee = Number(deliveryFee || 0) + groupedCargoTotal;
+  const groupDeliveryButtonLabel = useMemo(() => {
+    return footerDeliveryEntries.some(
+      (item) => String(item.delivery_method || "").trim().toLowerCase() === "delivery",
+    )
+      ? "Хүргэлтийг үргэлжлүүлэх"
+      : "Хүргэлтээр авах";
+  }, [footerDeliveryEntries]);
+
+  const openGroupedDelivery = () => {
+    if (footerDeliveryEntries.length === 0) return;
+    const seed =
+      footerDeliveryEntries.find(
+        (item) => String(item.delivery_method || "").trim().toLowerCase() === "delivery",
+      ) ?? footerDeliveryEntries[0];
+    setSelected(null);
+    setDeliveryOpen(false);
+    setSelectedDeliveryItemId(null);
+    setGroupDeliveryOpen(true);
+    setDeliveryName(seed.delivery_name || "");
+    setDeliveryPhone(seed.delivery_phone || "");
+    setDeliveryAddress(seed.delivery_address || "");
+    setDeliveryDistrictId(seed.delivery_district_id ?? "");
+    setDeliveryKhorooId(seed.delivery_khoroo_id ?? "");
+    setGroupQpay(null);
+    setGroupCheckMessage("");
+    setGroupShowBankApps(false);
+  };
+
+  const refreshOrders = async () => {
+    if (!userId) return;
+    const url = new URL(`/api/public/orders`, window.location.origin);
+    url.searchParams.set("userId", userId);
+    const res = await fetch(url.toString());
+    const json = await res.json().catch(() => ({}));
+    setOrders(json.items || []);
+  };
+
+  const requestGroupedDelivery = async () => {
+    if (!userId) return;
+    if (footerDeliveryEntries.length === 0) {
+      alert("Хүргэлтэнд оруулах бараа алга байна.");
+      return;
+    }
+    if (!deliveryName.trim() || !deliveryPhone.trim()) {
+      alert("Хүргэлтийн нэр, утсаа бүрэн бөглөнө үү.");
+      return;
+    }
+    if (!deliveryDistrictId || !deliveryKhorooId) {
+      alert("Дүүрэг, хороо сонгоно уу.");
+      return;
+    }
+    if (!deliveryAddress.trim()) {
+      alert("Нэмэлт хаягаа (байр, тоот, орц гэх мэт) бичнэ үү.");
+      return;
+    }
+
+    setGroupDeliverySaving(true);
+    try {
+      const res = await fetch("/api/public/orders/delivery-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          orderItemIds: footerDeliveryEntries.map((item) => item.id),
+          deliveryName,
+          deliveryPhone,
+          deliveryAddress,
+          deliveryDistrictId,
+          deliveryKhorooId,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(json?.message || "Нэгтгэсэн хүргэлт бүртгэхэд алдаа гарлаа");
+        return;
+      }
+      if (json?.qpay) {
+        setGroupQpay({
+          orderId: Number(footerDeliveryEntries[0]?.orderId || 0),
+          orderItemId: Number(json.orderItemId ?? footerDeliveryEntries[0]?.id ?? 0),
+          orderItemIds: Array.isArray(json.orderItemIds)
+            ? json.orderItemIds.map((value: unknown) => Number(value)).filter((value: number) => Number.isFinite(value))
+            : footerDeliveryEntries.map((item) => item.id),
+          cargo_fee: Number(json.cargo_fee ?? groupedCargoTotal ?? 0),
+          delivery_fee: Number(json.delivery_fee ?? deliveryFee ?? 0),
+          total_fee: Number(json.total_fee ?? groupedDeliveryTotalFee ?? 0),
+          qr_image: json.qpay.qr_image,
+          qr_text: json.qpay.qr_text,
+          short_url: json.qpay.short_url,
+          deeplinks: json.qpay.deeplinks || [],
+          expires_at: json.qpay.expires_at,
+        });
+      } else {
+        setGroupCheckMessage("Хүргэлтийн төлбөр 0₮ тул сонгосон бараанууд шууд хүргэлтэнд орлоо.");
+      }
+      await refreshOrders();
+    } finally {
+      setGroupDeliverySaving(false);
+    }
+  };
+
+  const refreshGroupedDelivery = async () => {
+    if (!groupQpay?.orderItemId) return;
+    setGroupChecking(true);
+    try {
+      const url = new URL("/api/payments/qpay/check", window.location.origin);
+      url.searchParams.set("orderItemId", String(groupQpay.orderItemId));
+      const res = await fetch(url.toString());
+      const json = await res.json().catch(() => ({}));
+      const status = String(json?.status || "").toUpperCase();
+      if (status === "PAID") {
+        setGroupCheckMessage("Хүргэлтийн төлбөр амжилттай төлөгдлөө.");
+        setGroupQpay(null);
+      } else if (status === "EXPIRED") {
+        setGroupCheckMessage("Хүргэлтийн нэхэмжлэлийн хугацаа дууссан байна.");
+        setGroupQpay(null);
+      } else if (status === "UNPAID") {
+        setGroupCheckMessage("Төлбөр хийгдээгүй байна. Дахин шалгана уу.");
+      }
+      await refreshOrders();
+    } finally {
+      setGroupChecking(false);
+    }
+  };
 
   const orderedTabs = useMemo(() => {
     const orderedKeys = [
@@ -644,25 +787,12 @@ function OrdersPageContent() {
                       Бараа ирсэн бараа: <span className="font-semibold">{footerDeliveryEntries.length}</span>
                     </div>
                     <div className="flex flex-wrap justify-end gap-2">
-                      {footerDeliveryEntries.map((item) => {
-                        const variantSuffix = item.variantLabel?.label ? ` • ${item.variantLabel.label}` : "";
-                        return (
-                          <button
-                            key={`${item.orderId}-${item.id}`}
-                            onClick={() =>
-                              loadDetail(String(item.orderId), {
-                                openDelivery: true,
-                                deliveryItemId: item.id,
-                              })
-                            }
-                            className="rounded-full bg-black px-4 py-2 text-xs font-semibold text-white"
-                          >
-                            {footerDeliveryEntries.length === 1
-                              ? deliveryActionLabel(item)
-                              : `#${item.orderId} • ${item.productName}${variantSuffix}`}
-                          </button>
-                        );
-                      })}
+                      <button
+                        onClick={openGroupedDelivery}
+                        className="rounded-full bg-black px-4 py-2 text-xs font-semibold text-white"
+                      >
+                        {groupDeliveryButtonLabel}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -670,6 +800,228 @@ function OrdersPageContent() {
             </div>
           )}
         </div>
+      {groupDeliveryOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b bg-white px-6 py-4">
+              <div>
+                <div className="text-lg font-bold">Нэгтгэсэн хүргэлт</div>
+                <div className="text-xs text-[var(--gray-500)]">
+                  Сонгогдсон бараа: {footerDeliveryEntries.length}
+                </div>
+              </div>
+              <button
+                onClick={() => setGroupDeliveryOpen(false)}
+                className="text-xl"
+              >
+                &times;
+              </button>
+            </div>
+            <div className="overflow-y-auto px-6 py-4">
+              <div className="space-y-3">
+                {footerDeliveryEntries.map((item) => (
+                  <div
+                    key={`group-${item.orderId}-${item.id}`}
+                    className="flex items-center gap-3 rounded-xl border px-3 py-3"
+                  >
+                    <div className="relative h-12 w-12 overflow-hidden rounded-lg bg-[var(--sky-100)]">
+                      {item.productImage ? (
+                        <Image
+                          src={resolveImageUrl(item.productImage)}
+                          alt={item.productName}
+                          fill
+                          className="object-cover"
+                          unoptimized
+                        />
+                      ) : null}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold">{item.productName}</div>
+                      <div className="mt-1 text-xs text-[var(--gray-500)]">
+                        #{item.orderId}
+                        {item.variantLabel?.label ? ` • ${item.variantLabel.label}` : ""}
+                      </div>
+                      <div className="mt-1 text-xs text-[var(--gray-500)]">
+                        {item.qty}ш × {Number(item.unitPrice).toLocaleString()}₮
+                      </div>
+                    </div>
+                    <div className="text-right text-xs">
+                      {Number(item.cargoFee || 0) > 0 && (
+                        <div className="font-semibold text-amber-700">
+                          Карго: {(Math.max(0, Number(item.cargoFee || 0)) * Math.max(1, Number(item.qty || 0))).toLocaleString()}₮
+                        </div>
+                      )}
+                      <div className="mt-1 font-semibold">
+                        {(Number(item.unitPrice || 0) * Math.max(1, Number(item.qty || 0))).toLocaleString()}₮
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 rounded-xl border bg-[var(--sky-50)] p-4 text-sm">
+                <div className="grid gap-2 text-xs">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <select
+                      value={deliveryDistrictId === "" ? "" : String(deliveryDistrictId)}
+                      onChange={(e) => setDeliveryDistrictId(e.target.value ? Number(e.target.value) : "")}
+                      className="rounded-lg border bg-white px-3 py-2"
+                    >
+                      <option value="">Дүүрэг сонгох</option>
+                      {districts.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={deliveryKhorooId === "" ? "" : String(deliveryKhorooId)}
+                      onChange={(e) => setDeliveryKhorooId(e.target.value ? Number(e.target.value) : "")}
+                      className="rounded-lg border bg-white px-3 py-2"
+                      disabled={!deliveryDistrictId}
+                    >
+                      <option value="">Хороо сонгох</option>
+                      {khoroos.map((k) => (
+                        <option key={k.id} value={k.id}>
+                          {k.name} ({k.zone}) — {Number(k.fee || 0).toLocaleString()}₮
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {deliveryFee > 0 && (
+                    <div className="rounded-lg border bg-white px-3 py-2">
+                      Хүргэлтийн төлбөр:{" "}
+                      <span className="font-semibold text-red-600">{deliveryFee.toLocaleString()}₮</span>
+                    </div>
+                  )}
+                  {groupedCargoTotal > 0 && (
+                    <div className="rounded-lg border bg-white px-3 py-2">
+                      Нийт карго:{" "}
+                      <span className="font-semibold text-amber-600">{groupedCargoTotal.toLocaleString()}₮</span>
+                    </div>
+                  )}
+                  {groupedDeliveryTotalFee > 0 && (
+                    <div className="rounded-lg border bg-white px-3 py-2">
+                      Төлөх нийт дүн:{" "}
+                      <span className="font-semibold text-red-600">
+                        {groupedDeliveryTotalFee.toLocaleString()}₮
+                      </span>
+                    </div>
+                  )}
+
+                  <input
+                    value={deliveryName}
+                    onChange={(e) => setDeliveryName(e.target.value)}
+                    placeholder="Хүлээн авагчийн нэр"
+                    className="rounded-lg border bg-white px-3 py-2"
+                  />
+                  <input
+                    value={deliveryPhone}
+                    onChange={(e) => setDeliveryPhone(e.target.value)}
+                    placeholder="Утас"
+                    className="rounded-lg border bg-white px-3 py-2"
+                  />
+                  <input
+                    value={deliveryAddress}
+                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                    placeholder="Нэмэлт хаяг (байр, тоот, орц гэх мэт)"
+                    className="rounded-lg border bg-white px-3 py-2"
+                  />
+
+                  <div className="flex items-center justify-end">
+                    <button
+                      onClick={requestGroupedDelivery}
+                      disabled={groupDeliverySaving}
+                      className="rounded-full bg-black px-5 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                    >
+                      {groupDeliverySaving ? "Хадгалж байна..." : "Хүргэлт бүртгэх"}
+                    </button>
+                  </div>
+                </div>
+
+                {groupQpay && (
+                  <div className="mt-3 rounded-xl border bg-white p-3">
+                    <div className="text-xs font-semibold">Нэгтгэсэн хүргэлтийн төлбөр (QPay)</div>
+                    <div className="mt-3 flex flex-col items-center gap-3">
+                      <div className="w-full rounded-lg border bg-[var(--sky-50)] px-3 py-2 text-xs text-[var(--gray-700)]">
+                        <div className="flex items-center justify-between gap-3">
+                          <span>Хүргэлт</span>
+                          <span className="font-semibold">{Number(groupQpay.delivery_fee || 0).toLocaleString()}₮</span>
+                        </div>
+                        <div className="mt-1 flex items-center justify-between gap-3">
+                          <span>Нийт карго</span>
+                          <span className="font-semibold">{Number(groupQpay.cargo_fee || 0).toLocaleString()}₮</span>
+                        </div>
+                        <div className="mt-2 flex items-center justify-between gap-3 border-t pt-2 text-sm font-bold text-red-600">
+                          <span>Нийт төлөх</span>
+                          <span>{Number(groupQpay.total_fee || 0).toLocaleString()}₮</span>
+                        </div>
+                      </div>
+                      {groupQpay.qr_image ? (
+                        <Image
+                          src={`data:image/png;base64,${groupQpay.qr_image}`}
+                          alt="QPay QR"
+                          width={208}
+                          height={208}
+                          className="h-52 w-52 rounded-lg border"
+                          unoptimized
+                        />
+                      ) : groupQpay.qr_text ? (
+                        <div className="text-[10px] break-all">{groupQpay.qr_text}</div>
+                      ) : null}
+                      <button
+                        onClick={refreshGroupedDelivery}
+                        disabled={groupChecking}
+                        className="rounded-full border px-4 py-2 text-xs font-semibold"
+                      >
+                        {groupChecking ? "Шинэчилж байна..." : "Төлөв шинэчлэх"}
+                      </button>
+                      <div className="text-[11px] text-[var(--gray-600)]">
+                        Төлбөр төлөгдвөл сонгосон бүх бараа “Хүргэлтэнд бүртгэгдсэн” рүү шилжинэ.
+                      </div>
+                    </div>
+                    {groupQpay.deeplinks && groupQpay.deeplinks.length > 0 && (
+                      <div className="mt-4 border-t pt-4">
+                        <button
+                          type="button"
+                          onClick={() => setGroupShowBankApps((value) => !value)}
+                          className="w-full rounded-full bg-black px-4 py-2 text-xs font-semibold text-white"
+                        >
+                          Банкны апп-аар төлөх
+                        </button>
+                        {groupShowBankApps && (
+                          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            {groupQpay.deeplinks.map((bank) => (
+                              <a
+                                key={bank.link}
+                                href={bank.link}
+                                className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs"
+                              >
+                                {bank.logo ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={bank.logo} alt={bank.name} className="h-5 w-5" />
+                                ) : null}
+                                <span>{bank.description || bank.name}</span>
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {!groupQpay && groupCheckMessage && (
+                  <div className="mt-3 rounded-lg border bg-white px-3 py-2 text-[11px] text-[var(--gray-600)]">
+                    {groupCheckMessage}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">

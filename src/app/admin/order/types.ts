@@ -1,3 +1,5 @@
+import type { DeliveryGroupSummary } from "@/lib/adminDeliveryGroups";
+
 export type Order = {
   id: number;
   name: string;
@@ -18,6 +20,7 @@ export type Order = {
   deleted_by_name?: string | null;
   deleted_by_phone?: string | null;
   deleted_reason?: string | null;
+  delivery_groups?: DeliveryGroupSummary[];
 };
 
 export type ProductBuyer = {

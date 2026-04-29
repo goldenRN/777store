@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { buildDeliveryGroups } from "@/lib/adminDeliveryGroups";
 
 export async function GET(
   _request: Request,
@@ -43,5 +44,7 @@ export async function GET(
       null,
   }));
 
-  return NextResponse.json({ order, items });
+  const deliveryGroups = buildDeliveryGroups(items);
+
+  return NextResponse.json({ order, items, delivery_groups: deliveryGroups });
 }

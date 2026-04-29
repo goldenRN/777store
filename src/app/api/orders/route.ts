@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { buildDeliveryGroups } from "@/lib/adminDeliveryGroups";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -73,8 +74,57 @@ export async function GET(request: NextRequest) {
     take: limit,
   });
 
+  const orderIds = data.map((order) => order.id);
+  let deliveryItemsByOrder = new Map<number, any[]>();
+
+  if (orderIds.length > 0) {
+    const deliveryItems = await prisma.adminOrderItem.findMany({
+      where: {
+        order_id: { in: orderIds },
+        delivery_method: "delivery",
+      },
+      select: {
+        id: true,
+        order_id: true,
+        product_id: true,
+        variant_id: true,
+        product_name: true,
+        quantity: true,
+        price: true,
+        image_url: true,
+        delivery_fee: true,
+        qpay_invoice_id: true,
+        qpay_payment_id: true,
+        qpay_sender_invoice_no: true,
+        delivery_paid_at: true,
+        product: { select: { cargo_fee: true, images: { select: { image_url: true }, take: 1 } } },
+        variant: {
+          select: {
+            id: true,
+            sku: true,
+            attribute: true,
+            cargo_fee: true,
+            images: { select: { image_url: true }, take: 1 },
+          },
+        },
+      },
+    });
+
+    deliveryItemsByOrder = deliveryItems.reduce((map, item) => {
+      const current = map.get(item.order_id) ?? [];
+      current.push(item);
+      map.set(item.order_id, current);
+      return map;
+    }, new Map<number, typeof deliveryItems>());
+  }
+
+  const enrichedData = data.map((order) => ({
+    ...order,
+    delivery_groups: buildDeliveryGroups(deliveryItemsByOrder.get(order.id) ?? []),
+  }));
+
   return NextResponse.json({
-    data,
+    data: enrichedData,
     meta: { page, limit, total, pages },
   });
 }
