@@ -6,6 +6,7 @@ import type { ArrivedTarget } from "./types";
 type ArrivedModalProps = {
   open: boolean;
   target: ArrivedTarget | null;
+  mode?: "arrived" | "edit";
   qty: string;
   cargoFee: string;
   cargoNote: string;
@@ -20,6 +21,7 @@ type ArrivedModalProps = {
 export default function ArrivedModal({
   open,
   target,
+  mode = "arrived",
   qty,
   cargoFee,
   cargoNote,
@@ -30,8 +32,9 @@ export default function ArrivedModal({
   onCargoNoteChange,
   onSave,
 }: ArrivedModalProps) {
+  const isEditMode = mode === "edit";
   return (
-    <Modal open={open} onClose={onClose} title="Бараа ирсэн">
+    <Modal open={open} onClose={onClose} title={isEditMode ? "Карго засах" : "Бараа ирсэн"}>
       <div className="space-y-4">
         <div className="text-sm text-gray-700">
           <div className="font-semibold">{target?.productName ?? "Бараа"}</div>
@@ -40,7 +43,9 @@ export default function ArrivedModal({
           ) : target?.applyToAllVariants ? (
             <div className="text-xs text-gray-600">Энэ барааны бүх төрөлд нэг мөр бүртгэнэ.</div>
           ) : null}
-          <div className="text-xs text-gray-500">Ирсэн тоо, карго үнэ оруулаад хадгална.</div>
+          <div className="text-xs text-gray-500">
+            {isEditMode ? "Карго үнэ, тайлбараа засаад хадгална." : "Ирсэн тоо, карго үнэ оруулаад хадгална."}
+          </div>
         </div>
 
         <div>
@@ -52,9 +57,12 @@ export default function ArrivedModal({
             onChange={(e) => onQtyChange(e.target.value)}
             className="mt-1 w-full rounded border px-3 py-2"
             placeholder="Ж: 10"
+            disabled={isEditMode}
           />
           <div className="mt-1 text-[11px] text-gray-500">
-            Default утга нь “Захиалсан” тоотой тэнцүү. Хуваагдаж ирсэн/гэмтэлтэй бол багасгаж засч болно.
+            {isEditMode
+              ? "Ирсэн тоо энэ цонхноос засагдахгүй, зөвхөн карго мэдээлэл шинэчлэгдэнэ."
+              : "Default утга нь “Захиалсан” тоотой тэнцүү. Хуваагдаж ирсэн/гэмтэлтэй бол багасгаж засч болно."}
           </div>
         </div>
 

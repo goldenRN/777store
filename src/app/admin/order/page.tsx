@@ -66,6 +66,7 @@ export default function AdminOrdersTable() {
   const [productSortOrder, setProductSortOrder] = useState<"asc" | "desc">("desc");
   const [arrivedOpen, setArrivedOpen] = useState(false);
   const [arrivedTarget, setArrivedTarget] = useState<ArrivedTarget | null>(null);
+  const [arrivedMode, setArrivedMode] = useState<"arrived" | "edit">("arrived");
   const [arrivedQty, setArrivedQty] = useState<string>("");
   const [arrivedCargoFee, setArrivedCargoFee] = useState<string>("");
   const [arrivedCargoNote, setArrivedCargoNote] = useState<string>("");
@@ -389,6 +390,7 @@ export default function AdminOrdersTable() {
 
   const openArrivedModalForProduct = (p: ProductSummary) => {
     if (!p.product_id) return;
+    setArrivedMode("arrived");
     setArrivedTarget({
       productId: p.product_id,
       productName: p.product_name,
@@ -404,6 +406,7 @@ export default function AdminOrdersTable() {
 
   const openArrivedModalForVariant = (p: ProductSummary, v: ProductSummary["variants"][number]) => {
     if (!p.product_id) return;
+    setArrivedMode("arrived");
     setArrivedTarget({
       productId: p.product_id,
       productName: p.product_name,
@@ -414,6 +417,38 @@ export default function AdminOrdersTable() {
     setArrivedQty(String(v.ordered_qty ?? 0));
     setArrivedCargoFee("");
     setArrivedCargoNote("");
+    setArrivedOpen(true);
+  };
+
+  const openEditArrivedForProduct = (p: ProductSummary) => {
+    if (!p.product_id) return;
+    setArrivedMode("edit");
+    setArrivedTarget({
+      productId: p.product_id,
+      productName: p.product_name,
+      variantId: null,
+      variantLabel: null,
+      applyToAllVariants: Array.isArray(p.variants) && p.variants.length > 0,
+    });
+    setArrivedQty(String(p.arrived_qty ?? p.total_qty ?? 0));
+    setArrivedCargoFee(String(p.cargo_fee ?? 0));
+    setArrivedCargoNote(p.cargo_note ?? "");
+    setArrivedOpen(true);
+  };
+
+  const openEditArrivedForVariant = (p: ProductSummary, v: ProductSummary["variants"][number]) => {
+    if (!p.product_id) return;
+    setArrivedMode("edit");
+    setArrivedTarget({
+      productId: p.product_id,
+      productName: p.product_name,
+      variantId: v.variant_id,
+      variantLabel: v.label,
+      applyToAllVariants: false,
+    });
+    setArrivedQty(String(v.arrived_qty ?? v.ordered_qty ?? 0));
+    setArrivedCargoFee(String(v.cargo_fee ?? 0));
+    setArrivedCargoNote(v.cargo_note ?? "");
     setArrivedOpen(true);
   };
 
@@ -450,7 +485,7 @@ export default function AdminOrdersTable() {
       setArrivedOpen(false);
       setArrivedTarget(null);
       setArrivedQty("");
-      alert("Амжилттай хадгаллаа. “Бараа ирсэн” цэсэнд харагдана.");
+      alert(arrivedMode === "edit" ? "Карго мэдээлэл амжилттай шинэчлэгдлээ." : "Амжилттай хадгаллаа. “Бараа ирсэн” цэсэнд харагдана.");
       await fetchProductSummary();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : typeof err === "string" ? err : "Алдаа гарлаа";
@@ -780,6 +815,8 @@ export default function AdminOrdersTable() {
           onCloseVariantOrders={closeVariantOrders}
           onOpenArrivedModalForProduct={openArrivedModalForProduct}
           onOpenArrivedModalForVariant={openArrivedModalForVariant}
+          onOpenEditArrivedForProduct={openEditArrivedForProduct}
+          onOpenEditArrivedForVariant={openEditArrivedForVariant}
           onOpenProductDetail={setProductDetail}
         />
       ) : (
@@ -857,6 +894,7 @@ export default function AdminOrdersTable() {
       <ArrivedModal
         open={arrivedOpen}
         target={arrivedTarget}
+        mode={arrivedMode}
         qty={arrivedQty}
         cargoFee={arrivedCargoFee}
         cargoNote={arrivedCargoNote}
@@ -865,6 +903,7 @@ export default function AdminOrdersTable() {
           setArrivedOpen(false);
           setArrivedTarget(null);
           setArrivedQty("");
+          setArrivedMode("arrived");
         }}
         onQtyChange={setArrivedQty}
         onCargoFeeChange={setArrivedCargoFee}

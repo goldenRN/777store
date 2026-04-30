@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ChevronDown, ChevronUp, Lock, MoreVertical, Package, Tag } from "lucide-react";
+import { ChevronDown, ChevronUp, Lock, MoreVertical, Package, Pencil, Tag } from "lucide-react";
 import { formatCurrency, getProductRowStatus, getRemainingForProductRow } from "./helpers";
 import type { ProductSortField, ProductSummary } from "./types";
 
@@ -27,6 +27,11 @@ type ProductSummaryTableProps = {
     product: ProductSummary,
     variant: ProductSummary["variants"][number]
   ) => void;
+  onOpenEditArrivedForProduct: (product: ProductSummary) => void;
+  onOpenEditArrivedForVariant: (
+    product: ProductSummary,
+    variant: ProductSummary["variants"][number]
+  ) => void;
   onOpenProductDetail: (product: ProductSummary) => void;
 };
 
@@ -49,6 +54,8 @@ export default function ProductSummaryTable({
   onCloseVariantOrders,
   onOpenArrivedModalForProduct,
   onOpenArrivedModalForVariant,
+  onOpenEditArrivedForProduct,
+  onOpenEditArrivedForVariant,
   onOpenProductDetail,
 }: ProductSummaryTableProps) {
   const colSpan = isArrivedTab ? 9 : 8;
@@ -182,6 +189,17 @@ export default function ProductSummaryTable({
                           </button>
                         ) : null}
 
+                        {isArrivedTab && product.product_id != null ? (
+                          <button
+                            onClick={() => onOpenEditArrivedForProduct(product)}
+                            className="flex h-9 w-9 items-center justify-center rounded border bg-white hover:bg-gray-50 disabled:opacity-50"
+                            title="Карго засах"
+                            disabled={arrivedSaving}
+                          >
+                            <Pencil size={16} />
+                          </button>
+                        ) : null}
+
                         <button
                           onClick={() => onOpenProductDetail(product)}
                           className="flex h-9 w-9 items-center justify-center rounded border bg-white"
@@ -207,7 +225,7 @@ export default function ProductSummaryTable({
                                   <th className="px-3 py-2 text-left">Үлдэгдэл</th>
                                   {isArrivedTab ? <th className="px-3 py-2 text-left">Карго</th> : null}
                                   <th className="px-3 py-2 text-left">Төлөв</th>
-                                  {isPending ? <th className="px-3 py-2 text-left">Үйлдэл</th> : null}
+                                  {isPending || isArrivedTab ? <th className="px-3 py-2 text-left">Үйлдэл</th> : null}
                                 </tr>
                               </thead>
                               <tbody>
@@ -236,9 +254,9 @@ export default function ProductSummaryTable({
                                         {variant.closed ? "Хаагдсан" : "Нээлттэй"}
                                       </span>
                                     </td>
-                                    {isPending ? (
+                                    {isPending || isArrivedTab ? (
                                       <td className="px-3 py-2">
-                                        {openOnly ? (
+                                        {isPending && openOnly ? (
                                           <button
                                             type="button"
                                             onClick={() => onCloseVariantOrders(variant.variant_id, variant.label)}
@@ -248,7 +266,7 @@ export default function ProductSummaryTable({
                                           >
                                             <Lock size={14} />
                                           </button>
-                                        ) : (
+                                        ) : isPending ? (
                                           <button
                                             type="button"
                                             onClick={() => onOpenArrivedModalForVariant(product, variant)}
@@ -257,6 +275,16 @@ export default function ProductSummaryTable({
                                             disabled={arrivedSaving}
                                           >
                                             <Package size={14} />
+                                          </button>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            onClick={() => onOpenEditArrivedForVariant(product, variant)}
+                                            className="inline-flex h-7 w-7 items-center justify-center rounded border bg-white hover:bg-gray-50 disabled:opacity-50"
+                                            title="Карго засах"
+                                            disabled={arrivedSaving}
+                                          >
+                                            <Pencil size={14} />
                                           </button>
                                         )}
                                       </td>
