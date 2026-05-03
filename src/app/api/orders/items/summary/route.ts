@@ -78,6 +78,8 @@ type SummaryVariant = {
   label: string;
   stock: number | null;
   ordered_qty: number;
+  handed_qty: number;
+  delivery_qty: number;
   arrived_qty: number | null;
   remaining_qty: number | null;
   cargo_fee: number | null;
@@ -93,6 +95,8 @@ type SummaryGroup = {
   image_url: string | null;
   product_stock: number | null;
   product_ordered_qty: number | null;
+  handed_qty: number;
+  delivery_qty: number;
   arrived_qty: number | null;
   arrival_status: string | null;
   cargo_fee: number | null;
@@ -106,6 +110,20 @@ type SummaryGroup = {
   all_variants_arrived?: boolean;
   uniform_variant_cargo?: boolean;
 };
+
+function normalizeStatus(value?: string | null) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isHandedStatus(value?: string | null) {
+  const normalized = normalizeStatus(value);
+  return normalized.includes("олгосон") || normalized.includes("delivered") || normalized.includes("completed");
+}
+
+function isDeliveryTakenStatus(value?: string | null) {
+  const normalized = normalizeStatus(value);
+  return normalized.includes("хүргэлт") || normalized.includes("shipping") || normalized.includes("shipped");
+}
 
 function normalizeImage(url?: string | null) {
   const raw = String(url || "").trim();
@@ -262,6 +280,10 @@ export async function GET(request: NextRequest) {
 
   const variantImageIndex = new Map<number, Map<string, number[]>>();
   const variantPriceIndex = new Map<number, Map<number, number[]>>();
+  const handedByProduct = new Map<number, number>();
+  const deliveryByProduct = new Map<number, number>();
+  const handedByVariant = new Map<string, number>();
+  const deliveryByVariant = new Map<string, number>();
   for (const product of products) {
     const byImage = new Map<string, number[]>();
     const byPrice = new Map<number, number[]>();
@@ -282,6 +304,39 @@ export async function GET(request: NextRequest) {
     variantPriceIndex.set(product.id, byPrice);
   }
 
+  if (productIds.length > 0) {
+    const fulfilledItems = await prisma.adminOrderItem.findMany({
+      where: {
+        product_id: { in: productIds },
+        order: {
+          deleted_at: null,
+          payment_status: "PAID",
+        },
+      },
+      select: {
+        product_id: true,
+        variant_id: true,
+        quantity: true,
+        status: true,
+      },
+    });
+
+    for (const item of fulfilledItems) {
+      if (!item.product_id) continue;
+      const qty = Math.max(0, Number(item.quantity || 0));
+      if (qty <= 0) continue;
+      const variantKey = item.variant_id ? `${item.product_id}|${Number(item.variant_id)}` : null;
+
+      if (isHandedStatus(item.status)) {
+        handedByProduct.set(item.product_id, (handedByProduct.get(item.product_id) ?? 0) + qty);
+        if (variantKey) handedByVariant.set(variantKey, (handedByVariant.get(variantKey) ?? 0) + qty);
+      } else if (isDeliveryTakenStatus(item.status)) {
+        deliveryByProduct.set(item.product_id, (deliveryByProduct.get(item.product_id) ?? 0) + qty);
+        if (variantKey) deliveryByVariant.set(variantKey, (deliveryByVariant.get(variantKey) ?? 0) + qty);
+      }
+    }
+  }
+
   const confirmedMap = new Map<string, number>();
   const inferredMap = new Map<string, number>();
   const grouped = new Map<string, SummaryGroup>();
@@ -290,6 +345,7 @@ export async function GET(request: NextRequest) {
     const key = item.product_id ? `p:${item.product_id}` : `n:${item.product_name}`;
     const nameKey = String(item.product_name || "").trim().toLowerCase();
     const fallbackProduct = !item.product_id && nameKey ? productByName.get(nameKey) : null;
+    const resolvedProductId = item.product_id ?? fallbackProduct?.id ?? null;
     const productMeta = item.product_id
       ? productMetaMap.get(item.product_id)
       : fallbackProduct
@@ -303,6 +359,8 @@ export async function GET(request: NextRequest) {
       image_url: productMeta?.image_url ?? item.image_url ?? null,
       product_stock: productMeta?.stock ?? null,
       product_ordered_qty: productMeta?.ordered_qty ?? null,
+      handed_qty: resolvedProductId ? handedByProduct.get(resolvedProductId) ?? 0 : 0,
+      delivery_qty: resolvedProductId ? deliveryByProduct.get(resolvedProductId) ?? 0 : 0,
       arrived_qty: productMeta?.arrived_qty ?? null,
       arrival_status: productMeta?.arrival_status ?? null,
       cargo_fee: productMeta?.cargo_fee ?? null,
@@ -327,7 +385,7 @@ export async function GET(request: NextRequest) {
     });
     grouped.set(key, current);
 
-    const productId = item.product_id ?? fallbackProduct?.id ?? null;
+    const productId = resolvedProductId;
     if (!productId) continue;
 
     const qty = item.quantity;
@@ -368,9 +426,11 @@ export async function GET(request: NextRequest) {
         product_name: product.name,
         product_description: productMeta?.description ?? product.description ?? "",
         image_url: productMeta?.image_url ?? product.images[0]?.image_url ?? null,
-        product_stock: productMeta?.stock ?? product.stock ?? null,
-        product_ordered_qty: productMeta?.ordered_qty ?? product.ordered_qty ?? 0,
-        arrived_qty: productMeta?.arrived_qty ?? product.arrived_qty ?? null,
+      product_stock: productMeta?.stock ?? product.stock ?? null,
+      product_ordered_qty: productMeta?.ordered_qty ?? product.ordered_qty ?? 0,
+      handed_qty: handedByProduct.get(product.id) ?? 0,
+      delivery_qty: deliveryByProduct.get(product.id) ?? 0,
+      arrived_qty: productMeta?.arrived_qty ?? product.arrived_qty ?? null,
         arrival_status: productMeta?.arrival_status ?? product.arrival_status ?? null,
         cargo_fee: productMeta?.cargo_fee ?? product.cargo_fee ?? null,
         cargo_note: productMeta?.cargo_note ?? product.cargo_note ?? null,
@@ -416,6 +476,8 @@ export async function GET(request: NextRequest) {
           label: getVariantLabel(variant),
           stock,
           ordered_qty: ordered,
+          handed_qty: handedByVariant.get(`${productId}|${variant.id}`) ?? 0,
+          delivery_qty: deliveryByVariant.get(`${productId}|${variant.id}`) ?? 0,
           arrived_qty: arrivedQty,
           remaining_qty: remaining,
           cargo_fee: variant.cargo_fee != null ? Number(variant.cargo_fee) : productMeta?.cargo_fee ?? null,
@@ -477,6 +539,8 @@ export async function GET(request: NextRequest) {
 
       return {
         ...group,
+        handed_qty: handedByProduct.get(productId) ?? group.handed_qty ?? 0,
+        delivery_qty: deliveryByProduct.get(productId) ?? group.delivery_qty ?? 0,
         cargo_fee:
           allVariantsArrived && uniformVariantCargo
             ? computedAll[0]?.cargo_fee ?? group.cargo_fee ?? null

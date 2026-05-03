@@ -58,7 +58,7 @@ export default function ProductSummaryTable({
   onOpenEditArrivedForVariant,
   onOpenProductDetail,
 }: ProductSummaryTableProps) {
-  const colSpan = isArrivedTab ? 9 : 8;
+  const colSpan = isArrivedTab ? 10 : 7;
 
   const sortIcon = (field: ProductSortField) =>
     productSortField === field
@@ -79,7 +79,6 @@ export default function ProductSummaryTable({
                 {sortIcon("product_name")}
               </button>
             </th>
-            <th className="p-3 text-left">Тайлбар</th>
             <th className="p-3 text-left">
               <button type="button" onClick={() => onProductSort("total_qty")} className="inline-flex items-center gap-1 font-semibold" title="Sort">
                 Захиалсан
@@ -98,6 +97,8 @@ export default function ProductSummaryTable({
                 {sortIcon("remaining")}
               </button>
             </th>
+            {isArrivedTab ? <th className="p-3 text-left">Ирж авсан</th> : null}
+            {isArrivedTab ? <th className="p-3 text-left">Хүргэлтээр авсан</th> : null}
             {isArrivedTab ? <th className="p-3 text-left">Карго төлбөр</th> : null}
             <th className="p-3 text-left">
               <Tag size={14} className="text-gray-600" />
@@ -136,12 +137,11 @@ export default function ProductSummaryTable({
                       </div>
                     </td>
                     <td className="p-3 font-medium">{product.product_name}</td>
-                    <td className="p-3 text-sm text-gray-600">
-                      <span className="line-clamp-2">{product.product_description || "-"}</span>
-                    </td>
                     <td className="p-3">{product.total_qty}</td>
                     <td className="p-3">{product.product_stock ?? "-"}</td>
                     <td className="p-3">{getRemainingForProductRow(product) ?? "-"}</td>
+                    {isArrivedTab ? <td className="p-3">{product.handed_qty ?? 0}</td> : null}
+                    {isArrivedTab ? <td className="p-3">{product.delivery_qty ?? 0}</td> : null}
                     {isArrivedTab ? (
                       <td className="p-3">
                         <div className="font-medium">{formatCurrency(product.cargo_fee)}</div>
@@ -223,6 +223,8 @@ export default function ProductSummaryTable({
                                   <th className="px-3 py-2 text-left">Захиалсан</th>
                                   <th className="px-3 py-2 text-left">Захиалга авах тоо</th>
                                   <th className="px-3 py-2 text-left">Үлдэгдэл</th>
+                                  {isArrivedTab ? <th className="px-3 py-2 text-left">Ирж авсан</th> : null}
+                                  {isArrivedTab ? <th className="px-3 py-2 text-left">Хүргэлтээр авсан</th> : null}
                                   {isArrivedTab ? <th className="px-3 py-2 text-left">Карго</th> : null}
                                   <th className="px-3 py-2 text-left">Төлөв</th>
                                   {isPending || isArrivedTab ? <th className="px-3 py-2 text-left">Үйлдэл</th> : null}
@@ -235,6 +237,8 @@ export default function ProductSummaryTable({
                                     <td className="px-3 py-2">{variant.ordered_qty}</td>
                                     <td className="px-3 py-2">{variant.stock != null ? variant.stock : "-"}</td>
                                     <td className="px-3 py-2">{variant.remaining_qty != null ? variant.remaining_qty : "-"}</td>
+                                    {isArrivedTab ? <td className="px-3 py-2">{variant.handed_qty ?? 0}</td> : null}
+                                    {isArrivedTab ? <td className="px-3 py-2">{variant.delivery_qty ?? 0}</td> : null}
                                     {isArrivedTab ? (
                                       <td className="px-3 py-2">
                                         <div className="font-medium">{formatCurrency(variant.cargo_fee)}</div>

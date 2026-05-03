@@ -46,6 +46,8 @@ export type ProductVariantSummary = {
   label: string;
   stock: number | null;
   ordered_qty: number;
+  handed_qty: number;
+  delivery_qty: number;
   arrived_qty: number | null;
   remaining_qty: number | null;
   cargo_fee: number | null;
@@ -61,6 +63,8 @@ export type ProductSummary = {
   image_url: string | null;
   product_stock: number | null;
   product_ordered_qty: number | null;
+  handed_qty: number;
+  delivery_qty: number;
   arrived_qty: number | null;
   arrival_status: string | null;
   cargo_fee: number | null;
