@@ -241,6 +241,10 @@ export async function GET(request: NextRequest) {
       delivery_khoroo_name: it.delivery_khoroo_name ?? null,
       delivery_zone: it.delivery_zone ?? null,
       delivery_fee: it.delivery_fee ?? 0,
+      qpay_invoice_id: it.qpay_invoice_id ?? null,
+      qpay_payment_id: it.qpay_payment_id ?? null,
+      payment_expires_at: it.payment_expires_at?.toISOString() ?? null,
+      delivery_paid_at: it.delivery_paid_at?.toISOString() ?? null,
       variantLabel: (() => {
         const productId = it.product_id ?? null;
         if (!productId) return null;
@@ -483,6 +487,10 @@ export async function POST(request: NextRequest) {
           status: string | null;
           product_name: string;
           quantity: number;
+          delivery_method: string | null;
+          qpay_sender_invoice_no: string | null;
+          qpay_payment_id: string | null;
+          delivery_paid_at: Date | null;
           product: { cargo_fee: Prisma.Decimal | number | null } | null;
           variant: { cargo_fee: Prisma.Decimal | number | null } | null;
         }> =
@@ -503,6 +511,10 @@ export async function POST(request: NextRequest) {
                   status: true,
                   product_name: true,
                   quantity: true,
+                  delivery_method: true,
+                  qpay_sender_invoice_no: true,
+                  qpay_payment_id: true,
+                  delivery_paid_at: true,
                   product: {
                     select: {
                       cargo_fee: true,
@@ -1006,29 +1018,54 @@ export async function POST(request: NextRequest) {
     });
 
     if (arrivedOrderItemIds.length > 0 && deliveryMethod === "delivery") {
-      await prisma.adminOrderItem.updateMany({
-        where: { id: { in: arrivedOrderItemIds } },
-        data: {
-          delivery_method: "delivery",
-          delivery_name: deliveryName,
-          delivery_phone: deliveryPhone,
-          delivery_address: deliveryAddress,
-          delivery_district_id: deliveryDistrictId,
-          delivery_district_name: currentOrder?.delivery_district_name ?? null,
-          delivery_khoroo_id: deliveryKhorooId,
-          delivery_khoroo_name: currentOrder?.delivery_khoroo_name ?? null,
-          delivery_zone: currentOrder?.delivery_zone ?? null,
-          delivery_fee: Number(currentOrder?.delivery_fee ?? 0),
-          qpay_invoice_id: invoice.invoice_id,
-          qpay_sender_invoice_no: senderInvoiceNo,
-          qpay_qr_text: invoice.qr_text ?? null,
-          qpay_qr_image: invoice.qr_image ?? null,
-          qpay_short_url: invoice.qPay_shortUrl ?? null,
-          qpay_deeplink: invoice.qPay_deeplink ?? [],
-          payment_expires_at: expiresAt,
-          qpay_payment_id: null,
-          delivery_paid_at: null,
-        },
+      await prisma.$transaction(async (tx) => {
+        const draftDeliveryOrderIds = (
+          await tx.adminDeliveryOrderItem.findMany({
+            where: {
+              order_item_id: { in: arrivedOrderItemIds },
+              delivery_order: {
+                payment_status: "UNPAID",
+              },
+            },
+            select: {
+              delivery_order_id: true,
+            },
+          })
+        ).map((row) => row.delivery_order_id);
+
+        if (draftDeliveryOrderIds.length > 0) {
+          await tx.adminDeliveryOrder.deleteMany({
+            where: {
+              id: { in: Array.from(new Set(draftDeliveryOrderIds)) },
+              payment_status: "UNPAID",
+            },
+          });
+        }
+
+        await tx.adminOrderItem.updateMany({
+          where: { id: { in: arrivedOrderItemIds } },
+          data: {
+            delivery_method: "delivery",
+            delivery_name: deliveryName,
+            delivery_phone: deliveryPhone,
+            delivery_address: deliveryAddress,
+            delivery_district_id: deliveryDistrictId,
+            delivery_district_name: currentOrder?.delivery_district_name ?? null,
+            delivery_khoroo_id: deliveryKhorooId,
+            delivery_khoroo_name: currentOrder?.delivery_khoroo_name ?? null,
+            delivery_zone: currentOrder?.delivery_zone ?? null,
+            delivery_fee: Number(currentOrder?.delivery_fee ?? 0),
+            qpay_invoice_id: invoice.invoice_id,
+            qpay_sender_invoice_no: senderInvoiceNo,
+            qpay_qr_text: invoice.qr_text ?? null,
+            qpay_qr_image: invoice.qr_image ?? null,
+            qpay_short_url: invoice.qPay_shortUrl ?? null,
+            qpay_deeplink: invoice.qPay_deeplink ?? [],
+            payment_expires_at: expiresAt,
+            qpay_payment_id: null,
+            delivery_paid_at: null,
+          },
+        });
       });
     }
 

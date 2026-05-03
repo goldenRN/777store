@@ -22,6 +22,7 @@ type ArrivedDeliveryCandidate = {
   qty: number;
   cargoFee: number;
   productImage: string | null;
+  deliveryInProgress: boolean;
 };
 
 type InvoicePreviewItem = {
@@ -297,11 +298,13 @@ export default function CartPageClient() {
                 .filter((item: any) => {
                   const status = String(item?.status || "").trim().toLowerCase();
                   const deliveryMethod = String(item?.delivery_method || "").trim().toLowerCase();
+                  const hasPaidDelivery = Boolean(item?.delivery_paid_at || item?.qpay_payment_id);
+                  const isDeliveryInProgress = deliveryMethod === "delivery" && !hasPaidDelivery;
                   return (
                     status.includes("ирсэн") &&
                     !status.includes("олгосон") &&
                     !status.includes("хүргэлт") &&
-                    deliveryMethod !== "delivery"
+                    (deliveryMethod !== "delivery" || isDeliveryInProgress)
                   );
                 })
                 .map((item: any) => ({
@@ -312,6 +315,10 @@ export default function CartPageClient() {
                   qty: Math.max(1, Number(item.qty || 0)),
                   cargoFee: Math.max(0, Number(item.cargoFee || 0)),
                   productImage: item.productImage || null,
+                  deliveryInProgress:
+                    String(item?.delivery_method || "").trim().toLowerCase() === "delivery" &&
+                    !item?.delivery_paid_at &&
+                    !item?.qpay_payment_id,
                 }))
             : [],
         );
@@ -915,6 +922,12 @@ export default function CartPageClient() {
               <div className="mt-2 text-sm text-[var(--gray-600)]">
                 Танд өмнө захиалсан, одоо ирсэн бараа байна. Энэ хүргэлтэнд хамт авах уу?
               </div>
+              {arrivedCandidates.some((item) => item.deliveryInProgress) && (
+                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                  Зарим бараа өмнө нь <span className="font-semibold">Хүргэлтийг үргэлжлүүлэх</span> төлөвт байгаа.
+                  Хэрвээ хамт авбал хуучин хүргэлтийн draft цуцлагдаад шинэ нэгдсэн хүргэлт рүү орно.
+                </div>
+              )}
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-2xl border bg-[var(--sky-50)] p-4">
                   <div className="text-[11px] uppercase tracking-wide text-[var(--gray-500)]">Сагснаас</div>
@@ -953,6 +966,11 @@ export default function CartPageClient() {
                       <div className="text-xs text-[var(--gray-500)]">
                         {item.variantLabel || "Төрөлгүй"} · {item.qty}ш
                       </div>
+                      {item.deliveryInProgress && (
+                        <div className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">
+                          Хүргэлтийг үргэлжлүүлэх
+                        </div>
+                      )}
                     </div>
                     <div className="text-right text-xs">
                       <div className="font-semibold text-red-600">
