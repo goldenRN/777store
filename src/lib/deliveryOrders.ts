@@ -45,6 +45,7 @@ type DeliverySourceItem = {
     attribute?: Prisma.JsonValue | null;
     cargo_fee?: number | null;
   } | null;
+  resolved_cargo_fee?: number | null;
 };
 
 const normalizeStatus = (value?: string | null) =>
@@ -85,7 +86,12 @@ const getVariantLabel = (variant?: {
 const getItemCargoTotal = (item: DeliverySourceItem) => {
   const unitCargo = Math.max(
     0,
-    Number(item.variant?.cargo_fee ?? item.product?.cargo_fee ?? 0),
+    Number(
+      item.resolved_cargo_fee ??
+        item.variant?.cargo_fee ??
+        item.product?.cargo_fee ??
+        0,
+    ),
   );
   return unitCargo * Math.max(1, Number(item.quantity || 0));
 };

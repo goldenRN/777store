@@ -14,6 +14,28 @@ type QPayInfo = {
   expires_at?: string | null;
 };
 
+type ArrivedDeliveryCandidate = {
+  id: number;
+  orderId: number;
+  productName: string;
+  variantLabel?: string | null;
+  qty: number;
+  cargoFee: number;
+  productImage: string | null;
+};
+
+type InvoicePreviewItem = {
+  key: string;
+  source: "cart" | "arrived";
+  name: string;
+  subtitle: string;
+  qty: number;
+  unitAmount: number;
+  totalAmount: number;
+  imageUrl: string | null;
+  note: string;
+};
+
 export default function CartPageClient() {
   const { items, total, updateQty, removeItem, clear } = useCart();
   const router = useRouter();
@@ -38,6 +60,9 @@ export default function CartPageClient() {
   const [deliveryKhorooId, setDeliveryKhorooId] = useState<number | "">("");
   const [deliveryFee, setDeliveryFee] = useState<number>(0);
   const [resolvedImages, setResolvedImages] = useState<Record<string, string>>({});
+  const [arrivedCandidates, setArrivedCandidates] = useState<ArrivedDeliveryCandidate[]>([]);
+  const [combinedPromptOpen, setCombinedPromptOpen] = useState(false);
+  const [includeArrivedChoice, setIncludeArrivedChoice] = useState<boolean | null>(null);
   const activeExpiry = invoiceEnableExpiry ? invoiceExpiry || qpay?.expires_at || null : null;
 
   const resolveImageUrl = (url?: string | null) => {
@@ -205,8 +230,95 @@ export default function CartPageClient() {
   const hasPreorder = items.some((it) => normalizeType(it.type_name) === "preorder");
   const hasReady = items.some((it) => normalizeType(it.type_name) === "ready" || !normalizeType(it.type_name));
   const orderKind = hasPreorder ? "preorder" : "ready";
+  const cartLineCount = items.length;
+  const cartQtyCount = items.reduce((sum, item) => sum + Math.max(1, item.qty), 0);
+  const arrivedLineCount = arrivedCandidates.length;
+  const arrivedQtyCount = arrivedCandidates.reduce((sum, item) => sum + Math.max(1, item.qty), 0);
+  const arrivedCargoTotal = arrivedCandidates.reduce(
+    (sum, item) => sum + Math.max(0, item.cargoFee) * Math.max(1, item.qty),
+    0,
+  );
   const grandTotal =
-    hasReady && deliveryMethod === "delivery" ? Math.max(0, total + (deliveryFee || 0)) : total;
+    hasReady && deliveryMethod === "delivery"
+      ? Math.max(
+          0,
+          total + (deliveryFee || 0) + (includeArrivedChoice ? arrivedCargoTotal : 0),
+        )
+      : total;
+  const invoicePreviewItems: InvoicePreviewItem[] = [
+    ...items.map((item) => ({
+      key: `cart-${item.id}-${item.variant_id ?? "base"}`,
+      source: "cart" as const,
+      name: item.name,
+      subtitle: item.variant_label || item.variant_sku || "Сагсны бараа",
+      qty: Math.max(1, item.qty),
+      unitAmount: Math.max(0, Number(item.price || 0)),
+      totalAmount: Math.max(1, item.qty) * Math.max(0, Number(item.price || 0)),
+      imageUrl:
+        item.image_url ||
+        resolvedImages[`${item.id}-${item.variant_id ?? "base"}`] ||
+        null,
+      note: "Барааны үнэ төлөгдөнө",
+    })),
+    ...(includeArrivedChoice
+      ? arrivedCandidates.map((item) => ({
+          key: `arrived-${item.id}`,
+          source: "arrived" as const,
+          name: item.productName,
+          subtitle: item.variantLabel || "Ирсэн бараа",
+          qty: Math.max(1, item.qty),
+          unitAmount: Math.max(0, item.cargoFee),
+          totalAmount: Math.max(1, item.qty) * Math.max(0, item.cargoFee),
+          imageUrl: item.productImage || null,
+          note: "Зөвхөн карго нэмэгдэнэ",
+        }))
+      : []),
+  ];
+
+  useEffect(() => {
+    setIncludeArrivedChoice(null);
+    setCombinedPromptOpen(false);
+  }, [deliveryMethod, items, arrivedCandidates.length]);
+
+  useEffect(() => {
+    if (!user?.id || !hasReady) {
+      setArrivedCandidates([]);
+      return;
+    }
+    const url = new URL("/api/public/orders", window.location.origin);
+    url.searchParams.set("userId", user.id);
+    fetch(url.toString())
+      .then((r) => r.json())
+      .then((json) => {
+        const orders = Array.isArray(json?.items) ? json.items : [];
+        const next = orders.flatMap((order: any) =>
+          Array.isArray(order?.items)
+            ? order.items
+                .filter((item: any) => {
+                  const status = String(item?.status || "").trim().toLowerCase();
+                  const deliveryMethod = String(item?.delivery_method || "").trim().toLowerCase();
+                  return (
+                    status.includes("ирсэн") &&
+                    !status.includes("олгосон") &&
+                    !status.includes("хүргэлт") &&
+                    deliveryMethod !== "delivery"
+                  );
+                })
+                .map((item: any) => ({
+                  id: Number(item.id),
+                  orderId: Number(order.id),
+                  productName: String(item.productName || "Бараа"),
+                  variantLabel: item.variantLabel?.label || null,
+                  qty: Math.max(1, Number(item.qty || 0)),
+                  cargoFee: Math.max(0, Number(item.cargoFee || 0)),
+                  productImage: item.productImage || null,
+                }))
+            : [],
+        );
+        setArrivedCandidates(next);
+      })
+      .catch(() => setArrivedCandidates([]));
+  }, [user?.id, hasReady]);
 
   useEffect(() => {
     if (!hasReady) return;
@@ -243,7 +355,7 @@ export default function CartPageClient() {
     setDeliveryFee(k?.fee != null ? Number(k.fee) : 0);
   }, [deliveryKhorooId, deliveryMethod, khoroos]);
 
-  const handleCheckout = async () => {
+  const submitCheckout = async (includeArrived: boolean) => {
     if (!user?.id) {
       router.push("/login?next=/cart");
       return;
@@ -286,6 +398,10 @@ export default function CartPageClient() {
           deliveryAddress: deliveryMethod === "delivery" ? deliveryAddress : null,
           deliveryDistrictId: deliveryMethod === "delivery" ? deliveryDistrictId : null,
           deliveryKhorooId: deliveryMethod === "delivery" ? deliveryKhorooId : null,
+          arrivedOrderItemIds:
+            includeArrived && deliveryMethod === "delivery"
+              ? arrivedCandidates.map((item) => item.id)
+              : [],
           items: items.map((it) => ({
             product_id: it.id,
             variant_id: it.variant_id ?? null,
@@ -306,6 +422,7 @@ export default function CartPageClient() {
         return;
       }
       if (json?.qpay) {
+        setIncludeArrivedChoice(includeArrived);
         setQpay({
           orderId: json.id,
           qr_image: json.qpay.qr_image,
@@ -318,6 +435,19 @@ export default function CartPageClient() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCheckout = async () => {
+    if (
+      hasReady &&
+      deliveryMethod === "delivery" &&
+      arrivedCandidates.length > 0 &&
+      includeArrivedChoice == null
+    ) {
+      setCombinedPromptOpen(true);
+      return;
+    }
+    await submitCheckout(includeArrivedChoice === true);
   };
 
   const checkPayment = async () => {
@@ -446,6 +576,12 @@ export default function CartPageClient() {
                       <div>{deliveryFee.toLocaleString()}₮</div>
                     </div>
                   ) : null}
+                  {!hasPreorder && deliveryMethod === "delivery" && includeArrivedChoice && arrivedCargoTotal > 0 ? (
+                    <div className="flex items-center justify-between gap-4 text-xs text-[var(--gray-600)]">
+                      <div>Ирсэн барааны карго</div>
+                      <div>{arrivedCargoTotal.toLocaleString()}₮</div>
+                    </div>
+                  ) : null}
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-[var(--gray-500)]">Нийт төлөх</div>
@@ -547,6 +683,12 @@ export default function CartPageClient() {
                         placeholder="Нэмэлт хаяг (байр, тоот, орц гэх мэт)"
                         className="rounded-lg border px-3 py-2"
                       />
+                      {arrivedCandidates.length > 0 && (
+                        <div className="rounded-lg border bg-[var(--sky-50)] px-3 py-2 text-[11px] text-[var(--gray-700)]">
+                          Өмнөх захиалгын ирсэн {arrivedCandidates.length} бараа байна.
+                          Захиалга үүсгэхдээ хамт хүргэх эсэхийг бид асууна.
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -568,6 +710,81 @@ export default function CartPageClient() {
         {qpay && (
           <div className="mt-6 rounded-2xl bg-white p-6 shadow">
             <div className="text-lg font-bold">QPay төлбөр</div>
+            <div className="mt-4 rounded-2xl border bg-[var(--sky-50)] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-[var(--navy-900)]">
+                    Энэ invoice-д орсон бараанууд
+                  </div>
+                  <div className="text-xs text-[var(--gray-600)]">
+                    Сагс: {cartLineCount} бараа / {cartQtyCount}ш
+                    {includeArrivedChoice
+                      ? ` · Ирсэн бараа: ${arrivedLineCount} бараа / ${arrivedQtyCount}ш`
+                      : ""}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[11px] text-[var(--gray-500)]">Нийт төлөх</div>
+                  <div className="text-lg font-bold text-[var(--navy-900)]">
+                    {grandTotal.toLocaleString()}₮
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {invoicePreviewItems.map((item) => (
+                  <div key={item.key} className="flex items-center gap-3 rounded-xl border bg-white p-3">
+                    <div className="relative h-12 w-12 overflow-hidden rounded-lg bg-[var(--sky-100)]">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={item.imageUrl ? resolveImageUrl(item.imageUrl) : "/logo.png"}
+                        alt={item.name}
+                        className="h-full w-full object-cover"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src = "/logo.png";
+                        }}
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold">{item.name}</div>
+                      <div className="text-xs text-[var(--gray-500)]">
+                        {item.subtitle} · {item.qty}ш
+                      </div>
+                      <div className="mt-1 text-[11px] font-medium text-[var(--gray-600)]">
+                        {item.note}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-semibold text-[var(--navy-900)]">
+                        {item.totalAmount.toLocaleString()}₮
+                      </div>
+                      <div className="text-[11px] text-[var(--gray-500)]">
+                        {item.unitAmount.toLocaleString()}₮ × {item.qty}
+                      </div>
+                      <div
+                        className={`mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-semibold ${
+                          item.source === "cart"
+                            ? "bg-black/5 text-[var(--navy-900)]"
+                            : "bg-orange-50 text-orange-700"
+                        }`}
+                      >
+                        {item.source === "cart" ? "Сагснаас" : "Ирсэн бараа"}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {deliveryMethod === "delivery" && deliveryFee > 0 && (
+                  <div className="flex items-center justify-between rounded-xl border border-dashed bg-white px-4 py-3 text-sm">
+                    <div>
+                      <div className="font-semibold">Хүргэлтийн төлбөр</div>
+                      <div className="text-xs text-[var(--gray-500)]">Нэг удаагийн хүргэлтийн дүн</div>
+                    </div>
+                    <div className="font-semibold text-red-600">{deliveryFee.toLocaleString()}₮</div>
+                  </div>
+                )}
+              </div>
+            </div>
             <div className="mt-4 grid gap-6 lg:grid-cols-2">
               <div className="flex flex-col items-center justify-center">
                 {qpay.qr_image ? (
@@ -686,6 +903,91 @@ export default function CartPageClient() {
                     {`QPay төлөв: ${invoiceStatus}`}
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {combinedPromptOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl">
+              <div className="text-lg font-bold">Ирсэн бараагаа хамт хүргэх үү?</div>
+              <div className="mt-2 text-sm text-[var(--gray-600)]">
+                Танд өмнө захиалсан, одоо ирсэн бараа байна. Энэ хүргэлтэнд хамт авах уу?
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border bg-[var(--sky-50)] p-4">
+                  <div className="text-[11px] uppercase tracking-wide text-[var(--gray-500)]">Сагснаас</div>
+                  <div className="mt-2 text-lg font-bold text-[var(--navy-900)]">{cartLineCount} бараа</div>
+                  <div className="text-xs text-[var(--gray-600)]">{cartQtyCount}ш</div>
+                </div>
+                <div className="rounded-2xl border bg-[var(--sky-50)] p-4">
+                  <div className="text-[11px] uppercase tracking-wide text-[var(--gray-500)]">Ирсэн бараа</div>
+                  <div className="mt-2 text-lg font-bold text-[var(--navy-900)]">{arrivedLineCount} бараа</div>
+                  <div className="text-xs text-[var(--gray-600)]">{arrivedQtyCount}ш</div>
+                </div>
+                <div className="rounded-2xl border bg-red-50 p-4">
+                  <div className="text-[11px] uppercase tracking-wide text-[var(--gray-500)]">Нэмэгдэх карго</div>
+                  <div className="mt-2 text-lg font-bold text-red-600">
+                    {arrivedCargoTotal.toLocaleString()}₮
+                  </div>
+                  <div className="text-xs text-[var(--gray-600)]">Ирсэн бараануудын карго</div>
+                </div>
+              </div>
+              <div className="mt-4 max-h-64 space-y-3 overflow-y-auto rounded-xl border p-3">
+                {arrivedCandidates.map((item) => (
+                  <div key={item.id} className="flex items-center gap-3 rounded-lg border p-2">
+                    <div className="relative h-12 w-12 overflow-hidden rounded-lg bg-[var(--sky-100)]">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={item.productImage ? resolveImageUrl(item.productImage) : "/logo.png"}
+                        alt={item.productName}
+                        className="h-full w-full object-cover"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src = "/logo.png";
+                        }}
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold">{item.productName}</div>
+                      <div className="text-xs text-[var(--gray-500)]">
+                        {item.variantLabel || "Төрөлгүй"} · {item.qty}ш
+                      </div>
+                    </div>
+                    <div className="text-right text-xs">
+                      <div className="font-semibold text-red-600">
+                        {(item.cargoFee * item.qty).toLocaleString()}₮
+                      </div>
+                      <div className="text-[var(--gray-500)]">
+                        {item.cargoFee.toLocaleString()}₮ × {item.qty}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-5 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCombinedPromptOpen(false);
+                    setIncludeArrivedChoice(false);
+                    void submitCheckout(false);
+                  }}
+                  className="rounded-full border px-4 py-2 text-sm font-semibold"
+                >
+                  Үгүй, зөвхөн сагсаа авъя
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCombinedPromptOpen(false);
+                    setIncludeArrivedChoice(true);
+                    void submitCheckout(true);
+                  }}
+                  className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white"
+                >
+                  Тийм, хамт авъя
+                </button>
               </div>
             </div>
           </div>

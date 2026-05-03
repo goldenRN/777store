@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createInvoice } from "@/lib/qpay";
 import { getBulkUnitPrice } from "@/lib/bulkPricing";
@@ -16,11 +16,11 @@ const getReserveWindowStart = (now: Date) => {
 };
 
 async function deleteExpiredUnpaidOrders(
-  db: Pick<typeof prisma, "adminOrder">,
+  db: Pick<typeof prisma, "adminOrder" | "adminOrderItem">,
   now: Date,
   reserveWindowStart: Date,
 ) {
-  await db.adminOrder.deleteMany({
+  const expiredOrders = await db.adminOrder.findMany({
     where: {
       deleted_at: null,
       payment_status: "UNPAID",
@@ -34,6 +34,42 @@ async function deleteExpiredUnpaidOrders(
         },
       ],
     },
+    select: { id: true },
+  });
+
+  if (expiredOrders.length === 0) return;
+
+  const senderInvoiceNos = expiredOrders.map((order) => `order-${order.id}`);
+  await db.adminOrderItem.updateMany({
+    where: {
+      qpay_sender_invoice_no: { in: senderInvoiceNos },
+      order_id: { notIn: expiredOrders.map((order) => order.id) },
+    },
+    data: {
+      delivery_method: null,
+      delivery_name: null,
+      delivery_phone: null,
+      delivery_address: null,
+      delivery_district_id: null,
+      delivery_district_name: null,
+      delivery_khoroo_id: null,
+      delivery_khoroo_name: null,
+      delivery_zone: null,
+      delivery_fee: 0,
+      qpay_invoice_id: null,
+      qpay_payment_id: null,
+      qpay_sender_invoice_no: null,
+      qpay_qr_text: null,
+      qpay_qr_image: null,
+      qpay_short_url: null,
+      qpay_deeplink: Prisma.JsonNull,
+      payment_expires_at: null,
+      delivery_paid_at: null,
+    },
+  });
+
+  await db.adminOrder.deleteMany({
+    where: { id: { in: expiredOrders.map((order) => order.id) } },
   });
 }
 
@@ -272,6 +308,15 @@ export async function POST(request: NextRequest) {
   const deliveryAddress = body?.deliveryAddress ? String(body.deliveryAddress) : null;
   const deliveryDistrictIdRaw = body?.deliveryDistrictId;
   const deliveryKhorooIdRaw = body?.deliveryKhorooId;
+  const arrivedOrderItemIds: number[] = Array.isArray(body?.arrivedOrderItemIds)
+    ? Array.from<number>(
+        new Set(
+          body.arrivedOrderItemIds
+            .map((value: unknown) => Number(value))
+            .filter((value: number) => Number.isFinite(value) && value > 0),
+        ),
+      )
+    : [];
   const deliveryDistrictId =
     deliveryDistrictIdRaw != null && String(deliveryDistrictIdRaw).trim() !== ""
       ? Number(deliveryDistrictIdRaw)
@@ -324,6 +369,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { message: "Зөвхөн бэлэн бараатай үед хүргэлт сонгож болно." },
       { status: 400 }
+    );
+  }
+
+  if (arrivedOrderItemIds.length > 0 && deliveryMethod !== "delivery") {
+    return NextResponse.json(
+      { message: "Ирсэн барааг зөвхөн хүргэлтээр авах үед хамтатгаж болно." },
+      { status: 400 },
     );
   }
 
@@ -426,6 +478,66 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        const selectedArrivedItems: Array<{
+          id: number;
+          status: string | null;
+          product_name: string;
+          quantity: number;
+          product: { cargo_fee: Prisma.Decimal | number | null } | null;
+          variant: { cargo_fee: Prisma.Decimal | number | null } | null;
+        }> =
+          arrivedOrderItemIds.length > 0
+            ? await tx.adminOrderItem.findMany({
+                where: {
+                  id: { in: arrivedOrderItemIds },
+                  order: {
+                    is: {
+                      user_id: userId,
+                      deleted_at: null,
+                      payment_status: "PAID",
+                    },
+                  },
+                },
+                select: {
+                  id: true,
+                  status: true,
+                  product_name: true,
+                  quantity: true,
+                  product: {
+                    select: {
+                      cargo_fee: true,
+                    },
+                  },
+                  variant: {
+                    select: {
+                      cargo_fee: true,
+                    },
+                  },
+                },
+              })
+            : [];
+
+        if (selectedArrivedItems.length !== arrivedOrderItemIds.length) {
+          throw new CheckoutError("Хүргэлтэнд хамтатгах барааны мэдээлэл зөрүүтэй байна.", 400);
+        }
+
+        for (const item of selectedArrivedItems) {
+          const statusNorm = String(item.status || "").trim().toLowerCase();
+          if (
+            statusNorm.includes("хүргэлт") ||
+            statusNorm.includes("shipping") ||
+            statusNorm.includes("олгосон") ||
+            statusNorm.includes("handed") ||
+            statusNorm.includes("буца") ||
+            statusNorm.includes("return")
+          ) {
+            throw new CheckoutError(
+              `Хүргэлтэнд хамтатгах боломжгүй бараа байна: ${item.product_name}`,
+              409,
+            );
+          }
+        }
+
         const getVariantLabel = (variant: {
           sku: string | null;
           attribute: Record<string, unknown> | null;
@@ -498,8 +610,15 @@ export async function POST(request: NextRequest) {
           delivery_khoroo_name = khoroo.name ?? null;
           delivery_zone = khoroo.zone ?? null;
         }
+        const arrivedCargoTotal = selectedArrivedItems.reduce((sum, item) => {
+          const unitCargo = Math.max(
+            0,
+            Number(item.variant?.cargo_fee ?? item.product?.cargo_fee ?? 0),
+          );
+          return sum + unitCargo * Math.max(1, Number(item.quantity || 0));
+        }, 0);
 
-        const total = itemsTotal + delivery_fee;
+        const total = itemsTotal + delivery_fee + arrivedCargoTotal;
 
         const buildSignature = (
           rows: Array<{
@@ -541,6 +660,29 @@ export async function POST(request: NextRequest) {
           orderBy: { created_at: "desc" },
         });
 
+        const candidateLinkedArrivedMap = new Map<number, number[]>();
+        if (reusableCandidates.length > 0) {
+          const senderInvoiceNos = reusableCandidates.map((candidate) => `order-${candidate.id}`);
+          const linkedArrived = await tx.adminOrderItem.findMany({
+            where: {
+              qpay_sender_invoice_no: { in: senderInvoiceNos },
+              order_id: { notIn: reusableCandidates.map((candidate) => candidate.id) },
+            },
+            select: { qpay_sender_invoice_no: true, id: true },
+          });
+          for (const item of linkedArrived) {
+            const sender = String(item.qpay_sender_invoice_no || "");
+            if (!sender.startsWith("order-")) continue;
+            const orderId = Number(sender.replace("order-", ""));
+            if (!Number.isFinite(orderId)) continue;
+            const list = candidateLinkedArrivedMap.get(orderId) ?? [];
+            list.push(item.id);
+            candidateLinkedArrivedMap.set(orderId, list);
+          }
+        }
+
+        const requestedArrivedSignature = [...arrivedOrderItemIds].sort((a, b) => a - b).join("|");
+
         const reusableOrder = reusableCandidates.find((candidate) => {
           if (candidate.order_kind !== safeOrderKind) return false;
           if ((candidate.delivery_method || null) !== (hasReadyDb ? deliveryMethod : null)) return false;
@@ -551,7 +693,11 @@ export async function POST(request: NextRequest) {
           if ((candidate.delivery_address || null) !== (hasReadyDb && deliveryMethod === "delivery" ? deliveryAddress : null)) return false;
           if (Number(candidate.delivery_district_id ?? 0) !== Number(hasReadyDb && deliveryMethod === "delivery" ? deliveryDistrictId : 0)) return false;
           if (Number(candidate.delivery_khoroo_id ?? 0) !== Number(hasReadyDb && deliveryMethod === "delivery" ? deliveryKhorooId : 0)) return false;
-          return buildSignature(candidate.items) === requestedSignature;
+          if (buildSignature(candidate.items) !== requestedSignature) return false;
+          const candidateArrivedSignature = [...(candidateLinkedArrivedMap.get(candidate.id) ?? [])]
+            .sort((a, b) => a - b)
+            .join("|");
+          return candidateArrivedSignature === requestedArrivedSignature;
         });
 
         const orderActiveOrPaid: Prisma.AdminOrderWhereInput = {
@@ -725,6 +871,10 @@ export async function POST(request: NextRequest) {
     select: {
       id: true,
       total: true,
+      delivery_district_name: true,
+      delivery_khoroo_name: true,
+      delivery_zone: true,
+      delivery_fee: true,
       qpay_invoice_id: true,
       qpay_sender_invoice_no: true,
       qpay_qr_text: true,
@@ -854,6 +1004,33 @@ export async function POST(request: NextRequest) {
         payment_expires_at: expiresAt,
       },
     });
+
+    if (arrivedOrderItemIds.length > 0 && deliveryMethod === "delivery") {
+      await prisma.adminOrderItem.updateMany({
+        where: { id: { in: arrivedOrderItemIds } },
+        data: {
+          delivery_method: "delivery",
+          delivery_name: deliveryName,
+          delivery_phone: deliveryPhone,
+          delivery_address: deliveryAddress,
+          delivery_district_id: deliveryDistrictId,
+          delivery_district_name: currentOrder?.delivery_district_name ?? null,
+          delivery_khoroo_id: deliveryKhorooId,
+          delivery_khoroo_name: currentOrder?.delivery_khoroo_name ?? null,
+          delivery_zone: currentOrder?.delivery_zone ?? null,
+          delivery_fee: Number(currentOrder?.delivery_fee ?? 0),
+          qpay_invoice_id: invoice.invoice_id,
+          qpay_sender_invoice_no: senderInvoiceNo,
+          qpay_qr_text: invoice.qr_text ?? null,
+          qpay_qr_image: invoice.qr_image ?? null,
+          qpay_short_url: invoice.qPay_shortUrl ?? null,
+          qpay_deeplink: invoice.qPay_deeplink ?? [],
+          payment_expires_at: expiresAt,
+          qpay_payment_id: null,
+          delivery_paid_at: null,
+        },
+      });
+    }
 
     return NextResponse.json({
       id: created.id,
