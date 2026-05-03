@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { CheckCircle, MoreVertical, Trash2 } from "lucide-react";
+import { CheckCircle, MoreVertical, Truck, Trash2 } from "lucide-react";
 import type { Order, OrderColumn } from "./types";
 
 type OrdersTableProps = {
@@ -18,6 +18,7 @@ type OrdersTableProps = {
   onSelect: (order: Order) => void;
   onDelete: (order: Order) => void;
   onStatusChange: (orderId: number, status: string) => void;
+  onJumpToDelivery: (order: Order) => void;
 };
 
 export default function OrdersTable({
@@ -33,6 +34,7 @@ export default function OrdersTable({
   onSelect,
   onDelete,
   onStatusChange,
+  onJumpToDelivery,
 }: OrdersTableProps) {
   const formatCurrency = (value: number | null | undefined) =>
     `${Number(value || 0).toLocaleString()}₮`;
@@ -197,6 +199,21 @@ export default function OrdersTable({
                       >
                         <MoreVertical size={16} />
                       </button>
+                      {!deletedOnly &&
+                      !order.is_delivery_order &&
+                      Number(order.related_delivery_order_count || 0) > 0 ? (
+                        <button
+                          onClick={() => onJumpToDelivery(order)}
+                          className="flex h-9 w-9 items-center justify-center rounded border bg-white text-sky-600 hover:bg-sky-50"
+                          title={
+                            Number(order.related_delivery_order_count || 0) > 1
+                              ? `Хүргэлтийн ${order.related_delivery_order_count} бүртгэл рүү очих`
+                              : "Хүргэлтэнд бүртгэгдсэн захиалга руу очих"
+                          }
+                        >
+                          <Truck className="h-4 w-4" />
+                        </button>
+                      ) : null}
                       {!deletedOnly && !order.is_delivery_order ? (
                         <button
                           onClick={() => onDelete(order)}

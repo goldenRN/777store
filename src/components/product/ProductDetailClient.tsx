@@ -7,6 +7,7 @@ import AddToCartButton from "@/components/cart/AddToCartButton";
 import { toast } from "@/components/ui/use-toast";
 import { getVariantLabel } from "@/lib/variantLabel";
 import { getBulkUnitPrice, normalizeBulkTiers } from "@/lib/bulkPricing";
+import { getMediaThumbUrl, normalizeMediaUrl, resolveMediaUrl } from "@/lib/media";
 
 type Variant = {
   id: number;
@@ -48,35 +49,8 @@ type GalleryItem = {
 
 const ACTION_LABEL = "Сагсанд нэмэх";
 
-const isExternalUrl = (url?: string | null) => !!url && /^https?:\/\//i.test(url);
-
-const resolveImageUrl = (url?: string | null) => {
-  if (!url) return "";
-  if (isExternalUrl(url) || url.startsWith("/")) return url;
-  return `/uploads/${url}`;
-};
-
-const normalizeImage = (url?: string | null) => {
-  if (!url) return "";
-
-  let clean = url.split("?")[0].split("#")[0];
-
-  if (isExternalUrl(clean)) {
-    try {
-      const parsed = new URL(clean);
-      if (parsed.pathname.includes("/uploads/")) return parsed.pathname;
-      return clean;
-    } catch {
-      return clean;
-    }
-  }
-
-  if (clean.startsWith("/uploads/")) return clean;
-  if (clean.startsWith("uploads/")) return `/${clean}`;
-  if (clean.startsWith("/")) return clean;
-
-  return `/uploads/${clean}`;
-};
+const resolveImageUrl = resolveMediaUrl;
+const normalizeImage = normalizeMediaUrl;
 
 const getImageKey = (url: string) => {
   const clean = url.split("?")[0].split("#")[0];
@@ -84,22 +58,7 @@ const getImageKey = (url: string) => {
   return parts[parts.length - 1] || clean;
 };
 
-const getThumbUrl = (url: string) => {
-  if (!url || isExternalUrl(url)) return url;
-
-  const clean = url.split("?")[0].split("#")[0];
-  const parts = clean.split("/");
-  const filename = parts[parts.length - 1] || "";
-  if (!filename) return url;
-
-  const dot = filename.lastIndexOf(".");
-  const base = dot >= 0 ? filename.slice(0, dot) : filename;
-
-  if (base.endsWith("_sm")) return url;
-
-  const thumbName = `${base}_sm.jpg`;
-  return `${parts.slice(0, -1).join("/")}/${thumbName}`;
-};
+const getThumbUrl = getMediaThumbUrl;
 
 const getAttrString = (attribute: Record<string, unknown> | null | undefined, key: string) => {
   const value = attribute?.[key];

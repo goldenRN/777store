@@ -922,12 +922,6 @@ export default function CartPageClient() {
               <div className="mt-2 text-sm text-[var(--gray-600)]">
                 Танд өмнө захиалсан, одоо ирсэн бараа байна. Энэ хүргэлтэнд хамт авах уу?
               </div>
-              {arrivedCandidates.some((item) => item.deliveryInProgress) && (
-                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-                  Зарим бараа өмнө нь <span className="font-semibold">Хүргэлтийг үргэлжлүүлэх</span> төлөвт байгаа.
-                  Хэрвээ хамт авбал хуучин хүргэлтийн draft цуцлагдаад шинэ нэгдсэн хүргэлт рүү орно.
-                </div>
-              )}
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-2xl border bg-[var(--sky-50)] p-4">
                   <div className="text-[11px] uppercase tracking-wide text-[var(--gray-500)]">Сагснаас</div>

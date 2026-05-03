@@ -1,10 +1,9 @@
 "use client";
 
-import Image from "next/image";
 import { X } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { getVariantLabel } from "@/lib/variantLabel";
-import { isExternalMediaUrl, resolveMediaUrl } from "@/lib/media";
+import { getMediaThumbUrl, resolveMediaUrl } from "@/lib/media";
 
 type Variant = {
   id: number;
@@ -91,22 +90,24 @@ export default function ProductCardVariantSheet({
                   <div className="flex items-center gap-3">
                     <div className="relative h-12 w-12 overflow-hidden rounded-lg border bg-[var(--sky-100)]">
                       {variantImage ? (
-                        <Image
-                          src={resolveMediaUrl(variantImage)}
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={resolveMediaUrl(getMediaThumbUrl(variantImage))}
                           alt={variant.sku || "Төрөл"}
-                          fill
-                          className="object-cover"
-                          sizes="48px"
-                          unoptimized={isExternalMediaUrl(variantImage)}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                          decoding="async"
+                          onError={(e) => {
+                            const img = e.currentTarget as HTMLImageElement;
+                            const fallback = resolveMediaUrl(variantImage);
+                            if (img.src !== fallback) img.src = fallback;
+                            else img.src = "/logo.png";
+                            img.onerror = null;
+                          }}
                         />
                       ) : (
-                        <Image
-                          src="/logo.png"
-                          alt="Logo"
-                          fill
-                          className="object-contain p-2 opacity-80"
-                          sizes="48px"
-                        />
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src="/logo.png" alt="Logo" className="h-full w-full object-contain p-2 opacity-80" />
                       )}
                     </div>
                     <div className="flex-1">

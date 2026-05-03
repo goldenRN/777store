@@ -23,6 +23,8 @@ export type Order = {
   qpay_qr_text?: string | null;
   qpay_short_url?: string | null;
   payment_expires_at?: string | null;
+  related_delivery_order_id?: number | null;
+  related_delivery_order_count?: number | null;
   deleted_at?: string | null;
   deleted_by_name?: string | null;
   deleted_by_phone?: string | null;

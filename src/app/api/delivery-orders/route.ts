@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
         items: {
           some: {
             OR: [
+              ...(Number.isFinite(maybeId) ? [{ order_id: maybeId }] : []),
               { product_name: { contains: q, mode: "insensitive" } },
               { variant_label: { contains: q, mode: "insensitive" } },
             ],

@@ -88,6 +88,10 @@ export async function GET(request: NextRequest) {
 
   const orderIds = data.map((order) => order.id);
   let deliveryItemsByOrder = new Map<number, any[]>();
+  let relatedDeliveryOrderMetaByOrder = new Map<
+    number,
+    { latestDeliveryOrderId: number | null; deliveryOrderIds: number[] }
+  >();
 
   if (orderIds.length > 0) {
     const deliveryItems = await prisma.adminOrderItem.findMany({
@@ -128,10 +132,42 @@ export async function GET(request: NextRequest) {
       map.set(item.order_id, current);
       return map;
     }, new Map<number, typeof deliveryItems>());
+
+    const relatedDeliveryOrderItems = await prisma.adminDeliveryOrderItem.findMany({
+      where: {
+        order_id: { in: orderIds },
+      },
+      orderBy: { created_at: "desc" },
+      select: {
+        order_id: true,
+        delivery_order_id: true,
+      },
+    });
+
+    relatedDeliveryOrderMetaByOrder = relatedDeliveryOrderItems.reduce((map, item) => {
+      const current =
+        map.get(item.order_id) ??
+        {
+          latestDeliveryOrderId: null,
+          deliveryOrderIds: [],
+        };
+      if (current.latestDeliveryOrderId == null) {
+        current.latestDeliveryOrderId = item.delivery_order_id;
+      }
+      if (!current.deliveryOrderIds.includes(item.delivery_order_id)) {
+        current.deliveryOrderIds.push(item.delivery_order_id);
+      }
+      map.set(item.order_id, current);
+      return map;
+    }, new Map<number, { latestDeliveryOrderId: number | null; deliveryOrderIds: number[] }>());
   }
 
   const enrichedData = data.map((order) => ({
     ...order,
+    related_delivery_order_id:
+      relatedDeliveryOrderMetaByOrder.get(order.id)?.latestDeliveryOrderId ?? null,
+    related_delivery_order_count:
+      relatedDeliveryOrderMetaByOrder.get(order.id)?.deliveryOrderIds.length ?? 0,
     delivery_groups: buildDeliveryGroups(deliveryItemsByOrder.get(order.id) ?? []),
   }));
 

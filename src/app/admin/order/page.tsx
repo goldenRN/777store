@@ -1,6 +1,6 @@
 "use client";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import OrderDetailsModal from "./OrderDetailsModal";
 import ProductDetailModal from "./ProductDetailModal";
 import CreateOrderModal from "./CreateOrderModal";
@@ -29,6 +29,8 @@ import type {
 } from "./types";
 
 export default function AdminOrdersTable() {
+  const router = useRouter();
+  const pathname = usePathname();
   const [orders, setOrders] = useState<Order[]>([]);
   const [page, setPage] = useState(1);
   const [productPage, setProductPage] = useState(1);
@@ -77,6 +79,8 @@ export default function AdminOrdersTable() {
   const [deleteSaving, setDeleteSaving] = useState(false);
   const searchParams = useSearchParams();
   const statusFilter = searchParams.get("status") ?? "";
+  const qParam = (searchParams.get("q") ?? "").trim();
+  const deliveryIdParam = Number(searchParams.get("deliveryId") ?? "");
   const statusKey = statusFilter.toLowerCase();
   const isPending = statusKey === "pending";
   const isArrivedTab = statusKey === "confirmed";
@@ -87,6 +91,11 @@ export default function AdminOrdersTable() {
   // Other tabs (shipping/delivered/cancelled) should remain as order lists.
   const isProductOnly = !deletedOnly && (isPending || openOnly || isArrivedTab);
   const titleLabel = getTitleLabel({ deletedOnly, openOnly, isPending, statusFilter, statusOptions });
+
+  useEffect(() => {
+    setQInput(qParam);
+    setQDebounced(qParam);
+  }, [qParam]);
 
   useEffect(() => {
     if (isPending || openOnly) {
@@ -137,6 +146,14 @@ export default function AdminOrdersTable() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, viewMode, openOnly, deletedOnly]);
+
+  useEffect(() => {
+    if (!isShippingTab || !Number.isFinite(deliveryIdParam) || deliveryIdParam <= 0 || selected) return;
+    const matched = orders.find((order) => Number(order.id) === deliveryIdParam);
+    if (matched) {
+      setSelected(matched);
+    }
+  }, [deliveryIdParam, isShippingTab, orders, selected]);
 
   useEffect(() => {
     setPage(1);
@@ -310,6 +327,21 @@ export default function AdminOrdersTable() {
       setSortOrder("asc");
     }
   };
+
+  const jumpToDeliveryOrder = useCallback(
+    (order: Order) => {
+      const deliveryId = Number(order.related_delivery_order_id || 0);
+      const sourceOrderId = Number(order.id || 0);
+      if (!deliveryId || !sourceOrderId) return;
+
+      const nextParams = new URLSearchParams();
+      nextParams.set("status", "shipping");
+      nextParams.set("q", String(sourceOrderId));
+      nextParams.set("deliveryId", String(deliveryId));
+      router.push(`${pathname}?${nextParams.toString()}`);
+    },
+    [pathname, router],
+  );
 
   const fetchProductSummary = async () => {
     setProductLoading(true);
@@ -834,6 +866,7 @@ export default function AdminOrdersTable() {
           onSelect={setSelected}
           onDelete={openDeleteModal}
           onStatusChange={updatePendingOrderStatus}
+          onJumpToDelivery={jumpToDeliveryOrder}
         />
       )}
 
