@@ -59,6 +59,7 @@ const isShippingStatus = (status?: string | null) => {
 const isDeliveredStatus = (status?: string | null) => {
   const normalized = normalizeStatus(status);
   return (
+    normalized.includes("хүргэгд") ||
     normalized.includes("олгосон") ||
     normalized.includes("delivered") ||
     normalized.includes("handed")
@@ -104,10 +105,10 @@ const toJsonInput = (value?: Prisma.JsonValue | null) => {
 const computeHeaderStatus = (statuses: string[]) => {
   if (statuses.length === 0) return "Хүргэлтэнд бүртгэгдсэн";
   if (statuses.every((status) => isReturnedStatus(status))) return "Буцаагдсан";
-  if (statuses.every((status) => isDeliveredStatus(status))) return "Бараа олгосон";
+  if (statuses.every((status) => isDeliveredStatus(status))) return "Хүргэгдсэн";
   if (statuses.some((status) => isShippingStatus(status))) return "Хүргэлтэнд бүртгэгдсэн";
   if (statuses.some((status) => isDeliveredStatus(status)) && !statuses.some((status) => isReturnedStatus(status))) {
-    return "Бараа олгосон";
+    return "Хүргэгдсэн";
   }
   if (statuses.some((status) => isReturnedStatus(status)) && !statuses.some((status) => isDeliveredStatus(status))) {
     return "Буцаагдсан";

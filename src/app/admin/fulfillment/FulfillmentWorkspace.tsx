@@ -57,9 +57,8 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
-  const [deliveryPickOpen, setDeliveryPickOpen] = useState(false);
   const [deliveryOpen, setDeliveryOpen] = useState(false);
-  const [deliveryOrderId, setDeliveryOrderId] = useState<number | null>(null);
+  const [deliveryPrefillOrderId, setDeliveryPrefillOrderId] = useState<number | null>(null);
   const [deliveryName, setDeliveryName] = useState("");
   const [deliveryPhone, setDeliveryPhone] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
@@ -73,6 +72,8 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
   const [showBankApps, setShowBankApps] = useState(false);
   const [qpay, setQpay] = useState<{
     orderId: number;
+    deliveryOrderId?: number | null;
+    orderItemId?: number | null;
     qr_image?: string | null;
     qr_text?: string | null;
     short_url?: string | null;
@@ -80,9 +81,6 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
     expires_at?: string | null;
   } | null>(null);
   const [checking, setChecking] = useState(false);
-  const [deliveryCandidates, setDeliveryCandidates] = useState<
-    { order_id: number; name: string; phone: string; order_status: string }[]
-  >([]);
   const [returnOpen, setReturnOpen] = useState(false);
   const [returnNote, setReturnNote] = useState("");
   const [returnSaving, setReturnSaving] = useState(false);
@@ -93,6 +91,7 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
   const [recentSearchApplied, setRecentSearchApplied] = useState("");
   const [recentActions, setRecentActions] = useState<RecentFulfillmentAction[]>([]);
   const [recentLoading, setRecentLoading] = useState(false);
+  const [deliveryPaidRedirecting, setDeliveryPaidRedirecting] = useState(false);
 
 
   const resetDeliveryUi = () => {
@@ -105,6 +104,7 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
     setDeliveryPaymentMethod("QPAY");
     setShowBankApps(false);
     setQpay(null);
+    setDeliveryPaidRedirecting(false);
   };
 
   const loadOrderForDelivery = async (id: number) => {
@@ -175,38 +175,14 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
     }
   };
 
-  const openDeliveryForOrders = (
-    orderIds: number[],
-    buyers: { order_id: number; name: string; phone: string; order_status: string }[]
-  ) => {
-    const unique = Array.from(new Set(orderIds.filter((x) => Number.isFinite(Number(x))))) as number[];
-    if (unique.length === 0) return;
-
-    const map = new Map<number, { order_id: number; name: string; phone: string; order_status: string }>();
-    (buyers || []).forEach((b) => {
-      if (!unique.includes(b.order_id)) return;
-      if (!map.has(b.order_id)) {
-        map.set(b.order_id, {
-          order_id: b.order_id,
-          name: b.name,
-          phone: b.phone,
-          order_status: b.order_status,
-        });
-      }
-    });
-
-    const candidates = unique
-      .map((id) => map.get(id) || { order_id: id, name: "-", phone: phoneApplied || "-", order_status: "" })
-      .sort((a, b) => b.order_id - a.order_id);
-    setDeliveryCandidates(candidates);
+  const openDeliveryForSelection = () => {
+    if (!selectedRows.length) return;
     resetDeliveryUi();
-
-    if (unique.length === 1) {
-      setDeliveryOrderId(unique[0] || null);
-      setDeliveryOpen(true);
-    } else {
-      setDeliveryPickOpen(true);
-    }
+    setDeliveryPrefillOrderId(selectedOrderIds[0] || null);
+    const firstRow = selectedRows[0];
+    setDeliveryName(String(firstRow?.buyer_name || "").trim());
+    setDeliveryPhone(String(firstRow?.buyer_phone || "").trim());
+    setDeliveryOpen(true);
   };
 
   const effectiveStatus = (item: FulfillmentItem) => String(item.item_status || item.order_status || "").trim();
@@ -300,20 +276,6 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
     [selectedRows]
   );
 
-  const selectedBuyers = useMemo(
-    () =>
-      selectedOrderIds.map((orderId) => {
-        const row = selectedRows.find((item) => item.order_id === orderId);
-        return {
-          order_id: orderId,
-          name: row?.buyer_name || "-",
-          phone: row?.buyer_phone || phoneApplied || "-",
-          order_status: row?.order_status || "",
-        };
-      }),
-    [phoneApplied, selectedOrderIds, selectedRows]
-  );
-
   const toggleItem = (itemId: number) => {
     setSelectedItemIds((prev) =>
       prev.includes(itemId) ? prev.filter((id) => id !== itemId) : [...prev, itemId]
@@ -373,10 +335,10 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
 
   useEffect(() => {
     if (!deliveryOpen) return;
-    if (!deliveryOrderId) return;
-    loadOrderForDelivery(deliveryOrderId).catch(() => null);
+    if (!deliveryPrefillOrderId) return;
+    loadOrderForDelivery(deliveryPrefillOrderId).catch(() => null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deliveryOpen, deliveryOrderId]);
+  }, [deliveryOpen, deliveryPrefillOrderId]);
 
   useEffect(() => {
     if (!deliveryOpen) return;
@@ -412,7 +374,7 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
   }, [deliveryOpen, deliveryKhorooId, khoroos]);
 
   const requestDelivery = async () => {
-    if (!deliveryOrderId) return;
+    if (!selectedItemIds.length) return;
     if (!deliveryName.trim() || !deliveryPhone.trim()) {
       alert("Хүргэлтийн нэр, утсаа бүрэн бөглөнө үү.");
       return;
@@ -427,10 +389,11 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
     }
     setDeliverySaving(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/orders/${deliveryOrderId}/delivery`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/orders/delivery-batch`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...getActorHeaders() },
         body: JSON.stringify({
+          orderItemIds: selectedItemIds,
           deliveryName,
           deliveryPhone,
           deliveryAddress,
@@ -446,7 +409,9 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
       }
       if (json?.qpay) {
         setQpay({
-          orderId: deliveryOrderId,
+          orderId: selectedOrderIds[0] || 0,
+          deliveryOrderId: Number(json.delivery_order_id || 0) || null,
+          orderItemId: Number(json.orderItemId || 0) || null,
           qr_image: json.qpay.qr_image,
           qr_text: json.qpay.qr_text,
           short_url: json.qpay.short_url,
@@ -462,26 +427,83 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
     }
   };
 
-  const refreshDeliveryStatus = async () => {
-    if (!deliveryOrderId) return;
+  const refreshDeliveryStatus = async (options?: { silent?: boolean }) => {
+    const deliveryOrderId = Number(qpay?.deliveryOrderId || 0);
+    const orderItemId = Number(qpay?.orderItemId || 0);
+    if (!deliveryOrderId && !orderItemId) return;
     setChecking(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/orders/${deliveryOrderId}`, {
-        headers: { ...getActorHeaders() },
-      });
-      const json = await res.json().catch(() => ({}));
-      const order = json?.order ?? null;
-      const status = String(order?.status || "");
-      if (status.includes("Хүргэлт")) {
-        alert("Төлбөр баталгаажлаа. Хүргэлтэнд бүртгэгдсэн.");
-        window.location.href = "/admin/order?status=shipping";
-        return;
+      if (orderItemId) {
+        const checkRes = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || ""}/api/payments/qpay/check?orderItemId=${orderItemId}`,
+          {
+            headers: { ...getActorHeaders() },
+          }
+        );
+        const checkJson = await checkRes.json().catch(() => ({}));
+        if (String(checkJson?.status || "").toUpperCase() === "PAID") {
+          if (!options?.silent) {
+            alert("Төлбөр баталгаажлаа. Хүргэлтэнд бүртгэгдсэн.");
+          }
+          setDeliveryPaidRedirecting(true);
+          window.location.href = "/admin/order?status=shipping";
+          return;
+        }
       }
-      alert("Одоогоор төлбөр баталгаажаагүй байна. Дахин оролдоно уу.");
+
+      if (deliveryOrderId) {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/delivery-orders/${deliveryOrderId}`, {
+          headers: { ...getActorHeaders() },
+        });
+        const json = await res.json().catch(() => ({}));
+        const order = json?.order ?? null;
+        const status = String(order?.status || "").toLowerCase();
+        const paymentStatus = String(order?.payment_status || "").toUpperCase();
+        if (paymentStatus === "PAID" || status.includes("хүргэлт")) {
+          if (!options?.silent) {
+            alert("Төлбөр баталгаажлаа. Хүргэлтэнд бүртгэгдсэн.");
+          }
+          setDeliveryPaidRedirecting(true);
+          window.location.href = "/admin/order?status=shipping";
+          return;
+        }
+      }
+
+      if (!options?.silent) {
+        alert("Одоогоор төлбөр баталгаажаагүй байна. Дахин оролдоно уу.");
+      }
     } finally {
       setChecking(false);
     }
   };
+
+  useEffect(() => {
+    if (!deliveryOpen || !qpay || deliveryPaidRedirecting) return;
+
+    const tick = () => {
+      if (document.visibilityState !== "visible") return;
+      refreshDeliveryStatus({ silent: true }).catch(() => null);
+    };
+
+    const interval = window.setInterval(tick, 5000);
+    const onFocus = () => {
+      refreshDeliveryStatus({ silent: true }).catch(() => null);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        refreshDeliveryStatus({ silent: true }).catch(() => null);
+      }
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [deliveryOpen, qpay, deliveryPaidRedirecting]);
 
   return (
     <div className="w-full p-4 md:p-6">
@@ -801,7 +823,7 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
-                  onClick={() => openDeliveryForOrders(selectedOrderIds, selectedBuyers)}
+                  onClick={openDeliveryForSelection}
                   disabled={selectedItemIds.length === 0}
                   className="rounded-full bg-blue-600 px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -831,55 +853,15 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
         <OrderDetailsModal id={selected} onClose={() => setSelected(null)} />
       )}
 
-      {deliveryPickOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl">
-            <div className="flex items-center justify-between">
-              <div className="text-lg font-bold">Хүргэлтэнд бүртгэх</div>
-              <button onClick={() => setDeliveryPickOpen(false)} className="text-xl">
-                &times;
-              </button>
-            </div>
-            <div className="mt-2 text-xs text-gray-500">Хүргэлт бүртгэх захиалгаа сонгоно уу.</div>
-            <div className="mt-4 max-h-[60vh] space-y-2 overflow-auto pr-1">
-              {deliveryCandidates.map((c) => (
-                <button
-                  key={c.order_id}
-                  onClick={() => {
-                    setDeliveryPickOpen(false);
-                    setDeliveryOrderId(c.order_id);
-                    setDeliveryOpen(true);
-                  }}
-                  className="w-full rounded-xl border p-4 text-left hover:bg-gray-50"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold">Захиалга #{c.order_id}</div>
-                      <div className="mt-1 text-[11px] text-gray-500">
-                        {c.name} • {c.phone}
-                      </div>
-                      {c.order_status ? (
-                        <div className="mt-1 text-[11px] text-gray-500">Төлөв: {c.order_status}</div>
-                      ) : null}
-                    </div>
-                    <div className="text-xs text-gray-400">→</div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {deliveryOpen && deliveryOrderId && (
+      {deliveryOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between">
-              <div className="text-lg font-bold">Хүргэлтэнд бүртгэх (#{deliveryOrderId})</div>
+              <div className="text-lg font-bold">Хүргэлтэнд бүртгэх ({selectedItemIds.length} бараа)</div>
               <button
                 onClick={() => {
                   setDeliveryOpen(false);
-                  setDeliveryOrderId(null);
+                  setDeliveryPrefillOrderId(null);
                   setQpay(null);
                 }}
                 className="text-xl"
@@ -1001,7 +983,9 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
                       <div className="text-[10px] break-all">{qpay.qr_text}</div>
                     ) : null}
                     <button
-                      onClick={refreshDeliveryStatus}
+                      onClick={() => {
+                        refreshDeliveryStatus().catch(() => null);
+                      }}
                       disabled={checking}
                       className="rounded-full border px-4 py-2 text-xs font-semibold"
                     >

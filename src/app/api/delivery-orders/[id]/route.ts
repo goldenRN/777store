@@ -1,5 +1,26 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { logAdminAction } from "@/lib/audit";
+
+const normRole = (v?: string | null) =>
+  String(v || "").toUpperCase().replace(/\s+/g, "_");
+const requireAdmin = (request: NextRequest) => {
+  const role = normRole(request.headers.get("x-actor-role"));
+  return role === "SUPER_ADMIN" || role === "ADMIN";
+};
+
+const normalizeStatus = (value?: string | null) =>
+  String(value || "").trim().toLowerCase();
+
+const isDeliveredStatus = (status?: string | null) => {
+  const normalized = normalizeStatus(status);
+  return (
+    normalized.includes("хүргэгд") ||
+    normalized.includes("олгосон") ||
+    normalized.includes("delivered") ||
+    normalized.includes("handed")
+  );
+};
 
 const resolveImage = (url?: string | null) => {
   const raw = String(url || "").trim();
@@ -97,4 +118,107 @@ export async function GET(
     })),
     delivery_groups: [],
   });
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id: rawId } = await params;
+  const id = Number(rawId);
+  if (!id) {
+    return NextResponse.json({ message: "Invalid id" }, { status: 400 });
+  }
+  if (!requireAdmin(request)) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = await request.json().catch(() => ({}));
+  const action = String(body?.action ?? "").trim().toLowerCase();
+  if (action !== "mark_delivered") {
+    return NextResponse.json({ message: "Unsupported action" }, { status: 400 });
+  }
+
+  const deliveryOrder = await prisma.adminDeliveryOrder.findUnique({
+    where: { id },
+    include: {
+      items: {
+        select: {
+          order_id: true,
+          order_item_id: true,
+        },
+      },
+    },
+  });
+
+  if (!deliveryOrder) {
+    return NextResponse.json({ message: "Not found" }, { status: 404 });
+  }
+
+  const orderItemIds = deliveryOrder.items
+    .map((item) => Number(item.order_item_id))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  const sourceOrderIds = Array.from(
+    new Set(
+      deliveryOrder.items
+        .map((item) => Number(item.order_id))
+        .filter((value) => Number.isFinite(value) && value > 0),
+    ),
+  );
+
+  await prisma.$transaction(async (tx) => {
+    await tx.adminDeliveryOrder.update({
+      where: { id },
+      data: { status: "Хүргэгдсэн" },
+    });
+
+    if (orderItemIds.length > 0) {
+      await tx.adminDeliveryOrderItem.updateMany({
+        where: { delivery_order_id: id },
+        data: { status: "Хүргэгдсэн" },
+      });
+
+      await tx.adminOrderItem.updateMany({
+        where: { id: { in: orderItemIds } },
+        data: { status: "Хүргэгдсэн" },
+      });
+    }
+
+    for (const orderId of sourceOrderIds) {
+      const sourceOrder = await tx.adminOrder.findUnique({
+        where: { id: orderId },
+        select: {
+          items: {
+            select: { status: true },
+          },
+        },
+      });
+      if (!sourceOrder) continue;
+      const statuses = sourceOrder.items
+        .map((item) => String(item.status || "").trim())
+        .filter(Boolean);
+      if (statuses.length === 0) continue;
+      if (statuses.every((status) => isDeliveredStatus(status))) {
+        await tx.adminOrder.update({
+          where: { id: orderId },
+          data: { status: "Хүргэгдсэн" },
+        });
+      }
+    }
+  });
+
+  await logAdminAction({
+    request,
+    action: "DELIVERY_ORDER_MARK_DELIVERED",
+    entityType: "AdminDeliveryOrder",
+    entityId: String(id),
+    details: {
+      delivery_order_id: id,
+      order_item_ids: orderItemIds,
+      source_order_ids: sourceOrderIds,
+      status: "Хүргэгдсэн",
+    },
+  });
+
+  return NextResponse.json({ success: true, id, status: "Хүргэгдсэн" });
 }

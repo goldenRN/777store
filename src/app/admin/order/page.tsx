@@ -85,6 +85,8 @@ export default function AdminOrdersTable() {
   const isPending = statusKey === "pending";
   const isArrivedTab = statusKey === "confirmed";
   const isShippingTab = statusKey === "shipping" || statusKey === "shipped";
+  const isDeliveredTab = statusKey === "delivered" || statusKey === "completed";
+  const isDeliveryOrderTab = isShippingTab || isDeliveredTab;
   const openOnly = searchParams.get("openOnly") === "true";
   const deletedOnly = searchParams.get("deleted") === "true";
   // Only some tabs are "product summary" views (pending / openOnly / arrived workflow).
@@ -108,7 +110,7 @@ export default function AdminOrdersTable() {
     try {
       const trimmed = query.trim();
       const base = process.env.NEXT_PUBLIC_API_URL || "";
-      const useDeliveryOrders = isShippingTab && !deletedOnly;
+      const useDeliveryOrders = isDeliveryOrderTab && !deletedOnly;
       const url = new URL(
         `${base}${useDeliveryOrders ? "/api/delivery-orders" : "/api/orders"}`,
         window.location.origin
@@ -116,7 +118,7 @@ export default function AdminOrdersTable() {
       url.searchParams.set("page", String(p));
       url.searchParams.set("limit", String(limit));
       if (trimmed) url.searchParams.set("q", trimmed);
-      if (statusFilter && !useDeliveryOrders) url.searchParams.set("status", statusFilter);
+      if (statusFilter) url.searchParams.set("status", statusFilter);
       if (deletedOnly) url.searchParams.set("deleted", "true");
 
       const res = await fetch(url.toString());
@@ -148,12 +150,12 @@ export default function AdminOrdersTable() {
   }, [statusFilter, viewMode, openOnly, deletedOnly]);
 
   useEffect(() => {
-    if (!isShippingTab || !Number.isFinite(deliveryIdParam) || deliveryIdParam <= 0 || selected) return;
+    if (!isDeliveryOrderTab || !Number.isFinite(deliveryIdParam) || deliveryIdParam <= 0 || selected) return;
     const matched = orders.find((order) => Number(order.id) === deliveryIdParam);
     if (matched) {
       setSelected(matched);
     }
-  }, [deliveryIdParam, isShippingTab, orders, selected]);
+  }, [deliveryIdParam, isDeliveryOrderTab, orders, selected]);
 
   useEffect(() => {
     setPage(1);
@@ -571,13 +573,35 @@ export default function AdminOrdersTable() {
     fetchOrders(page);
   };
 
+  const markDeliveryComplete = async (order: Order) => {
+    if (!order.is_delivery_order) return;
+    if (!confirm(`Хүргэлтийн захиалга #${order.id}-г “Хүргэгдсэн” төлөвт шилжүүлэх үү?`)) return;
+    try {
+      const res = await fetch(`/api/delivery-orders/${order.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...getActorHeaders() },
+        body: JSON.stringify({ action: "mark_delivered" }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json?.message || "Хүргэлтийн төлөв шинэчилж чадсангүй");
+      }
+      alert("Хүргэлтийн төлөв “Хүргэгдсэн” боллоо.");
+      fetchOrders(page, qDebounced);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : typeof err === "string" ? err : "Алдаа гарлаа";
+      alert(`⚠️ ${message}`);
+    }
+  };
+
   const orderColumns = useMemo(() => {
     const cols: OrderColumn[] = [
       { key: "id", label: "Дугаар" },
       { key: "name", label: "Захиалагч" },
       { key: "phone1", label: "Утас" },
       { key: "total", label: "Нийт" },
-      ...(isShippingTab
+      ...(isDeliveryOrderTab
         ? ([
             { key: "cargo_fee", label: "Карго" },
             { key: "delivery_fee", label: "Хүргэлтийн төлбөр" },
@@ -596,7 +620,7 @@ export default function AdminOrdersTable() {
       );
     }
     return cols;
-  }, [deletedOnly, isShippingTab]);
+  }, [deletedOnly, isDeliveryOrderTab]);
 
   const orderColSpan = orderColumns.length + 1;
 
@@ -867,6 +891,7 @@ export default function AdminOrdersTable() {
           onDelete={openDeleteModal}
           onStatusChange={updatePendingOrderStatus}
           onJumpToDelivery={jumpToDeliveryOrder}
+          onMarkDeliveryComplete={markDeliveryComplete}
         />
       )}
 

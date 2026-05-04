@@ -6,7 +6,18 @@ export async function GET(request: NextRequest) {
   const page = Math.max(Number(searchParams.get("page") ?? 1), 1);
   const limit = Math.max(Number(searchParams.get("limit") ?? 20), 1);
   const q = String(searchParams.get("q") ?? "").trim();
-  const status = String(searchParams.get("status") ?? "Хүргэлтэнд бүртгэгдсэн").trim();
+  let status = String(searchParams.get("status") ?? "Хүргэлтэнд бүртгэгдсэн").trim();
+
+  if (status) {
+    const key = status.toLowerCase();
+    if (key === "shipping" || key === "shipped") {
+      status = "Хүргэлтэнд бүртгэгдсэн";
+    } else if (key === "delivered" || key === "completed") {
+      status = "Хүргэгдсэн";
+    } else if (key === "cancelled" || key === "canceled" || key === "returned") {
+      status = "Буцаагдсан";
+    }
+  }
 
   const where: Record<string, unknown> = {};
   if (status && status !== "ALL") where.status = status;
