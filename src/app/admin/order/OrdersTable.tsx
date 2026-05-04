@@ -110,20 +110,12 @@ export default function OrdersTable({
                   <td className="p-3">
                     <div className="font-medium">{order.name}</div>
                     <div className="text-xs text-gray-500">
-                      {order.email || (order.source_order_id != null && order.source_order_id > 0)
-                        ? order.email || `Эх захиалга #${order.source_order_id}`
-                        : ""}
+                      {order.email || ""}
                     </div>
                   </td>
                   <td className="p-3">{order.phone1}</td>
                   <td className="p-3">
                     <div>{Number(order.total || 0).toLocaleString()}₮</div>
-                    {order.is_delivery_order ? (
-                      <div className="mt-1 text-[11px] text-gray-500">
-                        Карго {formatCurrency(order.cargo_fee)} • Хүргэлт {formatCurrency(order.delivery_fee)}
-                        {order.item_count ? ` • ${order.item_count} мөр` : ""}
-                      </div>
-                    ) : null}
                   </td>
                   {showCargoColumn ? (
                     <td className="p-3">

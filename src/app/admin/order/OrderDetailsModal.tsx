@@ -349,122 +349,122 @@ export default function OrderDetailsModal({
                   </div>
                 ) : null}
 
-                <div className="mt-4">
-                  <h4 className="font-semibold">{deliveryMode ? "Хүргэлтийн мөрүүд" : "Захиалга"}</h4>
-                  <div className="mt-2 overflow-x-auto rounded-lg border">
-                    <table className="min-w-[720px] w-full text-sm bg-white">
-                      <thead>
-                        <tr className="text-left text-xs text-gray-500 border-b bg-gray-50">
-                          <th className="py-2 px-3">#</th>
-                          <th className="py-2 px-3">Бараа</th>
-                          <th className="py-2 px-3">Тоо ширхэг</th>
-                          <th className="py-2 px-3">Үнэ</th>
-                          <th className="py-2 px-3">Нийт</th>
-                          <th className="py-2 px-3">Төлөв</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.map((it, i) => (
-                          <tr key={it.id} className="border-b last:border-b-0">
-                            <td className="py-2 px-3">{i + 1}</td>
-                            <td className="py-2 px-3">
-                              <div className="flex items-start gap-2">
-                                <img
-                                  src={resolveImageUrl(it.image_url)}
-                                  alt={it.product_name || "Бараа"}
-                                  className="h-10 w-10 rounded border object-cover"
-                                  loading="lazy"
-                                />
-                                <div className="leading-snug">
-                                  <div className="flex items-center gap-2">
-                                    <div className="font-medium">{it.product_name}</div>
-                                    {!deliveryMode && isSuperAdmin && it.product_id ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => openVariantEditor(it)}
-                                        className="inline-flex h-7 w-7 items-center justify-center rounded border text-gray-600 hover:bg-gray-50"
-                                        title="Төрөл засах"
-                                      >
-                                        <svg
-                                          viewBox="0 0 24 24"
-                                          className="h-4 w-4"
-                                          fill="none"
-                                          stroke="currentColor"
-                                          strokeWidth="2"
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
+                {!deliveryMode && (
+                  <div className="mt-4">
+                    <h4 className="font-semibold">Захиалга</h4>
+                    <div className="mt-2 overflow-x-auto rounded-lg border">
+                      <table className="min-w-[720px] w-full text-sm bg-white">
+                        <thead>
+                          <tr className="text-left text-xs text-gray-500 border-b bg-gray-50">
+                            <th className="py-2 px-3">#</th>
+                            <th className="py-2 px-3">Бараа</th>
+                            <th className="py-2 px-3">Тоо ширхэг</th>
+                            <th className="py-2 px-3">Үнэ</th>
+                            <th className="py-2 px-3">Нийт</th>
+                            <th className="py-2 px-3">Төлөв</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {items.map((it, i) => (
+                            <tr key={it.id} className="border-b last:border-b-0">
+                              <td className="py-2 px-3">{i + 1}</td>
+                              <td className="py-2 px-3">
+                                <div className="flex items-start gap-2">
+                                  <img
+                                    src={resolveImageUrl(it.image_url)}
+                                    alt={it.product_name || "Бараа"}
+                                    className="h-10 w-10 rounded border object-cover"
+                                    loading="lazy"
+                                  />
+                                  <div className="leading-snug">
+                                    <div className="flex items-center gap-2">
+                                      <div className="font-medium">{it.product_name}</div>
+                                      {isSuperAdmin && it.product_id ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => openVariantEditor(it)}
+                                          className="inline-flex h-7 w-7 items-center justify-center rounded border text-gray-600 hover:bg-gray-50"
+                                          title="Төрөл засах"
                                         >
-                                          <path d="M12 20h9" />
-                                          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                                        </svg>
-                                      </button>
+                                          <svg
+                                            viewBox="0 0 24 24"
+                                            className="h-4 w-4"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth="2"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                          >
+                                            <path d="M12 20h9" />
+                                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                                          </svg>
+                                        </button>
+                                      ) : null}
+                                    </div>
+                                    {it.variant ? (
+                                      <div className="text-xs text-gray-500">
+                                        {variantLabel(it.variant)}
+                                      </div>
                                     ) : null}
+                                    {editingItemId === it.id && (
+                                      <div className="mt-2 flex items-center gap-2">
+                                        <select
+                                          className="h-9 rounded border px-2 text-xs"
+                                          value={selectedVariantByItem[it.id] ?? ""}
+                                          onChange={(e) =>
+                                            setSelectedVariantByItem((prev) => ({
+                                              ...prev,
+                                              [it.id]: e.target.value ? Number(e.target.value) : "",
+                                            }))
+                                          }
+                                        >
+                                          <option value="">Төрөл сонгох...</option>
+                                          {variantsForProduct(it.product_id).map((v: any) => (
+                                            <option key={v.id} value={v.id}>
+                                              {variantLabel(v)}
+                                            </option>
+                                          ))}
+                                        </select>
+                                        <button
+                                          type="button"
+                                          onClick={() => saveVariant(it)}
+                                          className="h-9 rounded bg-black px-3 text-xs text-white"
+                                          disabled={savingItemId === it.id}
+                                        >
+                                          {savingItemId === it.id ? "Хадгалж байна" : "Хадгалах"}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setEditingItemId(null)}
+                                          className="h-9 rounded border px-3 text-xs text-gray-700"
+                                        >
+                                          Болих
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
-                                  {it.variant ? (
-                                    <div className="text-xs text-gray-500">
-                                      {variantLabel(it.variant)}
-                                    </div>
-                                  ) : null}
-                                  {!deliveryMode && editingItemId === it.id && (
-                                    <div className="mt-2 flex items-center gap-2">
-                                      <select
-                                        className="h-9 rounded border px-2 text-xs"
-                                        value={selectedVariantByItem[it.id] ?? ""}
-                                        onChange={(e) =>
-                                          setSelectedVariantByItem((prev) => ({
-                                            ...prev,
-                                            [it.id]: e.target.value ? Number(e.target.value) : "",
-                                          }))
-                                        }
-                                      >
-                                        <option value="">Төрөл сонгох...</option>
-                                        {variantsForProduct(it.product_id).map((v: any) => (
-                                          <option key={v.id} value={v.id}>
-                                            {variantLabel(v)}
-                                          </option>
-                                        ))}
-                                      </select>
-                                      <button
-                                        type="button"
-                                        onClick={() => saveVariant(it)}
-                                        className="h-9 rounded bg-black px-3 text-xs text-white"
-                                        disabled={savingItemId === it.id}
-                                      >
-                                        {savingItemId === it.id ? "Хадгалж байна" : "Хадгалах"}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => setEditingItemId(null)}
-                                        className="h-9 rounded border px-3 text-xs text-gray-700"
-                                      >
-                                        Болих
-                                      </button>
-                                    </div>
-                                  )}
                                 </div>
-                              </div>
-                            </td>
-                            <td className="py-2 px-3">{it.quantity}</td>
-                            <td className="py-2 px-3">{Number(it.price).toLocaleString()}₮</td>
-                            <td className="py-2 px-3">{(it.quantity * Number(it.price)).toLocaleString()}₮</td>
-                            <td className="py-2 px-3 text-sm text-gray-800">
-                              {deliveryMode
-                                ? it.status || order.status
-                                : orderStatusLabels[order.status] ||
+                              </td>
+                              <td className="py-2 px-3">{it.quantity}</td>
+                              <td className="py-2 px-3">{Number(it.price).toLocaleString()}₮</td>
+                              <td className="py-2 px-3">{(it.quantity * Number(it.price)).toLocaleString()}₮</td>
+                              <td className="py-2 px-3 text-sm text-gray-800">
+                                {orderStatusLabels[order.status] ||
                                   itemStatusLabels[it.status] ||
                                   it.status ||
                                   order.status}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
 
-                  <div className="flex justify-end mt-3 items-center gap-3">
-                    <div className="text-sm font-medium">Нийт: {Number(order.total || 0).toLocaleString()}₮</div>
+                    <div className="mt-3 flex items-center justify-end gap-3">
+                      <div className="text-sm font-medium">Нийт: {Number(order.total || 0).toLocaleString()}₮</div>
+                    </div>
                   </div>
-                </div>
+                )}
               </>
             )}
           </div>

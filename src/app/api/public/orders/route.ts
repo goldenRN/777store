@@ -965,7 +965,7 @@ export async function POST(request: NextRequest) {
     sender_invoice_no: senderInvoiceNo,
     invoice_receiver_code: receiverCode,
     sender_branch_code: senderBranchCode,
-    invoice_description: `Төлбөр order #${created.id} ${created.total}₮`,
+    invoice_description: `order #${created.id} ${created.total}₮`,
     enable_expiry: !disableExpiry,
     ...(disableExpiry ? {} : { expiry_date: formatExpiry(expiresAtForPayload) }),
     allow_partial: false,

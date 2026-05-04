@@ -293,7 +293,7 @@ export async function POST(request: NextRequest) {
     sender_invoice_no: senderInvoiceNo,
     invoice_receiver_code: receiverCode,
     sender_branch_code: senderBranchCode,
-    invoice_description: `Төлбөр delivery #${draftDeliveryOrder?.id ?? sortedItems[0]?.id ?? 0} ${totalFee}₮`,
+    invoice_description: `delivery #${draftDeliveryOrder?.id ?? sortedItems[0]?.id ?? 0} ${totalFee}₮`,
     enable_expiry: !disableExpiry,
     ...(disableExpiry ? {} : { expiry_date: expiresAt.toISOString() }),
     allow_partial: false,
