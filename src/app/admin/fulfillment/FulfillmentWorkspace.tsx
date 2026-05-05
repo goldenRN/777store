@@ -266,6 +266,55 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
     });
   }, [recentActions, recentSearchApplied]);
 
+  const groupedRecentActions = useMemo(() => {
+    const groups = new Map<
+      string,
+      {
+        key: string;
+        buyer_name: string;
+        buyer_phone: string;
+        status: string;
+        note: string | null;
+        created_at: string;
+        orderIds: number[];
+        totalQty: number;
+        items: RecentFulfillmentAction[];
+      }
+    >();
+
+    for (const action of filteredRecentActions) {
+      const key = [
+        action.buyer_phone || "",
+        action.status || "",
+        action.created_at || "",
+        action.note || "",
+      ].join("|");
+
+      const existing = groups.get(key);
+      if (existing) {
+        existing.totalQty += Number(action.qty || 0);
+        existing.items.push(action);
+        if (!existing.orderIds.includes(action.order_id)) {
+          existing.orderIds.push(action.order_id);
+        }
+      } else {
+        groups.set(key, {
+          key,
+          buyer_name: action.buyer_name,
+          buyer_phone: action.buyer_phone,
+          status: action.status,
+          note: action.note,
+          created_at: action.created_at,
+          orderIds: [action.order_id],
+          totalQty: Number(action.qty || 0),
+          items: [action],
+        });
+      }
+    }
+
+    return Array.from(groups.values());
+  }, [filteredRecentActions]);
+
   const selectedOrderIds = useMemo(
     () => Array.from(new Set(selectedRows.map((item) => item.order_id))),
     [selectedRows]
@@ -630,7 +679,8 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
               <thead className="bg-gray-50">
                 <tr>
                   <th className="p-3 text-left">Зураг</th>
-                  <th className="p-3 text-left">Бараа</th>
+                  <th className="p-3 text-left">Худалдан авагч</th>
+                  <th className="p-3 text-left">Бараанууд</th>
                   <th className="p-3 text-left">Төлөв</th>
                   <th className="p-3 text-left">Тайлбар</th>
                   <th className="p-3 text-left">Захиалга</th>
@@ -640,23 +690,25 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
               <tbody>
                 {recentLoading ? (
                   <tr>
-                    <td colSpan={6} className="p-4 text-center">Уншиж байна...</td>
+                    <td colSpan={7} className="p-4 text-center">Уншиж байна...</td>
                   </tr>
-                ) : filteredRecentActions.length === 0 ? (
+                ) : groupedRecentActions.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-4 text-center text-gray-500">
+                    <td colSpan={7} className="p-4 text-center text-gray-500">
                       Сүүлийн олголтын түүх олдсонгүй.
                     </td>
                   </tr>
                 ) : (
-                  filteredRecentActions.map((action) => (
-                    <tr key={`${action.item_id}-${action.created_at}`} className="border-t">
+                  groupedRecentActions.map((group) => {
+                    const cover = group.items[0];
+                    return (
+                    <tr key={group.key} className="border-t align-top">
                       <td className="p-3 align-top">
                         <div className="h-12 w-12 overflow-hidden rounded border bg-gray-100">
-                          {action.image_url ? (
+                          {cover?.image_url ? (
                             <Image
-                              src={action.image_url}
-                              alt={action.product_name}
+                              src={cover.image_url}
+                              alt={cover.product_name}
                               width={48}
                               height={48}
                               className="h-full w-full object-cover"
@@ -665,37 +717,49 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
                           ) : (
                             <img
                               src="/logo.png"
-                              alt={action.product_name}
+                              alt={cover?.product_name || "Бараа"}
                               className="h-full w-full object-cover"
                             />
                           )}
                         </div>
                       </td>
                       <td className="p-3 align-top">
-                        <div className="font-medium">{action.product_name}</div>
+                        <div className="font-medium">{group.buyer_name || "—"}</div>
                         <div className="mt-1 text-xs text-gray-500">
-                          {action.buyer_name} • {action.buyer_phone}
+                          {group.buyer_phone}
                         </div>
-                        {action.variant_label ? (
-                          <div className="mt-1 text-xs text-gray-500">{action.variant_label}</div>
-                        ) : null}
+                        <div className="mt-2 inline-flex rounded-full bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-700">
+                          {group.items.length} бараа • {group.totalQty}ш
+                        </div>
                       </td>
                       <td className="p-3 align-top">
-                        <span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusBadgeClass(action.status)}`}>
-                          {action.status}
+                        <div className="space-y-2">
+                          {group.items.map((item) => (
+                            <div key={`${item.item_id}-${item.order_id}`} className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                              <div className="font-medium text-gray-900">{item.product_name}</div>
+                              <div className="mt-1 text-xs text-gray-500">
+                                {item.variant_label || "Төрөлгүй"} • {item.qty}ш
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="p-3 align-top">
+                        <span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusBadgeClass(group.status)}`}>
+                          {group.status}
                         </span>
                       </td>
                       <td className="p-3 align-top text-xs text-gray-600">
-                        {action.note || "-"}
+                        {group.note || "-"}
                       </td>
                       <td className="p-3 align-top text-xs text-gray-500">
-                        #{action.order_id} • {action.qty}ш
+                        {group.orderIds.map((id) => `#${id}`).join(", ")}
                       </td>
                       <td className="p-3 align-top text-xs text-gray-500">
-                        {new Date(action.created_at).toLocaleString()}
+                        {new Date(group.created_at).toLocaleString()}
                       </td>
                     </tr>
-                  ))
+                  )})
                 )}
               </tbody>
             </table>
