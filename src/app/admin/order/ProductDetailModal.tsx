@@ -24,10 +24,14 @@ export default function ProductDetailModal({
   }, [productDetail?.product_id, productDetail?.product_name]);
 
   const receivedCount = useMemo(
-    () => buyers.filter((buyer) => buyer.received).length,
+    () => buyers.filter((buyer) => buyer.received).reduce((sum, buyer) => sum + Math.max(0, Number(buyer.qty || 0)), 0),
     [buyers]
   );
-  const pendingCount = Math.max(0, buyers.length - receivedCount);
+  const totalBuyerQty = useMemo(
+    () => buyers.reduce((sum, buyer) => sum + Math.max(0, Number(buyer.qty || 0)), 0),
+    [buyers]
+  );
+  const pendingCount = Math.max(0, totalBuyerQty - receivedCount);
 
   const visibleBuyers = useMemo(() => {
     if (filter === "received") return buyers.filter((buyer) => buyer.received);
@@ -67,7 +71,7 @@ export default function ProductDetailModal({
           <button type="button" onClick={() => setFilter("all")} className={filterButtonClass("all")}>
             <span>Бүгд</span>
             <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${filter === "all" ? "bg-white/15 text-white" : "bg-gray-100 text-gray-700"}`}>
-              {buyers.length}
+              {totalBuyerQty}
             </span>
           </button>
           <button type="button" onClick={() => setFilter("received")} className={filterButtonClass("received")}>

@@ -383,7 +383,7 @@ export async function GET(request: NextRequest) {
       unit_price: item.price,
       total_price: item.price * item.quantity,
       status: item.status ?? null,
-      received: isHandedStatus(item.status),
+      received: isHandedStatus(item.status) || isDeliveryTakenStatus(item.status),
     });
     grouped.set(key, current);
 
