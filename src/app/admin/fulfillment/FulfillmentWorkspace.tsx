@@ -267,6 +267,13 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
   }, [recentActions, recentSearchApplied]);
 
   const groupedRecentActions = useMemo(() => {
+    const normalizeActionGroupTime = (value: string) => {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return value;
+      date.setMilliseconds(0);
+      return date.toISOString();
+    };
+
     const groups = new Map<
       string,
       {
@@ -283,11 +290,13 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
     >();
 
     for (const action of filteredRecentActions) {
+      const normalizedCreatedAt = normalizeActionGroupTime(action.created_at);
       const key = [
         action.buyer_phone || "",
         action.status || "",
-        action.created_at || "",
+        normalizedCreatedAt,
         action.note || "",
+        action.actor_phone || action.actor_name || "",
       ].join("|");
 
       const existing = groups.get(key);
