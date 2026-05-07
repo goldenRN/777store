@@ -17,24 +17,25 @@ export default function ProductDetailModal({
   onClose,
 }: ProductDetailModalProps) {
   const [filter, setFilter] = useState<BuyerFilter>("all");
+  const buyers = productDetail?.buyers ?? [];
 
   useEffect(() => {
     setFilter("all");
   }, [productDetail?.product_id, productDetail?.product_name]);
 
-  if (!productDetail) return null;
-
   const receivedCount = useMemo(
-    () => productDetail.buyers.filter((buyer) => buyer.received).length,
-    [productDetail.buyers]
+    () => buyers.filter((buyer) => buyer.received).length,
+    [buyers]
   );
-  const pendingCount = Math.max(0, productDetail.buyers.length - receivedCount);
+  const pendingCount = Math.max(0, buyers.length - receivedCount);
 
   const visibleBuyers = useMemo(() => {
-    if (filter === "received") return productDetail.buyers.filter((buyer) => buyer.received);
-    if (filter === "pending") return productDetail.buyers.filter((buyer) => !buyer.received);
-    return productDetail.buyers;
-  }, [filter, productDetail.buyers]);
+    if (filter === "received") return buyers.filter((buyer) => buyer.received);
+    if (filter === "pending") return buyers.filter((buyer) => !buyer.received);
+    return buyers;
+  }, [buyers, filter]);
+
+  if (!productDetail) return null;
 
   const filterButtonClass = (value: BuyerFilter) =>
     `inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold transition ${
@@ -66,7 +67,7 @@ export default function ProductDetailModal({
           <button type="button" onClick={() => setFilter("all")} className={filterButtonClass("all")}>
             <span>Бүгд</span>
             <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${filter === "all" ? "bg-white/15 text-white" : "bg-gray-100 text-gray-700"}`}>
-              {productDetail.buyers.length}
+              {buyers.length}
             </span>
           </button>
           <button type="button" onClick={() => setFilter("received")} className={filterButtonClass("received")}>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import type { ArrivedTarget } from "./types";
 
@@ -36,6 +37,14 @@ export default function ArrivedModal({
 }: ArrivedModalProps) {
   const isEditMode = mode === "edit";
   const hasIssuedItems = Number(target?.handedQty ?? 0) > 0 || Number(target?.deliveryQty ?? 0) > 0;
+  const [confirmingRevert, setConfirmingRevert] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setConfirmingRevert(false);
+    }
+  }, [open]);
+
   return (
     <Modal open={open} onClose={onClose} title={isEditMode ? "Карго засах" : "Бараа ирсэн"}>
       <div className="space-y-4">
@@ -91,10 +100,37 @@ export default function ArrivedModal({
           />
         </div>
 
+        {isEditMode && confirmingRevert ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+            <div className="text-sm font-semibold text-red-700">Анхааруулга</div>
+            <div className="mt-1 text-sm text-red-600">
+              Энэ барааг `Бараа ирсэн` төлөвөөс хасаад `Хүлээгдэж буй` руу буцаана. Карго болон тайлбарын мэдээлэл
+              мөн цэвэрлэгдэнэ.
+            </div>
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmingRevert(false)}
+                className="rounded border border-red-200 px-4 py-2 text-sm text-red-700"
+              >
+                Болих
+              </button>
+              <button
+                type="button"
+                onClick={onRevertToPending}
+                className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={saving}
+              >
+                Тийм, буцаая
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         <div className="flex justify-end gap-2">
           {isEditMode ? (
             <button
-              onClick={onRevertToPending}
+              onClick={() => setConfirmingRevert(true)}
               className="rounded border border-amber-300 px-4 py-2 text-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={saving || hasIssuedItems}
               title={

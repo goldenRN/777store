@@ -153,8 +153,9 @@ function isClosedProduct(
   const remaining = Math.max(0, effectiveStock - orderedQty);
   const stockLimitEnabled = effectiveStock > 0;
   const closedByStock = isReady ? remaining <= 0 : stockLimitEnabled && remaining <= 0;
+  const closedByManual = !isReady && product.order_accept_status === "CLOSED";
   return {
-    closed: product.order_accept_status === "CLOSED" || expired || closedByStock,
+    closed: closedByManual || expired || closedByStock,
     effectiveStock,
     orderedQty,
   };
@@ -176,9 +177,7 @@ export async function GET(request: NextRequest) {
   const skip = Math.max(page - 1, 0) * take;
 
   const now = new Date();
-  const where: Prisma.AdminProductWhereInput = {
-    order_accept_status: { not: "CLOSED" },
-  };
+  const where: Prisma.AdminProductWhereInput = {};
 
   if (type) {
     const typeWhere = buildTypeWhere(type);
@@ -221,7 +220,7 @@ export async function GET(request: NextRequest) {
   const pickRandomIds = async () => {
     // Oversample because we still filter out "closed" items after computing stock/expiry.
     const oversample = Math.min(Math.max(take * 8, take), 400);
-    const clauses: Prisma.Sql[] = [Prisma.sql`p."order_accept_status" <> 'CLOSED'`];
+    const clauses: Prisma.Sql[] = [];
 
     if (q) {
       const like = `%${q}%`;

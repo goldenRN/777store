@@ -539,7 +539,6 @@ export default function AdminOrdersTable() {
       alert("Ирж авсан эсвэл хүргэлтэнд бүртгэгдсэн тоо байгаа тул буцаах боломжгүй.");
       return;
     }
-    if (!confirm(`“${arrivedTarget.productName}”-г “Хүлээгдэж буй” руу буцаах уу?`)) return;
 
     setArrivedSaving(true);
     try {
