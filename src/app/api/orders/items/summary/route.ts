@@ -284,6 +284,10 @@ export async function GET(request: NextRequest) {
   const deliveryByProduct = new Map<number, number>();
   const handedByVariant = new Map<string, number>();
   const deliveryByVariant = new Map<string, number>();
+  const buyersByProduct = new Map<
+    number,
+    { order_id: number; name: string; phone: string; qty: number; unit_price: number; total_price: number; status: string | null; received: boolean }[]
+  >();
   for (const product of products) {
     const byImage = new Map<string, number[]>();
     const byPrice = new Map<number, number[]>();
@@ -314,10 +318,18 @@ export async function GET(request: NextRequest) {
         },
       },
       select: {
+        order_id: true,
         product_id: true,
         variant_id: true,
+        price: true,
         quantity: true,
         status: true,
+        order: {
+          select: {
+            name: true,
+            phone1: true,
+          },
+        },
       },
     });
 
@@ -334,6 +346,19 @@ export async function GET(request: NextRequest) {
         deliveryByProduct.set(item.product_id, (deliveryByProduct.get(item.product_id) ?? 0) + qty);
         if (variantKey) deliveryByVariant.set(variantKey, (deliveryByVariant.get(variantKey) ?? 0) + qty);
       }
+
+      const list = buyersByProduct.get(item.product_id) ?? [];
+      list.push({
+        order_id: item.order_id,
+        name: item.order?.name ?? "",
+        phone: item.order?.phone1 ?? "",
+        qty: item.quantity,
+        unit_price: item.price,
+        total_price: item.price * item.quantity,
+        status: item.status ?? null,
+        received: isHandedStatus(item.status) || isDeliveryTakenStatus(item.status),
+      });
+      buyersByProduct.set(item.product_id, list);
     }
   }
 
@@ -539,6 +564,8 @@ export async function GET(request: NextRequest) {
         if (!productArrived && !variantArrived && !orderArrived) return null;
       }
 
+      const resolvedBuyers = productId ? buyersByProduct.get(productId) ?? group.buyers : group.buyers;
+
       return {
         ...group,
         handed_qty: handedByProduct.get(productId) ?? group.handed_qty ?? 0,
@@ -555,7 +582,8 @@ export async function GET(request: NextRequest) {
           group.arrival_status === "Бараа ирсэн" || (allVariantsArrived && uniformVariantCargo)
             ? "Бараа ирсэн"
             : group.arrival_status ?? null,
-        order_count: group.buyers.length,
+        buyers: resolvedBuyers,
+        order_count: resolvedBuyers.length,
         variants: visibleVariants,
         all_variants_arrived: allVariantsArrived,
         uniform_variant_cargo: uniformVariantCargo,
