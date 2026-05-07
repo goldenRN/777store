@@ -105,7 +105,7 @@ type SummaryGroup = {
   total_qty: number;
   order_count: number;
   item_ids: number[];
-  buyers: { order_id: number; name: string; phone: string; qty: number; unit_price: number; total_price: number }[];
+  buyers: { order_id: number; name: string; phone: string; qty: number; unit_price: number; total_price: number; status: string | null; received: boolean }[];
   variants: SummaryVariant[];
   all_variants_arrived?: boolean;
   uniform_variant_cargo?: boolean;
@@ -382,6 +382,8 @@ export async function GET(request: NextRequest) {
       qty: item.quantity,
       unit_price: item.price,
       total_price: item.price * item.quantity,
+      status: item.status ?? null,
+      received: isHandedStatus(item.status),
     });
     grouped.set(key, current);
 

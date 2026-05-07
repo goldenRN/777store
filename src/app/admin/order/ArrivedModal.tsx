@@ -15,6 +15,7 @@ type ArrivedModalProps = {
   onQtyChange: (value: string) => void;
   onCargoFeeChange: (value: string) => void;
   onCargoNoteChange: (value: string) => void;
+  onRevertToPending?: () => void;
   onSave: () => void;
 };
 
@@ -30,9 +31,11 @@ export default function ArrivedModal({
   onQtyChange,
   onCargoFeeChange,
   onCargoNoteChange,
+  onRevertToPending,
   onSave,
 }: ArrivedModalProps) {
   const isEditMode = mode === "edit";
+  const hasIssuedItems = Number(target?.handedQty ?? 0) > 0 || Number(target?.deliveryQty ?? 0) > 0;
   return (
     <Modal open={open} onClose={onClose} title={isEditMode ? "Карго засах" : "Бараа ирсэн"}>
       <div className="space-y-4">
@@ -89,6 +92,20 @@ export default function ArrivedModal({
         </div>
 
         <div className="flex justify-end gap-2">
+          {isEditMode ? (
+            <button
+              onClick={onRevertToPending}
+              className="rounded border border-amber-300 px-4 py-2 text-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={saving || hasIssuedItems}
+              title={
+                hasIssuedItems
+                  ? "Ирж авсан эсвэл хүргэлтэнд бүртгэгдсэн тоо байгаа тул буцаах боломжгүй."
+                  : "Барааг Хүлээгдэж буй руу буцаана."
+              }
+            >
+              Хүлээгдэж буй руу буцаах
+            </button>
+          ) : null}
           <button onClick={onClose} className="rounded border px-4 py-2">
             Болих
           </button>

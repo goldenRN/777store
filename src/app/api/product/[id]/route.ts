@@ -6,6 +6,16 @@ import { unlink } from "fs/promises";
 import path from "path";
 import { normalizeBulkTiers } from "@/lib/bulkPricing";
 
+const isReadyTypeLike = (type: { name?: string | null; has_duration?: boolean | null } | null | undefined) => {
+  if (!type) return false;
+  if (type.has_duration === true) return false;
+  const name = String(type.name ?? "").toLowerCase();
+  if (name.includes("бэлэн") || name.includes("ready")) return true;
+  if (name.includes("захиал") || name.includes("урьдчил") || name.includes("preorder")) return false;
+  if (name.includes("лайв") || name.includes("live")) return false;
+  return type.has_duration === false;
+};
+
 const tryDeleteFileIfUnused = async (imageUrl: string | null) => {
   if (!imageUrl) return;
   if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) return;
@@ -58,6 +68,7 @@ export async function PUT(
       ? Math.round(Number(body.cargo_fee))
       : null;
   const cargo_note = body?.cargo_note != null ? String(body.cargo_note).trim() : null;
+  const explicitOrderAcceptStatus = Object.prototype.hasOwnProperty.call(body ?? {}, "order_accept_status");
   const order_accept_status = body?.order_accept_status
     ? String(body.order_accept_status).toUpperCase()
     : null;
@@ -68,10 +79,36 @@ export async function PUT(
 
   const before = await prisma.adminProduct.findUnique({
     where: { id },
-    select: { name: true, price: true, discount_price: true, stock: true },
+    select: {
+      name: true,
+      price: true,
+      discount_price: true,
+      stock: true,
+      type: {
+        select: {
+          name: true,
+          has_duration: true,
+        },
+      },
+    },
   });
 
   await prisma.$transaction(async (tx) => {
+    const nextTypeId = body?.type_id ? Number(body.type_id) : null;
+    const nextType = nextTypeId
+      ? await tx.adminType.findUnique({
+          where: { id: nextTypeId },
+          select: { name: true, has_duration: true },
+        })
+      : null;
+
+    const movedToReady = !isReadyTypeLike(before?.type) && isReadyTypeLike(nextType);
+    const nextOrderAcceptStatus = explicitOrderAcceptStatus
+      ? order_accept_status || undefined
+      : movedToReady
+        ? "OPEN"
+        : undefined;
+
     await tx.adminProduct.update({
       where: { id },
       data: {
@@ -87,20 +124,26 @@ export async function PUT(
         arrival_status: arrival_status || undefined,
         cargo_fee: cargo_fee ?? null,
         cargo_note: cargo_note || null,
-        order_accept_status: order_accept_status || undefined,
+        order_accept_status: nextOrderAcceptStatus,
         category_id: body?.category_id ? Number(body.category_id) : null,
         subcategory_id: body?.subcategory_id ? Number(body.subcategory_id) : null,
         brand_id: body?.brand_id ? Number(body.brand_id) : null,
         unit_id: body?.unit_id ? Number(body.unit_id) : null,
-        type_id: body?.type_id ? Number(body.type_id) : null,
+        type_id: nextTypeId,
       },
     });
 
-    // If the main product is closed for orders, all variants must be closed as well.
-    if (order_accept_status === "CLOSED") {
+    if ((nextOrderAcceptStatus ?? order_accept_status) === "CLOSED") {
       await tx.adminProductVariant.updateMany({
         where: { product_id: id },
         data: { order_accept_status: "CLOSED" },
+      });
+    }
+
+    if (movedToReady && !explicitOrderAcceptStatus) {
+      await tx.adminProductVariant.updateMany({
+        where: { product_id: id },
+        data: { order_accept_status: "OPEN" },
       });
     }
   });

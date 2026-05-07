@@ -41,6 +41,7 @@ type RecentFulfillmentAction = {
   actor_name: string | null;
   actor_phone: string | null;
   created_at: string;
+  delivery_address: string | null;
 };
 
 type RecentActionFilter = "ALL" | "ирж авсан" | "Хүргэлтээр авсан" | "Буцаагдсан";
@@ -691,6 +692,7 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
                   <th className="p-3 text-left">Худалдан авагч</th>
                   <th className="p-3 text-left">Бараанууд</th>
                   <th className="p-3 text-left">Төлөв</th>
+                  <th className="p-3 text-left">Хаяг</th>
                   <th className="p-3 text-left">Тайлбар</th>
                   <th className="p-3 text-left">Захиалга</th>
                   <th className="p-3 text-left">Огноо</th>
@@ -699,11 +701,11 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
               <tbody>
                 {recentLoading ? (
                   <tr>
-                    <td colSpan={7} className="p-4 text-center">Уншиж байна...</td>
+                    <td colSpan={8} className="p-4 text-center">Уншиж байна...</td>
                   </tr>
                 ) : groupedRecentActions.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-4 text-center text-gray-500">
+                    <td colSpan={8} className="p-4 text-center text-gray-500">
                       Сүүлийн олголтын түүх олдсонгүй.
                     </td>
                   </tr>
@@ -757,6 +759,15 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
                         <span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusBadgeClass(group.status)}`}>
                           {group.status}
                         </span>
+                      </td>
+                      <td className="p-3 align-top text-xs text-gray-600">
+                        {group.status === "Хүргэлтэнд бүртгэгдсэн" ? (
+                          <div className="max-w-[220px] whitespace-pre-wrap break-words" title={group.items.find((item) => item.delivery_address)?.delivery_address || "-"}>
+                            {group.items.find((item) => item.delivery_address)?.delivery_address || "-"}
+                          </div>
+                        ) : (
+                          "-"
+                        )}
                       </td>
                       <td className="p-3 align-top text-xs text-gray-600">
                         {group.note || "-"}

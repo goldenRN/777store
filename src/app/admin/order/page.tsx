@@ -463,6 +463,8 @@ export default function AdminOrdersTable() {
       variantId: null,
       variantLabel: null,
       applyToAllVariants: Array.isArray(p.variants) && p.variants.length > 0,
+      handedQty: p.handed_qty ?? 0,
+      deliveryQty: p.delivery_qty ?? 0,
     });
     setArrivedQty(String(p.arrived_qty ?? p.total_qty ?? 0));
     setArrivedCargoFee(String(p.cargo_fee ?? 0));
@@ -479,6 +481,8 @@ export default function AdminOrdersTable() {
       variantId: v.variant_id,
       variantLabel: v.label,
       applyToAllVariants: false,
+      handedQty: v.handed_qty ?? 0,
+      deliveryQty: v.delivery_qty ?? 0,
     });
     setArrivedQty(String(v.arrived_qty ?? v.ordered_qty ?? 0));
     setArrivedCargoFee(String(v.cargo_fee ?? 0));
@@ -520,6 +524,44 @@ export default function AdminOrdersTable() {
       setArrivedTarget(null);
       setArrivedQty("");
       alert(arrivedMode === "edit" ? "Карго мэдээлэл амжилттай шинэчлэгдлээ." : "Амжилттай хадгаллаа. “Бараа ирсэн” цэсэнд харагдана.");
+      await fetchProductSummary();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : typeof err === "string" ? err : "Алдаа гарлаа";
+      alert(`⚠️ ${message}`);
+    } finally {
+      setArrivedSaving(false);
+    }
+  };
+
+  const revertArrivedToPending = async () => {
+    if (!arrivedTarget) return;
+    if ((arrivedTarget.handedQty ?? 0) > 0 || (arrivedTarget.deliveryQty ?? 0) > 0) {
+      alert("Ирж авсан эсвэл хүргэлтэнд бүртгэгдсэн тоо байгаа тул буцаах боломжгүй.");
+      return;
+    }
+    if (!confirm(`“${arrivedTarget.productName}”-г “Хүлээгдэж буй” руу буцаах уу?`)) return;
+
+    setArrivedSaving(true);
+    try {
+      const res = await fetch(`/api/orders/items/mark-arrived`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...getActorHeaders() },
+        body: JSON.stringify({
+          action: "revert_pending",
+          productId: arrivedTarget.productId,
+          variantId: arrivedTarget.variantId,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.message || "Буцааж чадсангүй");
+
+      setArrivedOpen(false);
+      setArrivedTarget(null);
+      setArrivedQty("");
+      setArrivedCargoFee("");
+      setArrivedCargoNote("");
+      setArrivedMode("arrived");
+      alert("Бараа “Хүлээгдэж буй” руу буцлаа.");
       await fetchProductSummary();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : typeof err === "string" ? err : "Алдаа гарлаа";
@@ -966,6 +1008,7 @@ export default function AdminOrdersTable() {
         onQtyChange={setArrivedQty}
         onCargoFeeChange={setArrivedCargoFee}
         onCargoNoteChange={setArrivedCargoNote}
+        onRevertToPending={arrivedMode === "edit" ? revertArrivedToPending : undefined}
         onSave={saveArrived}
       />
 

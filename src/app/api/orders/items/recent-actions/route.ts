@@ -162,7 +162,24 @@ export async function GET(request: NextRequest) {
     },
   });
 
+  const deliveryRows = await prisma.adminDeliveryOrderItem.findMany({
+    where: { order_item_id: { in: itemIds } },
+    select: {
+      order_item_id: true,
+      delivery_order: {
+        select: {
+          name: true,
+          phone: true,
+          address: true,
+          district_name: true,
+          khoroo_name: true,
+        },
+      },
+    },
+  });
+
   const itemMap = new Map(itemRows.map((row) => [row.id, row]));
+  const deliveryMap = new Map(deliveryRows.map((row) => [row.order_item_id, row.delivery_order]));
 
   const getVariantLabel = (variant?: { sku: string | null; attribute: unknown } | null) => {
     if (!variant) return null;
@@ -181,20 +198,28 @@ export async function GET(request: NextRequest) {
     .map((entry) => {
       const item = itemMap.get(entry.itemId);
       if (!item) return null;
+      const delivery = deliveryMap.get(entry.itemId);
+      const isDeliveryRegistered = entry.status === "Хүргэлтэнд бүртгэгдсэн";
+      const deliveryAddress = isDeliveryRegistered
+        ? [delivery?.district_name, delivery?.khoroo_name, delivery?.address]
+            .filter((value) => String(value || "").trim().length > 0)
+            .join(" / ") || null
+        : null;
       return {
         item_id: item.id,
         order_id: item.order_id,
         product_name: item.product_name,
         image_url: item.image_url ?? null,
         qty: item.quantity,
-        buyer_name: item.order?.name ?? "",
-        buyer_phone: item.order?.phone1 ?? "",
+        buyer_name: isDeliveryRegistered ? delivery?.name || item.order?.name || "" : item.order?.name || "",
+        buyer_phone: isDeliveryRegistered ? delivery?.phone || item.order?.phone1 || "" : item.order?.phone1 || "",
         variant_label: getVariantLabel(item.variant),
         status: entry.status,
         note: entry.note ?? item.return_note ?? null,
         actor_name: entry.actorName,
         actor_phone: entry.actorPhone,
         created_at: entry.createdAt,
+        delivery_address: deliveryAddress,
       };
     })
     .filter(Boolean)

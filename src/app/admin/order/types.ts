@@ -39,6 +39,8 @@ export type ProductBuyer = {
   qty: number;
   unit_price: number;
   total_price: number;
+  status: string | null;
+  received: boolean;
 };
 
 export type ProductVariantSummary = {
@@ -115,6 +117,8 @@ export type ArrivedTarget = {
   variantId: number | null;
   variantLabel: string | null;
   applyToAllVariants: boolean;
+  handedQty?: number;
+  deliveryQty?: number;
 };
 
 export type ProductSortField = "product_name" | "total_qty" | "product_stock" | "remaining";
