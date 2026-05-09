@@ -22,6 +22,8 @@ type PublicProduct = {
   ordered_qty?: number | null;
   image_url: string | null;
   type_name?: string | null;
+  order_accept_status?: string | null;
+  is_closed?: boolean;
   type_has_duration?: boolean;
   duration_hours?: number | null;
   created_at?: string | null;

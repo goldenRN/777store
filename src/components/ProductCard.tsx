@@ -22,6 +22,8 @@ type ProductCardProps = {
   ordered_qty?: number | null;
   image_url: string | null;
   type_name?: string | null;
+  order_accept_status?: string | null;
+  is_closed?: boolean;
   type_has_duration?: boolean;
   duration_hours?: number | null;
   created_at?: string | null;
@@ -51,6 +53,8 @@ export default function ProductCard({
   ordered_qty,
   image_url,
   type_name,
+  order_accept_status,
+  is_closed = false,
   type_has_duration,
   duration_hours,
   created_at,
@@ -77,7 +81,8 @@ export default function ProductCard({
   })();
   const stockNumber = Number(stock || 0);
   const remaining = Math.max(0, stockNumber - Number(ordered_qty || 0));
-  const canAddToCart = stockNumber > 0 ? remaining > 0 : true;
+  const statusClosed = order_accept_status === "CLOSED" || is_closed;
+  const canAddToCart = statusClosed ? false : stockNumber > 0 ? remaining > 0 : true;
 
   const variantLabel = (v: Variant) => getVariantLabel(v.attribute, v.sku, v.id);
 
@@ -148,6 +153,11 @@ export default function ProductCard({
     <div className="flex flex-col rounded-3xl border border-[#e5e7eb] bg-slate-50 shadow-sm">
       <div className="relative">
         <DiscountBadge percent={discountPercent} />
+        {is_closed ? (
+          <div className="absolute left-3 top-3 z-10 rounded-full bg-red-500 px-3 py-1 text-[11px] font-semibold text-white shadow-sm">
+            Захиалга хаагдсан
+          </div>
+        ) : null}
         {/* <div className="absolute right-4 top-4 text-[10px] font-bold text-[var(--navy-900)]">
           VMLC
           "
@@ -228,7 +238,7 @@ export default function ProductCard({
           <button
             onClick={() => {
               if (!canAddToCart) {
-                toast({ title: "Захиалах тоо дууссан байна" });
+                toast({ title: statusClosed ? "Захиалга хаагдсан байна" : "Захиалах тоо дууссан байна" });
                 return;
               }
               loadVariants();

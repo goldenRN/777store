@@ -14,6 +14,8 @@ type Product = {
   ordered_qty?: number | null;
   image_url: string | null;
   type_name?: string | null;
+  order_accept_status?: string | null;
+  is_closed?: boolean;
   type_has_duration?: boolean;
   duration_hours?: number | null;
   created_at?: string | null;
@@ -107,13 +109,19 @@ export default function AllProductsSection({
     }
     // shuffle only on client to avoid hydration mismatch
     if (isClient && categoryId === "all" && subcategoryId === "all" && sort === "newest") {
-      const shuffled = [...data];
-      for (let i = shuffled.length - 1; i > 0; i -= 1) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-      }
-      return shuffled;
+      const shuffle = (input: Product[]) => {
+        const shuffled = [...input];
+        for (let i = shuffled.length - 1; i > 0; i -= 1) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        return shuffled;
+      };
+      const openItems = data.filter((item) => !item.is_closed);
+      const closedItems = data.filter((item) => item.is_closed);
+      return [...shuffle(openItems), ...shuffle(closedItems)];
     }
+    data.sort((a, b) => Number(Boolean(a.is_closed)) - Number(Boolean(b.is_closed)));
     return data;
   }, [products, categoryId, subcategoryId, discountOnly, sort, isClient]);
 
@@ -286,6 +294,8 @@ export default function AllProductsSection({
                 ordered_qty={item.ordered_qty}
                 image_url={item.image_url}
                 type_name={item.type_name}
+                order_accept_status={item.order_accept_status}
+                is_closed={item.is_closed}
                 type_has_duration={item.type_has_duration}
                 duration_hours={item.duration_hours}
                 created_at={item.created_at}

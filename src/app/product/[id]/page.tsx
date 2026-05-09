@@ -15,6 +15,7 @@ type ProductDetail = {
   bulk_prices?: unknown | null;
   stock: number;
   ordered_qty?: number | null;
+  order_accept_status?: string | null;
   material: string | null;
   image_url: string | null;
   images: string[];
@@ -189,6 +190,7 @@ const fetchProduct = async (id: string): Promise<ProductDetail | null> => {
     bulk_prices: (product as any).bulk_prices ?? null,
     stock: product.stock,
     ordered_qty: totalOrdered,
+    order_accept_status: (product as any).order_accept_status ?? null,
     material: product.material,
     image_url: product.images?.[0]?.image_url ?? null,
     images: product.images?.map((img) => img.image_url) ?? [],

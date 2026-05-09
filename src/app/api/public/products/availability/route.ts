@@ -18,10 +18,17 @@ export async function POST(request: NextRequest) {
       duration_hours: true,
       created_at: true,
       order_accept_status: true,
+      type: {
+        select: {
+          name: true,
+        },
+      },
     },
   });
 
   const items = products.map((p) => {
+    const typeName = String(p.type?.name || "").toLowerCase();
+    const isReady = typeName.includes("бэлэн") || typeName.includes("ready");
     const hasDuration = Number(p.duration_hours || 0) > 0;
     const endMs =
       p.created_at && hasDuration
@@ -30,8 +37,9 @@ export async function POST(request: NextRequest) {
     const expired = endMs ? endMs <= now.getTime() : false;
     const remaining = Math.max(0, Number(p.stock || 0) - Number(p.ordered_qty || 0));
     const stockLimitEnabled = Number(p.stock || 0) > 0;
-    const closedByStock = hasDuration ? stockLimitEnabled && remaining <= 0 : remaining <= 0;
-    const closed = p.order_accept_status === "CLOSED" || expired || closedByStock;
+    const closedByStock = isReady ? remaining <= 0 : hasDuration ? stockLimitEnabled && remaining <= 0 : remaining <= 0;
+    const closedByManual = !isReady && p.order_accept_status === "CLOSED";
+    const closed = closedByManual || expired || closedByStock;
     return { id: p.id, closed, remaining, expired };
   });
 

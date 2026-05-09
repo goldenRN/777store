@@ -30,6 +30,7 @@ type ProductDetail = {
   bulk_prices?: unknown | null;
   stock: number;
   ordered_qty?: number | null;
+  order_accept_status?: string | null;
   material: string | null;
   image_url: string | null;
   images: string[];
@@ -380,8 +381,10 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
     return sum > 0 ? sum : null;
   }, [product.stock, product.variants]);
 
+  const productStatusClosed = product.order_accept_status === "CLOSED";
   const isClosed =
     selectedVariant?.order_accept_status === "CLOSED" ||
+    (!selectedVariant && productStatusClosed) ||
     (stockNumber > 0 && remainingQty !== null && remainingQty <= 0);
   const canAddToCart = stockNumber > 0 ? !isClosed : true;
 
@@ -516,7 +519,7 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
             </div>
           )}
 
-          {isPreorderLive && stockNumber > 0 && isClosed && (
+          {isPreorderLive && isClosed && (
             <div className="font-semibold text-red-600">Захиалга хаагдсан</div>
           )}
 

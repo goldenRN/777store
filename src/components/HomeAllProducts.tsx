@@ -13,6 +13,8 @@ type Product = {
   ordered_qty?: number | null;
   image_url: string | null;
   type_name?: string | null;
+  order_accept_status?: string | null;
+  is_closed?: boolean;
   type_has_duration?: boolean;
   duration_hours?: number | null;
   created_at?: string | null;
@@ -176,6 +178,8 @@ export default function HomeAllProducts({
                 ordered_qty={item.ordered_qty}
                 image_url={item.image_url}
                 type_name={item.type_name}
+                order_accept_status={item.order_accept_status}
+                is_closed={item.is_closed}
                 type_has_duration={item.type_has_duration}
                 duration_hours={item.duration_hours}
                 created_at={item.created_at}

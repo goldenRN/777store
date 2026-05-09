@@ -91,6 +91,17 @@ const countSelect = Prisma.validator<Prisma.AdminProductSelect>()({
 type ListedProduct = Prisma.AdminProductGetPayload<{ select: typeof listSelect }>;
 type CountedProduct = Prisma.AdminProductGetPayload<{ select: typeof countSelect }>;
 
+function shouldHideClosedProduct(
+  product: {
+    type: { name: string; has_duration: boolean } | null;
+  },
+  closed: boolean
+) {
+  if (!closed) return false;
+  const { isReady } = getTypeFlags(product.type?.name ?? "");
+  return isReady;
+}
+
 function buildTypeWhere(type: string) {
   const normalized = type.trim().toLowerCase();
   if (!normalized) return undefined;
@@ -315,7 +326,7 @@ export async function GET(request: NextRequest) {
   const mapped = items
     .map((product) => {
       const { closed, effectiveStock, orderedQty } = isClosedProduct(product, now);
-      if (closed) return null;
+      if (shouldHideClosedProduct(product, closed)) return null;
       return {
         id: product.id,
         name: product.name,
@@ -338,22 +349,31 @@ export async function GET(request: NextRequest) {
         brand_name: product.brand?.name ?? "",
         image_url: product.images[0]?.image_url ?? getFallbackVariantImage(product.variants) ?? null,
         created_at: product.created_at,
+        order_accept_status: product.order_accept_status,
+        is_closed: closed,
       };
     })
     .filter(Boolean);
 
   const orderedMapped = (() => {
-    if (!random || randomIds.length === 0) return mapped;
+    const base = [...(mapped as NonNullable<(typeof mapped)[number]>[])];
+    base.sort((a, b) => {
+      const aClosed = a.is_closed ? 1 : 0;
+      const bClosed = b.is_closed ? 1 : 0;
+      if (aClosed !== bClosed) return aClosed - bClosed;
+      return 0;
+    });
+    if (!random || randomIds.length === 0) return base;
     const positionById = new Map<number, number>();
     randomIds.forEach((id, index) => positionById.set(id, index));
-    return (mapped as NonNullable<(typeof mapped)[number]>[])
+    return base
       .sort((a, b) => (positionById.get(a.id) ?? 0) - (positionById.get(b.id) ?? 0))
       .slice(0, take);
   })();
 
   const total = countRows.reduce((acc, product) => {
     const { closed } = isClosedProduct(product, now);
-    return closed ? acc : acc + 1;
+    return shouldHideClosedProduct(product, closed) ? acc : acc + 1;
   }, 0);
 
   return NextResponse.json({
