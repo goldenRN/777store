@@ -119,7 +119,7 @@ export default function ProductCardVariantSheet({
                         {variantPrice.toLocaleString()}₮
                       </div>
                       {closed && (
-                        <div className="mt-1 text-[10px] font-semibold text-red-600">
+                        <div className="mt-1 inline-flex rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-red-600">
                           Захиалга хаагдсан
                         </div>
                       )}

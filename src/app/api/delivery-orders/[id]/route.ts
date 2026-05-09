@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { logAdminAction } from "@/lib/audit";
 
+const formatDeliveryAddress = (
+  districtName?: string | null,
+  khorooName?: string | null,
+  address?: string | null,
+) =>
+  [districtName, khorooName, address]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(" / ") || null;
+
 const normRole = (v?: string | null) =>
   String(v || "").toUpperCase().replace(/\s+/g, "_");
 const requireAdmin = (request: NextRequest) => {
@@ -72,7 +82,11 @@ export async function GET(
       delivery_method: "delivery",
       delivery_name: deliveryOrder.name,
       delivery_phone: deliveryOrder.phone,
-      delivery_address: deliveryOrder.address,
+      delivery_address: formatDeliveryAddress(
+        deliveryOrder.district_name,
+        deliveryOrder.khoroo_name,
+        deliveryOrder.address,
+      ),
       delivery_district_id: deliveryOrder.district_id,
       delivery_district_name: deliveryOrder.district_name,
       delivery_khoroo_id: deliveryOrder.khoroo_id,

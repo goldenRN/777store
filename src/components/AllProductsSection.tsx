@@ -58,6 +58,10 @@ export default function AllProductsSection({
   const [sort, setSort] = useState<string>("newest");
   const [discountOnly, setDiscountOnly] = useState(false);
   const [isClient, setIsClient] = useState(false);
+  const pageType = (searchParams.get("type") || "").toLowerCase();
+  const availability = (searchParams.get("availability") || "all").toLowerCase();
+  const showAvailabilityFilter = pageType === "preorder" || pageType === "live";
+  const allowShuffle = !pageType && !searchParams.get("q") && !searchParams.get("brand");
 
   useEffect(() => {
     setCategoryId(initialCategoryId);
@@ -108,7 +112,10 @@ export default function AllProductsSection({
       data.sort((a, b) => (b.discount_price ?? b.price) - (a.discount_price ?? a.price));
     }
     // shuffle only on client to avoid hydration mismatch
-    if (isClient && categoryId === "all" && subcategoryId === "all" && sort === "newest") {
+    if (showAvailabilityFilter && availability === "open") {
+      data = data.filter((item) => !item.is_closed);
+    }
+    if (isClient && allowShuffle && categoryId === "all" && subcategoryId === "all" && sort === "newest") {
       const shuffle = (input: Product[]) => {
         const shuffled = [...input];
         for (let i = shuffled.length - 1; i > 0; i -= 1) {
@@ -123,7 +130,7 @@ export default function AllProductsSection({
     }
     data.sort((a, b) => Number(Boolean(a.is_closed)) - Number(Boolean(b.is_closed)));
     return data;
-  }, [products, categoryId, subcategoryId, discountOnly, sort, isClient]);
+  }, [products, categoryId, subcategoryId, discountOnly, sort, isClient, showAvailabilityFilter, availability, allowShuffle]);
 
   const activeCategory = categories.find((c) => String(c.category_id) === categoryId) || null;
 
@@ -272,6 +279,43 @@ export default function AllProductsSection({
               />
               Хямдралтай
             </label>
+
+            {showAvailabilityFilter ? (
+              <div className="flex items-center gap-2 rounded-full border border-[var(--gray-200)] bg-white p-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const params = new URLSearchParams(searchParams.toString());
+                    params.set("availability", "open");
+                    params.set("page", "1");
+                    router.push(`/products?${params.toString()}`);
+                  }}
+                  className={`rounded-full px-3 py-1.5 font-semibold transition ${
+                    availability === "open"
+                      ? "bg-[var(--accent-2)] text-white"
+                      : "text-[var(--gray-600)] hover:bg-[var(--sky-100)]"
+                  }`}
+                >
+                  Зөвхөн нээлттэй
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const params = new URLSearchParams(searchParams.toString());
+                    params.set("availability", "all");
+                    params.set("page", "1");
+                    router.push(`/products?${params.toString()}`);
+                  }}
+                  className={`rounded-full px-3 py-1.5 font-semibold transition ${
+                    availability === "all"
+                      ? "bg-[var(--navy-900)] text-white"
+                      : "text-[var(--gray-600)] hover:bg-[var(--sky-100)]"
+                  }`}
+                >
+                  Бүгд
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
 

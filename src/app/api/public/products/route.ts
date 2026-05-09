@@ -102,6 +102,18 @@ function shouldHideClosedProduct(
   return isReady;
 }
 
+function shouldExcludeProductByAvailability(
+  product: {
+    type: { name: string; has_duration: boolean } | null;
+  },
+  closed: boolean,
+  availability: string,
+) {
+  if (shouldHideClosedProduct(product, closed)) return true;
+  if (availability === "open" && closed) return true;
+  return false;
+}
+
 function buildTypeWhere(type: string) {
   const normalized = type.trim().toLowerCase();
   if (!normalized) return undefined;
@@ -112,6 +124,15 @@ function buildTypeWhere(type: string) {
       type: { name: { contains: alias, mode: "insensitive" as const } },
     })),
   };
+}
+
+function normalizeTypeKey(type?: string | null) {
+  const normalized = String(type || "").trim().toLowerCase();
+  if (!normalized) return "";
+  if (TYPE_ALIASES.ready.some((alias) => normalized.includes(alias))) return "ready";
+  if (TYPE_ALIASES.preorder.some((alias) => normalized.includes(alias))) return "preorder";
+  if (TYPE_ALIASES.live.some((alias) => normalized.includes(alias))) return "live";
+  return normalized;
 }
 
 function getTypeFlags(typeName?: string | null) {
@@ -182,10 +203,13 @@ export async function GET(request: NextRequest) {
   const brandOnly = searchParams.get("brandOnly") === "true";
   const discount = searchParams.get("discount") === "true";
   const random = searchParams.get("random") === "true";
+  const availability = String(searchParams.get("availability") ?? "all").trim().toLowerCase();
   const limit = Number(searchParams.get("limit") ?? DEFAULT_LIMIT);
   const page = Number(searchParams.get("page") ?? 1);
   const take = Number.isNaN(limit) ? DEFAULT_LIMIT : Math.min(limit, 100);
   const skip = Math.max(page - 1, 0) * take;
+  const normalizedType = normalizeTypeKey(type);
+  const paginateOpenBeforeClosed = !random && (normalizedType === "preorder" || normalizedType === "live");
 
   const now = new Date();
   const where: Prisma.AdminProductWhereInput = {};
@@ -313,8 +337,6 @@ export async function GET(request: NextRequest) {
         prisma.adminProduct.findMany({
           where,
           orderBy: { created_at: "desc" },
-          take,
-          skip,
           select: listSelect,
         }),
         prisma.adminProduct.findMany({
@@ -326,7 +348,7 @@ export async function GET(request: NextRequest) {
   const mapped = items
     .map((product) => {
       const { closed, effectiveStock, orderedQty } = isClosedProduct(product, now);
-      if (shouldHideClosedProduct(product, closed)) return null;
+      if (shouldExcludeProductByAvailability(product, closed, availability)) return null;
       return {
         id: product.id,
         name: product.name,
@@ -361,7 +383,7 @@ export async function GET(request: NextRequest) {
       const aClosed = a.is_closed ? 1 : 0;
       const bClosed = b.is_closed ? 1 : 0;
       if (aClosed !== bClosed) return aClosed - bClosed;
-      return 0;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
     if (!random || randomIds.length === 0) return base;
     const positionById = new Map<number, number>();
@@ -373,11 +395,17 @@ export async function GET(request: NextRequest) {
 
   const total = countRows.reduce((acc, product) => {
     const { closed } = isClosedProduct(product, now);
-    return shouldHideClosedProduct(product, closed) ? acc : acc + 1;
+    return shouldExcludeProductByAvailability(product, closed, availability) ? acc : acc + 1;
   }, 0);
 
+  const pagedItems = random
+    ? orderedMapped
+    : paginateOpenBeforeClosed
+      ? orderedMapped.slice(skip, skip + take)
+      : orderedMapped.slice(skip, skip + take);
+
   return NextResponse.json({
-    items: orderedMapped,
+    items: pagedItems,
     total: random ? orderedMapped.length : total,
     page,
     limit: take,

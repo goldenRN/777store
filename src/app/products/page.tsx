@@ -104,6 +104,7 @@ export default async function ProductsPage({
     category?: string;
     subcategory?: string;
     brand?: string;
+    availability?: string;
     page?: string;
   }>;
 }) {
@@ -114,6 +115,7 @@ export default async function ProductsPage({
   const category = params.category ?? "";
   const subcategory = params.subcategory ?? "";
   const brand = params.brand ?? "";
+  const availability = params.availability ?? "";
   const page = Math.max(Number(params.page ?? 1), 1);
   const limit = 15;
 
@@ -125,6 +127,7 @@ export default async function ProductsPage({
       category: category || undefined,
       subcategory: subcategory || undefined,
       brand: brand || undefined,
+      availability: availability || undefined,
       limit,
       page,
     }),
@@ -198,6 +201,7 @@ export default async function ProductsPage({
                       category,
                       subcategory,
                       brand,
+                      availability,
                       page: String(page - 1),
                     }).toString()}`} />
                   </PaginationItem>
@@ -214,6 +218,7 @@ export default async function ProductsPage({
                           category,
                           subcategory,
                           brand,
+                          availability,
                           page: String(p),
                         }).toString()}`}
                         isActive={p === page}
@@ -232,6 +237,7 @@ export default async function ProductsPage({
                       category,
                       subcategory,
                       brand,
+                      availability,
                       page: String(page + 1),
                     }).toString()}`} />
                   </PaginationItem>

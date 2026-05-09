@@ -520,7 +520,9 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
           )}
 
           {isPreorderLive && isClosed && (
-            <div className="font-semibold text-red-600">Захиалга хаагдсан</div>
+            <div className="inline-flex rounded-full bg-white px-3 py-1 text-sm font-semibold text-red-600">
+              Захиалга хаагдсан
+            </div>
           )}
 
           {product.material && (

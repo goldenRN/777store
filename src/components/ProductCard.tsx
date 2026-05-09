@@ -154,8 +154,10 @@ export default function ProductCard({
       <div className="relative">
         <DiscountBadge percent={discountPercent} />
         {is_closed ? (
-          <div className="absolute left-3 top-3 z-10 rounded-full bg-red-500 px-3 py-1 text-[11px] font-semibold text-white shadow-sm">
-            Захиалга хаагдсан
+          <div className="absolute left-0 top-4 z-10">
+            <div className="rounded-r-full bg-white px-4 py-1.5 text-[11px] font-bold tracking-wide text-red-600 shadow-md">
+              Захиалга хаагдсан
+            </div>
           </div>
         ) : null}
         {/* <div className="absolute right-4 top-4 text-[10px] font-bold text-[var(--navy-900)]">

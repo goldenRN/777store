@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+const formatDeliveryAddress = (
+  districtName?: string | null,
+  khorooName?: string | null,
+  address?: string | null,
+) =>
+  [districtName, khorooName, address]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(" / ") || null;
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const page = Math.max(Number(searchParams.get("page") ?? 1), 1);
@@ -27,6 +37,8 @@ export async function GET(request: NextRequest) {
       { name: { contains: q, mode: "insensitive" } },
       { phone: { contains: q } },
       { address: { contains: q, mode: "insensitive" } },
+      { district_name: { contains: q, mode: "insensitive" } },
+      { khoroo_name: { contains: q, mode: "insensitive" } },
       ...(Number.isFinite(maybeId) ? [{ id: maybeId }, { source_order_id: maybeId }] : []),
       {
         items: {
@@ -73,7 +85,7 @@ export async function GET(request: NextRequest) {
       total: row.total,
       is_delivery_order: true,
       source_order_id: row.source_order_id,
-      delivery_address: row.address,
+      delivery_address: formatDeliveryAddress(row.district_name, row.khoroo_name, row.address),
       delivery_fee: row.delivery_fee,
       cargo_fee: row.cargo_fee,
       item_count: row.items.length,
@@ -86,6 +98,8 @@ export async function GET(request: NextRequest) {
       qpay_qr_text: row.qpay_qr_text,
       qpay_short_url: row.qpay_short_url,
       payment_expires_at: row.payment_expires_at,
+      delivery_district_name: row.district_name,
+      delivery_khoroo_name: row.khoroo_name,
       delivery_groups: [],
     })),
     meta: { page, limit, total, pages },
