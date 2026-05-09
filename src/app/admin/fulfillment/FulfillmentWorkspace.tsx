@@ -47,6 +47,7 @@ type RecentFulfillmentAction = {
 type RecentActionFilter = "ALL" | "ирж авсан" | "Хүргэлтээр авсан" | "Буцаагдсан";
 type RecentRangePreset = "today" | "yesterday" | "7d" | "custom";
 export type FulfillmentViewMode = "fulfill" | "history";
+type DeliveryAreaType = "city" | "rural";
 
 export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMode }) {
   const activeTab = mode;
@@ -63,6 +64,7 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
   const [deliveryName, setDeliveryName] = useState("");
   const [deliveryPhone, setDeliveryPhone] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [deliveryAreaType, setDeliveryAreaType] = useState<DeliveryAreaType>("city");
   const [districts, setDistricts] = useState<{ id: number; name: string }[]>([]);
   const [khoroos, setKhoroos] = useState<{ id: number; name: string; zone: string; fee: number }[]>([]);
   const [deliveryDistrictId, setDeliveryDistrictId] = useState<number | "">("");
@@ -99,6 +101,7 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
     setDeliveryName("");
     setDeliveryPhone("");
     setDeliveryAddress("");
+    setDeliveryAreaType("city");
     setDeliveryDistrictId("");
     setDeliveryKhorooId("");
     setDeliveryFee(0);
@@ -120,6 +123,7 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
     setDeliveryAddress(String(order.delivery_address || "").trim());
     setDeliveryDistrictId(order.delivery_district_id ?? "");
     setDeliveryKhorooId(order.delivery_khoroo_id ?? "");
+    setDeliveryAreaType(order.delivery_district_id ? "city" : "rural");
   };
 
   const fetchOrders = async (query = phoneApplied) => {
@@ -401,15 +405,27 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
 
   useEffect(() => {
     if (!deliveryOpen) return;
+    if (deliveryAreaType === "rural") {
+      setKhoroos([]);
+      setDeliveryKhorooId("");
+      setDeliveryFee(0);
+      return;
+    }
     if (districts.length > 0) return;
     fetch("/api/public/delivery/districts")
       .then((r) => r.json())
       .then((d) => setDistricts(Array.isArray(d?.items) ? d.items : []))
       .catch(() => setDistricts([]));
-  }, [deliveryOpen, districts.length]);
+  }, [deliveryAreaType, deliveryOpen, districts.length]);
 
   useEffect(() => {
     if (!deliveryOpen) return;
+    if (deliveryAreaType === "rural") {
+      setKhoroos([]);
+      setDeliveryKhorooId("");
+      setDeliveryFee(0);
+      return;
+    }
     if (!deliveryDistrictId) {
       setKhoroos([]);
       setDeliveryKhorooId("");
@@ -420,17 +436,21 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
       .then((r) => r.json())
       .then((d) => setKhoroos(Array.isArray(d?.items) ? d.items : []))
       .catch(() => setKhoroos([]));
-  }, [deliveryOpen, deliveryDistrictId]);
+  }, [deliveryAreaType, deliveryOpen, deliveryDistrictId]);
 
   useEffect(() => {
     if (!deliveryOpen) return;
+    if (deliveryAreaType === "rural") {
+      setDeliveryFee(0);
+      return;
+    }
     if (!deliveryKhorooId) {
       setDeliveryFee(0);
       return;
     }
     const k = khoroos.find((x) => Number(x.id) === Number(deliveryKhorooId));
     setDeliveryFee(k?.fee != null ? Number(k.fee) : 0);
-  }, [deliveryOpen, deliveryKhorooId, khoroos]);
+  }, [deliveryAreaType, deliveryOpen, deliveryKhorooId, khoroos]);
 
   const requestDelivery = async () => {
     if (!selectedItemIds.length) return;
@@ -438,12 +458,16 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
       alert("Хүргэлтийн нэр, утсаа бүрэн бөглөнө үү.");
       return;
     }
-    if (!deliveryDistrictId || !deliveryKhorooId) {
+    if (deliveryAreaType === "city" && (!deliveryDistrictId || !deliveryKhorooId)) {
       alert("Дүүрэг, хороо сонгоно уу.");
       return;
     }
     if (!deliveryAddress.trim()) {
-      alert("Нэмэлт хаягаа (байр, тоот, орц гэх мэт) бичнэ үү.");
+      alert(
+        deliveryAreaType === "rural"
+          ? "Орон нутгийн бүтэн хаягаа бичнэ үү."
+          : "Нэмэлт хаягаа (байр, тоот, орц гэх мэт) бичнэ үү.",
+      );
       return;
     }
     setDeliverySaving(true);
@@ -453,11 +477,12 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
         headers: { "Content-Type": "application/json", ...getActorHeaders() },
         body: JSON.stringify({
           orderItemIds: selectedItemIds,
+          deliveryAreaType,
           deliveryName,
           deliveryPhone,
           deliveryAddress,
-          deliveryDistrictId,
-          deliveryKhorooId,
+          deliveryDistrictId: deliveryAreaType === "city" ? deliveryDistrictId : null,
+          deliveryKhorooId: deliveryAreaType === "city" ? deliveryKhorooId : null,
           paymentMethod: deliveryPaymentMethod,
         }),
       });
@@ -955,6 +980,16 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
             </div>
 
             <div className="mt-4 grid gap-2 text-xs">
+              <select
+                value={deliveryAreaType}
+                onChange={(e) => setDeliveryAreaType((e.target.value as DeliveryAreaType) || "city")}
+                className="rounded-lg border bg-white px-3 py-2"
+              >
+                <option value="city">Нийслэл</option>
+                <option value="rural">Орон нутаг</option>
+              </select>
+
+              {deliveryAreaType === "city" ? (
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <select
                   value={deliveryDistrictId === "" ? "" : String(deliveryDistrictId)}
@@ -982,6 +1017,11 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
                   ))}
                 </select>
               </div>
+              ) : (
+                <div className="rounded-lg border bg-white px-3 py-2 text-[11px] text-[var(--gray-700)]">
+                  Орон нутаг сонгосон тул доорх хамгийн сүүлийн хаягийн талбарт бүтэн хаягаа оруулна уу.
+                </div>
+              )}
 
               {deliveryFee > 0 && (
                 <div className="rounded-lg border bg-white px-3 py-2">
@@ -1005,7 +1045,11 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
               <input
                 value={deliveryAddress}
                 onChange={(e) => setDeliveryAddress(e.target.value)}
-                placeholder="Нэмэлт хаяг (байр, тоот, орц гэх мэт)"
+                placeholder={
+                  deliveryAreaType === "rural"
+                    ? "Бүтэн хаяг (аймаг, сум, баг, гудамж, тоот...)"
+                    : "Нэмэлт хаяг (байр, тоот, орц гэх мэт)"
+                }
                 className="rounded-lg border bg-white px-3 py-2"
               />
 

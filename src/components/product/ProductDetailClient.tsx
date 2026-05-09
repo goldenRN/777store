@@ -172,7 +172,7 @@ const ProductImageGallery = memo(function ProductImageGallery({
   }, []);
 
   return (
-    <div className="rounded-2xl bg-white p-4 shadow">
+    <div className="rounded-2xl border border-[#e5e7eb] bg-white p-4">
       <div className="relative h-[420px] w-full overflow-hidden rounded-xl bg-[var(--sky-100)]">
         {activeImage && !mainImageError ? (
           // Use a plain <img> for uploaded images to avoid Next.js optimizer issues
@@ -520,7 +520,7 @@ export default function ProductDetailClient({ product }: { product: ProductDetai
           )}
 
           {isPreorderLive && isClosed && (
-            <div className="inline-flex rounded-full bg-white px-3 py-1 text-sm font-semibold text-red-600">
+            <div className="inline-flex rounded-full bg-white/65 px-3 py-1 text-sm font-semibold text-red-600 backdrop-blur-[2px]">
               Захиалга хаагдсан
             </div>
           )}

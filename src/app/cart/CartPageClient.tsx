@@ -37,6 +37,8 @@ type InvoicePreviewItem = {
   note: string;
 };
 
+type DeliveryAreaType = "city" | "rural";
+
 export default function CartPageClient() {
   const { items, total, updateQty, removeItem, clear } = useCart();
   const router = useRouter();
@@ -55,6 +57,7 @@ export default function CartPageClient() {
   const [deliveryName, setDeliveryName] = useState("");
   const [deliveryPhone, setDeliveryPhone] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [deliveryAreaType, setDeliveryAreaType] = useState<DeliveryAreaType>("city");
   const [districts, setDistricts] = useState<{ id: number; name: string }[]>([]);
   const [khoroos, setKhoroos] = useState<{ id: number; name: string; zone: string; fee: number }[]>([]);
   const [deliveryDistrictId, setDeliveryDistrictId] = useState<number | "">("");
@@ -181,8 +184,7 @@ export default function CartPageClient() {
       deliveryName &&
       deliveryPhone &&
       deliveryAddress &&
-      deliveryDistrictId &&
-      deliveryKhorooId
+      (deliveryAreaType === "rural" || (deliveryDistrictId && deliveryKhorooId))
     )
       return;
 
@@ -196,6 +198,13 @@ export default function CartPageClient() {
         if (!deliveryPhone) setDeliveryPhone(u.phone || user.phone || "");
         if (!deliveryAddress)
           setDeliveryAddress(last?.delivery_address || u.address || user.address || "");
+        const lastHasCityArea = Boolean(last?.delivery_district_id && last?.delivery_khoroo_id);
+        const lastHasRuralArea = !lastHasCityArea && Boolean(last?.delivery_address);
+        if (lastHasRuralArea) {
+          setDeliveryAreaType("rural");
+        } else if (lastHasCityArea) {
+          setDeliveryAreaType("city");
+        }
         if (!deliveryDistrictId && last?.delivery_district_id) {
           setDeliveryDistrictId(Number(last.delivery_district_id));
         }
@@ -213,6 +222,7 @@ export default function CartPageClient() {
     deliveryName,
     deliveryPhone,
     deliveryAddress,
+    deliveryAreaType,
     deliveryDistrictId,
     deliveryKhorooId,
     user?.name,
@@ -330,6 +340,12 @@ export default function CartPageClient() {
   useEffect(() => {
     if (!hasReady) return;
     if (deliveryMethod !== "delivery") return;
+    if (deliveryAreaType === "rural") {
+      setKhoroos([]);
+      setDeliveryKhorooId("");
+      setDeliveryFee(0);
+      return;
+    }
     if (districts.length > 0) return;
     fetch("/api/public/delivery/districts")
       .then((r) => r.json())
@@ -340,6 +356,12 @@ export default function CartPageClient() {
   useEffect(() => {
     if (!hasReady) return;
     if (deliveryMethod !== "delivery") return;
+    if (deliveryAreaType === "rural") {
+      setKhoroos([]);
+      setDeliveryKhorooId("");
+      setDeliveryFee(0);
+      return;
+    }
     if (!deliveryDistrictId) {
       setKhoroos([]);
       setDeliveryKhorooId("");
@@ -350,17 +372,21 @@ export default function CartPageClient() {
       .then((r) => r.json())
       .then((d) => setKhoroos(Array.isArray(d?.items) ? d.items : []))
       .catch(() => setKhoroos([]));
-  }, [deliveryDistrictId, deliveryMethod, hasReady]);
+  }, [deliveryAreaType, deliveryDistrictId, deliveryMethod, hasReady]);
 
   useEffect(() => {
     if (deliveryMethod !== "delivery") return;
+    if (deliveryAreaType === "rural") {
+      setDeliveryFee(0);
+      return;
+    }
     if (!deliveryKhorooId) {
       setDeliveryFee(0);
       return;
     }
     const k = khoroos.find((x) => Number(x.id) === Number(deliveryKhorooId)) as any;
     setDeliveryFee(k?.fee != null ? Number(k.fee) : 0);
-  }, [deliveryKhorooId, deliveryMethod, khoroos]);
+  }, [deliveryAreaType, deliveryKhorooId, deliveryMethod, khoroos]);
 
   const submitCheckout = async (includeArrived: boolean) => {
     if (!user?.id) {
@@ -379,12 +405,16 @@ export default function CartPageClient() {
           alert("Хүргэлтийн нэр, утсаа бүрэн бөглөнө үү.");
           return;
         }
-        if (!deliveryDistrictId || !deliveryKhorooId) {
+        if (deliveryAreaType === "city" && (!deliveryDistrictId || !deliveryKhorooId)) {
           alert("Дүүрэг, хороо сонгоно уу.");
           return;
         }
         if (!deliveryAddress.trim()) {
-          alert("Нэмэлт хаягаа (байр, тоот, орц гэх мэт) бичнэ үү.");
+          alert(
+            deliveryAreaType === "rural"
+              ? "Орон нутгийн бүтэн хаягаа бичнэ үү."
+              : "Нэмэлт хаягаа (байр, тоот, орц гэх мэт) бичнэ үү.",
+          );
           return;
         }
       }
@@ -400,11 +430,14 @@ export default function CartPageClient() {
           phone: user.phone || "0000-0000",
           orderKind,
           deliveryMethod: hasReady ? deliveryMethod || null : null,
+          deliveryAreaType: deliveryMethod === "delivery" ? deliveryAreaType : null,
           deliveryName: deliveryMethod === "delivery" ? deliveryName : null,
           deliveryPhone: deliveryMethod === "delivery" ? deliveryPhone : null,
           deliveryAddress: deliveryMethod === "delivery" ? deliveryAddress : null,
-          deliveryDistrictId: deliveryMethod === "delivery" ? deliveryDistrictId : null,
-          deliveryKhorooId: deliveryMethod === "delivery" ? deliveryKhorooId : null,
+          deliveryDistrictId:
+            deliveryMethod === "delivery" && deliveryAreaType === "city" ? deliveryDistrictId : null,
+          deliveryKhorooId:
+            deliveryMethod === "delivery" && deliveryAreaType === "city" ? deliveryKhorooId : null,
           arrivedOrderItemIds:
             includeArrived && deliveryMethod === "delivery"
               ? arrivedCandidates.map((item) => item.id)
@@ -639,6 +672,18 @@ export default function CartPageClient() {
                     <div className="mt-3 grid gap-2 text-xs">
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <select
+                          value={deliveryAreaType}
+                          onChange={(e) => setDeliveryAreaType((e.target.value as DeliveryAreaType) || "city")}
+                          className="rounded-lg border px-3 py-2"
+                        >
+                          <option value="city">Нийслэл</option>
+                          <option value="rural">Орон нутаг</option>
+                        </select>
+                      </div>
+
+                      {deliveryAreaType === "city" ? (
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <select
                           value={deliveryDistrictId === "" ? "" : String(deliveryDistrictId)}
                           onChange={(e) => setDeliveryDistrictId(e.target.value ? Number(e.target.value) : "")}
                           className="rounded-lg border px-3 py-2"
@@ -664,6 +709,11 @@ export default function CartPageClient() {
                           ))}
                         </select>
                       </div>
+                      ) : (
+                        <div className="rounded-lg border bg-[var(--sky-50)] px-3 py-2 text-[11px] text-[var(--gray-700)]">
+                          Орон нутаг сонгосон тул доорх хамгийн сүүлийн хаягийн талбарт бүтэн хаягаа оруулна уу.
+                        </div>
+                      )}
 
                       {deliveryFee > 0 && (
                         <div className="rounded-lg border bg-[var(--sky-50)] px-3 py-2">
@@ -687,7 +737,11 @@ export default function CartPageClient() {
                       <input
                         value={deliveryAddress}
                         onChange={(e) => setDeliveryAddress(e.target.value)}
-                        placeholder="Нэмэлт хаяг (байр, тоот, орц гэх мэт)"
+                        placeholder={
+                          deliveryAreaType === "rural"
+                            ? "Бүтэн хаяг (аймаг, сум, баг, гудамж, тоот...)"
+                            : "Нэмэлт хаяг (байр, тоот, орц гэх мэт)"
+                        }
                         className="rounded-lg border px-3 py-2"
                       />
                       {arrivedCandidates.length > 0 && (

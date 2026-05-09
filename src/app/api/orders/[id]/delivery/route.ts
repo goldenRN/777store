@@ -95,6 +95,9 @@ export async function POST(
   }
 
   const orderItemId = Number(body?.orderItemId ?? "");
+  const deliveryAreaType = String(body?.deliveryAreaType ?? "city").trim().toLowerCase() === "rural"
+    ? "rural"
+    : "city";
   const deliveryName = String(body?.deliveryName ?? "").trim();
   const deliveryPhone = String(body?.deliveryPhone ?? "").trim();
   const deliveryAddress = String(body?.deliveryAddress ?? "").trim();
@@ -113,7 +116,7 @@ export async function POST(
       { status: 400 },
     );
   }
-  if (!Number.isFinite(deliveryDistrictId) || !Number.isFinite(deliveryKhorooId)) {
+  if (deliveryAreaType === "city" && (!Number.isFinite(deliveryDistrictId) || !Number.isFinite(deliveryKhorooId))) {
     return NextResponse.json({ message: "Дүүрэг, хороо сонгоно уу." }, { status: 400 });
   }
   if (paymentMethod !== "QPAY" && paymentMethod !== "BANK") {
@@ -163,15 +166,26 @@ export async function POST(
     );
   }
 
-  const khoroo = await prisma.adminDeliveryKhoroo.findUnique({
-    where: { id: deliveryKhorooId },
-    include: { district: true },
-  });
-  if (!khoroo || khoroo.district_id !== deliveryDistrictId) {
-    return NextResponse.json({ message: "Дүүрэг/хороо буруу байна." }, { status: 400 });
+  let deliveryFee = 0;
+  let deliveryDistrictName: string | null = null;
+  let deliveryKhorooName: string | null = null;
+  let deliveryZone: string | null = null;
+  if (deliveryAreaType === "rural") {
+    deliveryDistrictName = "Орон нутаг";
+    deliveryZone = "RURAL";
+  } else {
+    const khoroo = await prisma.adminDeliveryKhoroo.findUnique({
+      where: { id: deliveryKhorooId },
+      include: { district: true },
+    });
+    if (!khoroo || khoroo.district_id !== deliveryDistrictId) {
+      return NextResponse.json({ message: "Дүүрэг/хороо буруу байна." }, { status: 400 });
+    }
+    deliveryFee = Math.max(0, Number(khoroo.fee || 0));
+    deliveryDistrictName = khoroo.district?.name ?? null;
+    deliveryKhorooName = khoroo.name ?? null;
+    deliveryZone = khoroo.zone ?? null;
   }
-
-  const deliveryFee = Math.max(0, Number(khoroo.fee || 0));
   const cargoFee = Math.max(
     0,
     Number(targetItem.variant?.cargo_fee ?? targetItem.product?.cargo_fee ?? 0),
@@ -209,11 +223,11 @@ export async function POST(
       delivery_name: deliveryName,
       delivery_phone: deliveryPhone,
       delivery_address: deliveryAddress,
-      delivery_district_id: deliveryDistrictId,
-      delivery_district_name: khoroo.district?.name ?? null,
-      delivery_khoroo_id: deliveryKhorooId,
-      delivery_khoroo_name: khoroo.name ?? null,
-      delivery_zone: khoroo.zone ?? null,
+      delivery_district_id: deliveryAreaType === "city" ? deliveryDistrictId : null,
+      delivery_district_name: deliveryDistrictName,
+      delivery_khoroo_id: deliveryAreaType === "city" ? deliveryKhorooId : null,
+      delivery_khoroo_name: deliveryKhorooName,
+      delivery_zone: deliveryZone,
       delivery_fee: deliveryFee,
     },
   });
@@ -231,8 +245,8 @@ export async function POST(
       delivery_fee: deliveryFee,
       cargo_fee: cargoFee,
       total_fee: totalFee,
-      district_id: deliveryDistrictId,
-      khoroo_id: deliveryKhorooId,
+      district_id: deliveryAreaType === "city" ? deliveryDistrictId : null,
+      khoroo_id: deliveryAreaType === "city" ? deliveryKhorooId : null,
     },
   });
 

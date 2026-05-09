@@ -150,12 +150,12 @@ export default function ProductCard({
   }, [variantOpen]);
 
   return (
-    <div className="flex flex-col rounded-3xl border border-[#e5e7eb] bg-slate-50 shadow-sm">
+    <div className="flex flex-col rounded-3xl border border-[#e5e7eb] bg-slate-50">
       <div className="relative">
         <DiscountBadge percent={discountPercent} />
         {is_closed ? (
           <div className="absolute left-0 top-4 z-10">
-            <div className="rounded-r-full bg-white px-4 py-1.5 text-[11px] font-bold tracking-wide text-red-600 shadow-md">
+            <div className="rounded-r-full bg-white/65 px-4 py-1.5 text-[11px] font-bold tracking-wide text-red-600 shadow-md backdrop-blur-[2px]">
               Захиалга хаагдсан
             </div>
           </div>
@@ -166,7 +166,7 @@ export default function ProductCard({
         </div> */}
         <Link
           href={`/product/${id}`}
-          className="relative flex h-[260px] w-full items-center justify-center overflow-hidden rounded-t-2xl rounded-b-none bg-white"
+          className="relative flex h-[260px] w-full items-center justify-center overflow-hidden rounded-t-3xl rounded-b-none bg-white"
         >
           {resolvedImage && !imgError ? (
             <Image

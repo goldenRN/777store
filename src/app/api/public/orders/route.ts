@@ -307,6 +307,9 @@ export async function POST(request: NextRequest) {
   const items = Array.isArray(body?.items) ? body.items : [];
   const orderKindInput = String(body?.orderKind ?? "").trim();
   const deliveryMethod = body?.deliveryMethod ? String(body.deliveryMethod) : null;
+  const deliveryAreaType = String(body?.deliveryAreaType ?? "city").trim().toLowerCase() === "rural"
+    ? "rural"
+    : "city";
   const deliveryName = body?.deliveryName ? String(body.deliveryName) : null;
   const deliveryPhone = body?.deliveryPhone ? String(body.deliveryPhone) : null;
   const deliveryAddress = body?.deliveryAddress ? String(body.deliveryAddress) : null;
@@ -366,7 +369,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    if (!deliveryDistrictId || !deliveryKhorooId) {
+    if (deliveryAreaType === "city" && (!deliveryDistrictId || !deliveryKhorooId)) {
       return NextResponse.json({ message: "Дүүрэг, хороо сонгоно уу." }, { status: 400 });
     }
   } else if (deliveryMethod === "delivery" && !hasReadyInput) {
@@ -477,7 +480,7 @@ export async function POST(request: NextRequest) {
           if (!deliveryName || !deliveryPhone || !deliveryAddress) {
             throw new CheckoutError("Хүргэлтийн нэр, утас, хаяг шаардлагатай", 400);
           }
-          if (!deliveryDistrictId || !deliveryKhorooId) {
+          if (deliveryAreaType === "city" && (!deliveryDistrictId || !deliveryKhorooId)) {
             throw new CheckoutError("Дүүрэг, хороо сонгоно уу.", 400);
           }
         }
@@ -610,17 +613,24 @@ export async function POST(request: NextRequest) {
         let delivery_khoroo_name: string | null = null;
         let delivery_zone: string | null = null;
         if (deliveryMethod === "delivery" && hasReadyDb) {
-          const khoroo = await tx.adminDeliveryKhoroo.findUnique({
-            where: { id: deliveryKhorooId as number },
-            include: { district: true },
-          });
-          if (!khoroo || khoroo.district_id !== deliveryDistrictId) {
-            throw new CheckoutError("Дүүрэг/хороо буруу байна.", 400);
+          if (deliveryAreaType === "rural") {
+            delivery_fee = 0;
+            delivery_district_name = "Орон нутаг";
+            delivery_khoroo_name = null;
+            delivery_zone = "RURAL";
+          } else {
+            const khoroo = await tx.adminDeliveryKhoroo.findUnique({
+              where: { id: deliveryKhorooId as number },
+              include: { district: true },
+            });
+            if (!khoroo || khoroo.district_id !== deliveryDistrictId) {
+              throw new CheckoutError("Дүүрэг/хороо буруу байна.", 400);
+            }
+            delivery_fee = Math.max(0, Number(khoroo.fee || 0));
+            delivery_district_name = khoroo.district?.name ?? null;
+            delivery_khoroo_name = khoroo.name ?? null;
+            delivery_zone = khoroo.zone ?? null;
           }
-          delivery_fee = Math.max(0, Number(khoroo.fee || 0));
-          delivery_district_name = khoroo.district?.name ?? null;
-          delivery_khoroo_name = khoroo.name ?? null;
-          delivery_zone = khoroo.zone ?? null;
         }
         const arrivedCargoTotal = selectedArrivedItems.reduce((sum, item) => {
           const unitCargo = Math.max(
@@ -832,9 +842,15 @@ export async function POST(request: NextRequest) {
               delivery_name: hasReadyDb && deliveryMethod === "delivery" ? deliveryName : null,
               delivery_phone: hasReadyDb && deliveryMethod === "delivery" ? deliveryPhone : null,
               delivery_address: hasReadyDb && deliveryMethod === "delivery" ? deliveryAddress : null,
-              delivery_district_id: hasReadyDb && deliveryMethod === "delivery" ? deliveryDistrictId : null,
+              delivery_district_id:
+                hasReadyDb && deliveryMethod === "delivery" && deliveryAreaType === "city"
+                  ? deliveryDistrictId
+                  : null,
               delivery_district_name: hasReadyDb && deliveryMethod === "delivery" ? delivery_district_name : null,
-              delivery_khoroo_id: hasReadyDb && deliveryMethod === "delivery" ? deliveryKhorooId : null,
+              delivery_khoroo_id:
+                hasReadyDb && deliveryMethod === "delivery" && deliveryAreaType === "city"
+                  ? deliveryKhorooId
+                  : null,
               delivery_khoroo_name: hasReadyDb && deliveryMethod === "delivery" ? delivery_khoroo_name : null,
               delivery_zone: hasReadyDb && deliveryMethod === "delivery" ? delivery_zone : null,
               delivery_fee: hasReadyDb && deliveryMethod === "delivery" ? delivery_fee : 0,
@@ -856,9 +872,15 @@ export async function POST(request: NextRequest) {
             delivery_name: hasReadyDb && deliveryMethod === "delivery" ? deliveryName : null,
             delivery_phone: hasReadyDb && deliveryMethod === "delivery" ? deliveryPhone : null,
             delivery_address: hasReadyDb && deliveryMethod === "delivery" ? deliveryAddress : null,
-            delivery_district_id: hasReadyDb && deliveryMethod === "delivery" ? deliveryDistrictId : null,
+            delivery_district_id:
+              hasReadyDb && deliveryMethod === "delivery" && deliveryAreaType === "city"
+                ? deliveryDistrictId
+                : null,
             delivery_district_name: hasReadyDb && deliveryMethod === "delivery" ? delivery_district_name : null,
-            delivery_khoroo_id: hasReadyDb && deliveryMethod === "delivery" ? deliveryKhorooId : null,
+            delivery_khoroo_id:
+              hasReadyDb && deliveryMethod === "delivery" && deliveryAreaType === "city"
+                ? deliveryKhorooId
+                : null,
             delivery_khoroo_name: hasReadyDb && deliveryMethod === "delivery" ? delivery_khoroo_name : null,
             delivery_zone: hasReadyDb && deliveryMethod === "delivery" ? delivery_zone : null,
             delivery_fee: hasReadyDb && deliveryMethod === "delivery" ? delivery_fee : 0,
@@ -1049,9 +1071,9 @@ export async function POST(request: NextRequest) {
             delivery_name: deliveryName,
             delivery_phone: deliveryPhone,
             delivery_address: deliveryAddress,
-            delivery_district_id: deliveryDistrictId,
+            delivery_district_id: deliveryAreaType === "city" ? deliveryDistrictId : null,
             delivery_district_name: currentOrder?.delivery_district_name ?? null,
-            delivery_khoroo_id: deliveryKhorooId,
+            delivery_khoroo_id: deliveryAreaType === "city" ? deliveryKhorooId : null,
             delivery_khoroo_name: currentOrder?.delivery_khoroo_name ?? null,
             delivery_zone: currentOrder?.delivery_zone ?? null,
             delivery_fee: Number(currentOrder?.delivery_fee ?? 0),

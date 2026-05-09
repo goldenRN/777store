@@ -101,6 +101,8 @@ type StoredUser = {
   role?: string | null;
 };
 
+type DeliveryAreaType = "city" | "rural";
+
 type FlatOrderItem = OrderItem & {
   orderId: number;
   orderStatus: string;
@@ -137,6 +139,7 @@ function OrdersPageContent() {
   const [deliveryName, setDeliveryName] = useState("");
   const [deliveryPhone, setDeliveryPhone] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [deliveryAreaType, setDeliveryAreaType] = useState<DeliveryAreaType>("city");
   const [districts, setDistricts] = useState<{ id: number; name: string }[]>([]);
   const [khoroos, setKhoroos] = useState<{ id: number; name: string; zone: string; fee: number }[]>([]);
   const [deliveryDistrictId, setDeliveryDistrictId] = useState<number | "">("");
@@ -241,6 +244,9 @@ function OrdersPageContent() {
       setDeliveryAddress(deliveryItem?.delivery_address || json?.delivery_address || "");
       setDeliveryDistrictId(deliveryItem?.delivery_district_id ?? json?.delivery_district_id ?? "");
       setDeliveryKhorooId(deliveryItem?.delivery_khoroo_id ?? json?.delivery_khoroo_id ?? "");
+      setDeliveryAreaType(
+        deliveryItem?.delivery_district_id || json?.delivery_district_id ? "city" : "rural",
+      );
     } finally {
       setDetailLoading(false);
     }
@@ -330,6 +336,8 @@ function OrdersPageContent() {
           if (!deliveryKhorooId && last.delivery_khoroo_id) {
             setDeliveryKhorooId(Number(last.delivery_khoroo_id));
           }
+          if (last.delivery_district_id && last.delivery_khoroo_id) setDeliveryAreaType("city");
+          else if (last.delivery_address) setDeliveryAreaType("rural");
         }
       } catch {
         // ignore
@@ -341,15 +349,27 @@ function OrdersPageContent() {
 
   useEffect(() => {
     if (!deliveryOpen && !groupDeliveryOpen) return;
+    if (deliveryAreaType === "rural") {
+      setKhoroos([]);
+      setDeliveryKhorooId("");
+      setDeliveryFee(0);
+      return;
+    }
     if (districts.length > 0) return;
     fetch("/api/public/delivery/districts")
       .then((r) => r.json())
       .then((d) => setDistricts(Array.isArray(d?.items) ? d.items : []))
       .catch(() => setDistricts([]));
-  }, [deliveryOpen, groupDeliveryOpen, districts.length]);
+  }, [deliveryAreaType, deliveryOpen, groupDeliveryOpen, districts.length]);
 
   useEffect(() => {
     if (!deliveryOpen && !groupDeliveryOpen) return;
+    if (deliveryAreaType === "rural") {
+      setKhoroos([]);
+      setDeliveryKhorooId("");
+      setDeliveryFee(0);
+      return;
+    }
     if (!deliveryDistrictId) {
       setKhoroos([]);
       setDeliveryKhorooId("");
@@ -360,17 +380,21 @@ function OrdersPageContent() {
       .then((r) => r.json())
       .then((d) => setKhoroos(Array.isArray(d?.items) ? d.items : []))
       .catch(() => setKhoroos([]));
-  }, [deliveryOpen, groupDeliveryOpen, deliveryDistrictId]);
+  }, [deliveryAreaType, deliveryOpen, groupDeliveryOpen, deliveryDistrictId]);
 
   useEffect(() => {
     if (!deliveryOpen && !groupDeliveryOpen) return;
+    if (deliveryAreaType === "rural") {
+      setDeliveryFee(0);
+      return;
+    }
     if (!deliveryKhorooId) {
       setDeliveryFee(0);
       return;
     }
     const k = khoroos.find((x) => Number(x.id) === Number(deliveryKhorooId));
     setDeliveryFee(k?.fee != null ? Number(k.fee) : 0);
-  }, [deliveryOpen, groupDeliveryOpen, deliveryKhorooId, khoroos]);
+  }, [deliveryAreaType, deliveryOpen, groupDeliveryOpen, deliveryKhorooId, khoroos]);
 
   const requestDelivery = async () => {
     if (!selected || !userId) return;
@@ -382,12 +406,16 @@ function OrdersPageContent() {
       alert("Хүргэлтийн нэр, утсаа бүрэн бөглөнө үү.");
       return;
     }
-    if (!deliveryDistrictId || !deliveryKhorooId) {
+    if (deliveryAreaType === "city" && (!deliveryDistrictId || !deliveryKhorooId)) {
       alert("Дүүрэг, хороо сонгоно уу.");
       return;
     }
     if (!deliveryAddress.trim()) {
-      alert("Нэмэлт хаягаа (байр, тоот, орц гэх мэт) бичнэ үү.");
+      alert(
+        deliveryAreaType === "rural"
+          ? "Орон нутгийн бүтэн хаягаа бичнэ үү."
+          : "Нэмэлт хаягаа (байр, тоот, орц гэх мэт) бичнэ үү.",
+      );
       return;
     }
     setDeliverySaving(true);
@@ -398,11 +426,12 @@ function OrdersPageContent() {
         body: JSON.stringify({
           userId,
           orderItemId: selectedDeliveryItemId,
+          deliveryAreaType,
           deliveryName,
           deliveryPhone,
           deliveryAddress,
-          deliveryDistrictId,
-          deliveryKhorooId,
+          deliveryDistrictId: deliveryAreaType === "city" ? deliveryDistrictId : null,
+          deliveryKhorooId: deliveryAreaType === "city" ? deliveryKhorooId : null,
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -543,6 +572,7 @@ function OrdersPageContent() {
     setDeliveryAddress(seed.delivery_address || "");
     setDeliveryDistrictId(seed.delivery_district_id ?? "");
     setDeliveryKhorooId(seed.delivery_khoroo_id ?? "");
+    setDeliveryAreaType(seed.delivery_district_id ? "city" : "rural");
     setGroupQpay(null);
     setGroupCheckMessage("");
     setGroupShowBankApps(false);
@@ -570,12 +600,16 @@ function OrdersPageContent() {
       alert("Хүргэлтийн нэр, утсаа бүрэн бөглөнө үү.");
       return;
     }
-    if (!deliveryDistrictId || !deliveryKhorooId) {
+    if (deliveryAreaType === "city" && (!deliveryDistrictId || !deliveryKhorooId)) {
       alert("Дүүрэг, хороо сонгоно уу.");
       return;
     }
     if (!deliveryAddress.trim()) {
-      alert("Нэмэлт хаягаа (байр, тоот, орц гэх мэт) бичнэ үү.");
+      alert(
+        deliveryAreaType === "rural"
+          ? "Орон нутгийн бүтэн хаягаа бичнэ үү."
+          : "Нэмэлт хаягаа (байр, тоот, орц гэх мэт) бичнэ үү.",
+      );
       return;
     }
 
@@ -592,20 +626,22 @@ function OrdersPageContent() {
           ? {
               userId,
               orderItemId: singleItem.id,
+              deliveryAreaType,
               deliveryName,
               deliveryPhone,
               deliveryAddress,
-              deliveryDistrictId,
-              deliveryKhorooId,
+              deliveryDistrictId: deliveryAreaType === "city" ? deliveryDistrictId : null,
+              deliveryKhorooId: deliveryAreaType === "city" ? deliveryKhorooId : null,
             }
           : {
               userId,
               orderItemIds: footerDeliveryEntries.map((item) => item.id),
+              deliveryAreaType,
               deliveryName,
               deliveryPhone,
               deliveryAddress,
-              deliveryDistrictId,
-              deliveryKhorooId,
+              deliveryDistrictId: deliveryAreaType === "city" ? deliveryDistrictId : null,
+              deliveryKhorooId: deliveryAreaType === "city" ? deliveryKhorooId : null,
             };
 
       const res = await fetch(endpoint, {
@@ -1028,6 +1064,16 @@ function OrdersPageContent() {
 
               <div className="mt-4 rounded-xl border bg-[var(--sky-50)] p-4 text-sm">
                 <div className="grid gap-2 text-xs">
+                  <select
+                    value={deliveryAreaType}
+                    onChange={(e) => setDeliveryAreaType((e.target.value as DeliveryAreaType) || "city")}
+                    className="rounded-lg border bg-white px-3 py-2"
+                  >
+                    <option value="city">Нийслэл</option>
+                    <option value="rural">Орон нутаг</option>
+                  </select>
+
+                  {deliveryAreaType === "city" ? (
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <select
                       value={deliveryDistrictId === "" ? "" : String(deliveryDistrictId)}
@@ -1055,6 +1101,11 @@ function OrdersPageContent() {
                       ))}
                     </select>
                   </div>
+                  ) : (
+                    <div className="rounded-lg border bg-white px-3 py-2 text-[11px] text-[var(--gray-700)]">
+                      Орон нутаг сонгосон тул доорх хамгийн сүүлийн хаягийн талбарт бүтэн хаягаа оруулна уу.
+                    </div>
+                  )}
 
                   {deliveryFee > 0 && (
                     <div className="rounded-lg border bg-white px-3 py-2">
@@ -1092,7 +1143,11 @@ function OrdersPageContent() {
                   <input
                     value={deliveryAddress}
                     onChange={(e) => setDeliveryAddress(e.target.value)}
-                    placeholder="Нэмэлт хаяг (байр, тоот, орц гэх мэт)"
+                    placeholder={
+                      deliveryAreaType === "rural"
+                        ? "Бүтэн хаяг (аймаг, сум, баг, гудамж, тоот...)"
+                        : "Нэмэлт хаяг (байр, тоот, орц гэх мэт)"
+                    }
                     className="rounded-lg border bg-white px-3 py-2"
                   />
 
@@ -1276,6 +1331,16 @@ function OrdersPageContent() {
                     </div>
                     {deliveryOpen && (
                       <div className="mt-3 grid gap-2 text-xs">
+                        <select
+                          value={deliveryAreaType}
+                          onChange={(e) => setDeliveryAreaType((e.target.value as DeliveryAreaType) || "city")}
+                          className="rounded-lg border bg-white px-3 py-2"
+                        >
+                          <option value="city">Нийслэл</option>
+                          <option value="rural">Орон нутаг</option>
+                        </select>
+
+                        {deliveryAreaType === "city" ? (
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                           <select
                             value={deliveryDistrictId === "" ? "" : String(deliveryDistrictId)}
@@ -1303,6 +1368,11 @@ function OrdersPageContent() {
                             ))}
                           </select>
                         </div>
+                        ) : (
+                          <div className="rounded-lg border bg-white px-3 py-2 text-[11px] text-[var(--gray-700)]">
+                            Орон нутаг сонгосон тул доорх хамгийн сүүлийн хаягийн талбарт бүтэн хаягаа оруулна уу.
+                          </div>
+                        )}
 
                         {deliveryFee > 0 && (
                           <div className="rounded-lg border bg-white px-3 py-2">
@@ -1340,7 +1410,11 @@ function OrdersPageContent() {
                         <input
                           value={deliveryAddress}
                           onChange={(e) => setDeliveryAddress(e.target.value)}
-                          placeholder="Нэмэлт хаяг (байр, тоот, орц гэх мэт)"
+                          placeholder={
+                            deliveryAreaType === "rural"
+                              ? "Бүтэн хаяг (аймаг, сум, баг, гудамж, тоот...)"
+                              : "Нэмэлт хаяг (байр, тоот, орц гэх мэт)"
+                          }
                           className="rounded-lg border bg-white px-3 py-2"
                         />
 
