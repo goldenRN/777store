@@ -4,6 +4,7 @@ import { useCart } from "@/components/cart/CartProvider";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
+import { RURAL_DELIVERY_FEE } from "@/lib/deliveryFees";
 
 type QPayInfo = {
   orderId: number;
@@ -343,7 +344,7 @@ export default function CartPageClient() {
     if (deliveryAreaType === "rural") {
       setKhoroos([]);
       setDeliveryKhorooId("");
-      setDeliveryFee(0);
+      setDeliveryFee(RURAL_DELIVERY_FEE);
       return;
     }
     if (districts.length > 0) return;
@@ -359,7 +360,7 @@ export default function CartPageClient() {
     if (deliveryAreaType === "rural") {
       setKhoroos([]);
       setDeliveryKhorooId("");
-      setDeliveryFee(0);
+      setDeliveryFee(RURAL_DELIVERY_FEE);
       return;
     }
     if (!deliveryDistrictId) {
@@ -377,7 +378,7 @@ export default function CartPageClient() {
   useEffect(() => {
     if (deliveryMethod !== "delivery") return;
     if (deliveryAreaType === "rural") {
-      setDeliveryFee(0);
+      setDeliveryFee(RURAL_DELIVERY_FEE);
       return;
     }
     if (!deliveryKhorooId) {

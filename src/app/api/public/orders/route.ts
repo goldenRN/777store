@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createInvoice } from "@/lib/qpay";
 import { getBulkUnitPrice } from "@/lib/bulkPricing";
+import { RURAL_DELIVERY_FEE } from "@/lib/deliveryFees";
 
 const isArrivedStatus = (value?: string | null) => {
   const status = String(value || "").trim().toLowerCase();
@@ -614,7 +615,7 @@ export async function POST(request: NextRequest) {
         let delivery_zone: string | null = null;
         if (deliveryMethod === "delivery" && hasReadyDb) {
           if (deliveryAreaType === "rural") {
-            delivery_fee = 0;
+            delivery_fee = RURAL_DELIVERY_FEE;
             delivery_district_name = "Орон нутаг";
             delivery_khoroo_name = null;
             delivery_zone = "RURAL";

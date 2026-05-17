@@ -6,6 +6,7 @@ import { Eye } from "lucide-react";
 import OrderDetailsModal from "../order/OrderDetailsModal";
 import AdminTableSearchBar from "@/components/admin/AdminTableSearchBar";
 import Image from "next/image";
+import { RURAL_DELIVERY_FEE } from "@/lib/deliveryFees";
 
 type FulfillmentItem = {
   item_id: number;
@@ -408,7 +409,7 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
     if (deliveryAreaType === "rural") {
       setKhoroos([]);
       setDeliveryKhorooId("");
-      setDeliveryFee(0);
+      setDeliveryFee(RURAL_DELIVERY_FEE);
       return;
     }
     if (districts.length > 0) return;
@@ -423,7 +424,7 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
     if (deliveryAreaType === "rural") {
       setKhoroos([]);
       setDeliveryKhorooId("");
-      setDeliveryFee(0);
+      setDeliveryFee(RURAL_DELIVERY_FEE);
       return;
     }
     if (!deliveryDistrictId) {
@@ -441,7 +442,7 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
   useEffect(() => {
     if (!deliveryOpen) return;
     if (deliveryAreaType === "rural") {
-      setDeliveryFee(0);
+      setDeliveryFee(RURAL_DELIVERY_FEE);
       return;
     }
     if (!deliveryKhorooId) {

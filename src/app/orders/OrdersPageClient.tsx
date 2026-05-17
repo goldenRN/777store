@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
+import { RURAL_DELIVERY_FEE } from "@/lib/deliveryFees";
 
 type QPayInfo = {
   orderId: number;
@@ -352,7 +353,7 @@ function OrdersPageContent() {
     if (deliveryAreaType === "rural") {
       setKhoroos([]);
       setDeliveryKhorooId("");
-      setDeliveryFee(0);
+      setDeliveryFee(RURAL_DELIVERY_FEE);
       return;
     }
     if (districts.length > 0) return;
@@ -367,7 +368,7 @@ function OrdersPageContent() {
     if (deliveryAreaType === "rural") {
       setKhoroos([]);
       setDeliveryKhorooId("");
-      setDeliveryFee(0);
+      setDeliveryFee(RURAL_DELIVERY_FEE);
       return;
     }
     if (!deliveryDistrictId) {
@@ -385,7 +386,7 @@ function OrdersPageContent() {
   useEffect(() => {
     if (!deliveryOpen && !groupDeliveryOpen) return;
     if (deliveryAreaType === "rural") {
-      setDeliveryFee(0);
+      setDeliveryFee(RURAL_DELIVERY_FEE);
       return;
     }
     if (!deliveryKhorooId) {

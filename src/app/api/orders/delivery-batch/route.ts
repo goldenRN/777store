@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { createInvoice } from "@/lib/qpay";
 import { logAdminAction } from "@/lib/audit";
 import { buildDeliverySourceKey, upsertDeliveryOrderFromItems } from "@/lib/deliveryOrders";
+import { RURAL_DELIVERY_FEE } from "@/lib/deliveryFees";
 import {
   getDeliveryStatusNames,
   isArrivedDeliveryStatus,
@@ -107,6 +108,7 @@ export async function POST(request: NextRequest) {
   let deliveryKhorooName: string | null = null;
   let deliveryZone: string | null = null;
   if (deliveryAreaType === "rural") {
+    deliveryFee = RURAL_DELIVERY_FEE;
     deliveryDistrictName = "Орон нутаг";
     deliveryZone = "RURAL";
   } else {
