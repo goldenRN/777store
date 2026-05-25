@@ -72,6 +72,8 @@ export async function PUT(
   const order_accept_status = body?.order_accept_status
     ? String(body.order_accept_status).toUpperCase()
     : null;
+  const explicitIsHidden = Object.prototype.hasOwnProperty.call(body ?? {}, "is_hidden");
+  const is_hidden = explicitIsHidden ? Boolean(body?.is_hidden) : undefined;
 
   if (!name) {
     return NextResponse.json({ message: "Нэр шаардлагатай" }, { status: 400 });
@@ -124,6 +126,7 @@ export async function PUT(
         arrival_status: arrival_status || undefined,
         cargo_fee: cargo_fee ?? null,
         cargo_note: cargo_note || null,
+        ...(explicitIsHidden ? { is_hidden } : {}),
         order_accept_status: nextOrderAcceptStatus,
         category_id: body?.category_id ? Number(body.category_id) : null,
         subcategory_id: body?.subcategory_id ? Number(body.subcategory_id) : null,
@@ -177,6 +180,7 @@ export async function PUT(
         price,
         discount_price,
         stock,
+        is_hidden,
       },
     },
   });
@@ -204,6 +208,8 @@ export async function PATCH(
   const order_accept_status = body?.order_accept_status
     ? String(body.order_accept_status)
     : null;
+  const explicitIsHidden = Object.prototype.hasOwnProperty.call(body ?? {}, "is_hidden");
+  const is_hidden = explicitIsHidden ? Boolean(body?.is_hidden) : undefined;
 
   const allowed = ["Хүлээгдэж буй", "Бараа ирсэн"];
   if (status && !allowed.includes(status)) {
@@ -215,7 +221,7 @@ export async function PATCH(
 
   const before = await prisma.adminProduct.findUnique({
     where: { id },
-    select: { arrival_status: true, cargo_fee: true, cargo_note: true, order_accept_status: true },
+    select: { arrival_status: true, cargo_fee: true, cargo_note: true, order_accept_status: true, is_hidden: true },
   });
 
   await prisma.$transaction(async (tx) => {
@@ -226,6 +232,7 @@ export async function PATCH(
         cargo_fee: cargo_fee ?? null,
         cargo_note: cargo_note || null,
         order_accept_status: order_accept_status || undefined,
+        ...(explicitIsHidden ? { is_hidden } : {}),
       },
     });
 
@@ -250,6 +257,7 @@ export async function PATCH(
         cargo_fee,
         cargo_note,
         order_accept_status: order_accept_status || null,
+        is_hidden: explicitIsHidden ? is_hidden : null,
       },
     },
   });

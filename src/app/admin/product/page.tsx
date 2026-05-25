@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { Edit, Trash2, Plus } from "lucide-react";
+import { Edit, Eye, EyeOff, Trash2, Plus } from "lucide-react";
 import AddProductModal from "./AddProductModal";
 import axios from "axios";
 import { getActorHeaders } from "@/lib/actorHeaders";
@@ -27,6 +27,7 @@ interface Product {
   arrival_status?: string | null;
   cargo_fee?: number | null;
   ordered_qty?: number | null;
+  is_hidden?: boolean;
   order_accept_status?: string | null;
   category_id?: number | null;
   subcategory_id?: number | null;
@@ -288,6 +289,36 @@ const ProductPage = () => {
     }
   };
 
+  const handleToggleVisibility = async (product: Product) => {
+    const nextHidden = !product.is_hidden;
+    const actionLabel = nextHidden ? "хэрэглэгчдээс нуух" : "хэрэглэгчдэд дахин харуулах";
+    if (!confirm(`Энэ барааг ${actionLabel} уу?`)) return;
+
+    try {
+      await axios.patch(
+        `${process.env.NEXT_PUBLIC_API_URL || ""}/api/product/${product.id}`,
+        {
+          is_hidden: nextHidden,
+        },
+        { headers: { ...getActorHeaders() } }
+      );
+
+      setProducts((prev) =>
+        prev.map((item) =>
+          item.id === product.id
+            ? {
+                ...item,
+                is_hidden: nextHidden,
+              }
+            : item
+        )
+      );
+    } catch (err) {
+      console.error("Харагдах төлөв шинэчлэхэд алдаа:", err);
+      alert("⚠️ Барааны харагдах төлөв шинэчилж чадсангүй!");
+    }
+  };
+
   const openStatusModal = (p: Product) => {
     setStatusTarget(p);
     setCargoInput(p.cargo_fee != null ? String(p.cargo_fee) : "");
@@ -383,8 +414,20 @@ const ProductPage = () => {
             <tbody>
               {filteredProducts.length > 0 ? (
                 pagedProducts.map((p) => (
-                  <tr key={p.id} className="border-b hover:bg-gray-50">
-                    <td className="py-2 px-4 text-xs">{p.name}</td>
+                  <tr
+                    key={p.id}
+                    className={`border-b hover:bg-gray-50 ${p.is_hidden ? "bg-gray-50/80 text-gray-400" : ""}`}
+                  >
+                    <td className="py-2 px-4 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span>{p.name}</span>
+                        {p.is_hidden && (
+                          <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-semibold text-gray-600">
+                            Нуусан
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="py-2 px-4 text-xs">{p.category_name}</td>
                     <td className="py-2 px-4 text-xs">{p.subcategory_name}</td>
                     {closedFilter && (
@@ -436,6 +479,18 @@ const ProductPage = () => {
                         >
                           🔗
                         </Button>
+
+                        {initialType === "ready" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            title={p.is_hidden ? "Хэрэглэгчдэд дахин харуулах" : "Хэрэглэгчдээс нуух"}
+                            onClick={() => handleToggleVisibility(p)}
+                            className={p.is_hidden ? "border-red-200 text-red-600 hover:bg-red-50" : ""}
+                          >
+                            {p.is_hidden ? <EyeOff size={16} /> : <Eye size={16} />}
+                          </Button>
+                        )}
 
                         {/* Бараа засах */}
                         <Button

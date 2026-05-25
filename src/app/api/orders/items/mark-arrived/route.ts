@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { createArrivedNotificationsByOrderItemIds } from "@/lib/userNotifications";
 
 type ProductTypeLike = {
   has_duration?: boolean | null;
@@ -52,6 +54,13 @@ export async function PATCH(request: Request) {
     const result = await prisma.$transaction(async (tx) => {
       const finalItemStatuses = ["Бараа ирсэн", "Хүргэлтэнд бүртгэгдсэн", "Бараа олгосон", "Буцаагдсан"];
       const lockedItemStatuses = ["Хүргэлтэнд бүртгэгдсэн", "Бараа олгосон", "Буцаагдсан", "Хүргэгдсэн"];
+      const getMatchingOrderItemIds = async (where: Prisma.AdminOrderItemWhereInput) => {
+        const rows = await tx.adminOrderItem.findMany({
+          where,
+          select: { id: true },
+        });
+        return rows.map((row) => row.id);
+      };
 
       const isPreorderType = (type: ProductTypeLike) => {
         if (type?.has_duration === true) return true;
@@ -336,24 +345,29 @@ export async function PATCH(request: Request) {
       }
 
       if (variantId != null) {
+        const notifyIds = new Set<number>();
         await tx.adminProductVariant.update({
           where: { id: variantId },
           data: { cargo_fee, cargo_note: cargo_note || null, arrived_qty },
         });
 
-        const updated = await tx.adminOrderItem.updateMany({
-          where: {
-            product_id: productId,
-            variant_id: variantId,
-            status: { not: "Бараа ирсэн" },
-            order: {
-              is: {
-                deleted_at: null,
-                payment_status: "PAID",
-                ...(pendingName ? { status: pendingName } : {}),
-              },
+        const variantItemWhere = {
+          product_id: productId,
+          variant_id: variantId,
+          status: { not: "Бараа ирсэн" },
+          order: {
+            is: {
+              deleted_at: null,
+              payment_status: "PAID",
+              ...(pendingName ? { status: pendingName } : {}),
             },
           },
+        } as const;
+        for (const id of await getMatchingOrderItemIds(variantItemWhere)) {
+          notifyIds.add(id);
+        }
+        const updated = await tx.adminOrderItem.updateMany({
+          where: variantItemWhere,
           data: { status: "Бараа ирсэн" },
         });
         const candidateOrders = await tx.adminOrderItem.findMany({
@@ -409,17 +423,21 @@ export async function PATCH(request: Request) {
           });
 
           if (allVariantsArrived) {
-            await tx.adminOrderItem.updateMany({
-              where: {
-                product_id: productId,
-                status: { notIn: finalItemStatuses },
-                order: {
-                  is: {
-                    deleted_at: null,
-                    payment_status: "PAID",
-                  },
+            const remainingProductWhere = {
+              product_id: productId,
+              status: { notIn: finalItemStatuses },
+              order: {
+                is: {
+                  deleted_at: null,
+                  payment_status: "PAID",
                 },
               },
+            } as const;
+            for (const id of await getMatchingOrderItemIds(remainingProductWhere)) {
+              notifyIds.add(id);
+            }
+            await tx.adminOrderItem.updateMany({
+              where: remainingProductWhere,
               data: { status: "Бараа ирсэн" },
             });
 
@@ -440,6 +458,8 @@ export async function PATCH(request: Request) {
             await updateOrdersIfPreorderArrived(allProductOrders.map((x) => x.order_id));
           }
         }
+
+        await createArrivedNotificationsByOrderItemIds(tx, Array.from(notifyIds));
 
         return { kind: "variant" as const, updatedCount: updated.count, updatedOrders };
       }
@@ -467,18 +487,20 @@ export async function PATCH(request: Request) {
         });
       }
 
-      const updated = await tx.adminOrderItem.updateMany({
-        where: {
-          product_id: productId,
-          status: { not: "Бараа ирсэн" },
-          order: {
-            is: {
-              deleted_at: null,
-              payment_status: "PAID",
-              ...(pendingName ? { status: pendingName } : {}),
-            },
+      const productItemWhere = {
+        product_id: productId,
+        status: { not: "Бараа ирсэн" },
+        order: {
+          is: {
+            deleted_at: null,
+            payment_status: "PAID",
+            ...(pendingName ? { status: pendingName } : {}),
           },
         },
+      } as const;
+      const notifyIds = await getMatchingOrderItemIds(productItemWhere);
+      const updated = await tx.adminOrderItem.updateMany({
+        where: productItemWhere,
         data: { status: "Бараа ирсэн" },
       });
       const candidateOrders = await tx.adminOrderItem.findMany({
@@ -497,6 +519,7 @@ export async function PATCH(request: Request) {
         distinct: ["order_id"],
       });
       const updatedOrders = await updateOrdersIfPreorderArrived(candidateOrders.map((x) => x.order_id));
+      await createArrivedNotificationsByOrderItemIds(tx, notifyIds);
       return {
         kind: hasVariants ? ("product-all-variants" as const) : ("product" as const),
         updatedCount: updated.count,

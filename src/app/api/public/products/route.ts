@@ -25,6 +25,7 @@ const listSelect = Prisma.validator<Prisma.AdminProductSelect>()({
   category_id: true,
   subcategory_id: true,
   brand_id: true,
+  is_hidden: true,
   order_accept_status: true,
   created_at: true,
   type: {
@@ -80,6 +81,7 @@ const countSelect = Prisma.validator<Prisma.AdminProductSelect>()({
       has_duration: true,
     },
   },
+  is_hidden: true,
   variants: {
     select: {
       stock: true,
@@ -104,11 +106,13 @@ function shouldHideClosedProduct(
 
 function shouldExcludeProductByAvailability(
   product: {
+    is_hidden?: boolean | null;
     type: { name: string; has_duration: boolean } | null;
   },
   closed: boolean,
   availability: string,
 ) {
+  if (product.is_hidden) return true;
   if (shouldHideClosedProduct(product, closed)) return true;
   if (availability === "open" && closed) return true;
   return false;

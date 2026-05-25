@@ -105,6 +105,21 @@ interface ProductImageResponse {
     public_id?: string | null;
 }
 
+interface VariantImageResponse {
+    id: number;
+    image_url: string;
+    public_id?: string | null;
+}
+
+interface ProductVariantResponse {
+    id: number;
+    sku?: string | null;
+    attribute?: Record<string, unknown> | null;
+    price?: number | null;
+    stock?: number | null;
+    images?: VariantImageResponse[];
+}
+
 interface UploadResponse {
     images: {
         imageUrl: string;
@@ -150,6 +165,11 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
     const [productMode, setProductMode] = useState<"ready" | "preorder" | "live" | null>(null);
     const [forceReadyEdit, setForceReadyEdit] = useState(false);
     const [showImagePanel, setShowImagePanel] = useState(true);
+    const [variantMoveOpen, setVariantMoveOpen] = useState(false);
+    const [variantMoveLoading, setVariantMoveLoading] = useState(false);
+    const [variantMoveSubmitting, setVariantMoveSubmitting] = useState(false);
+    const [variantOptions, setVariantOptions] = useState<ProductVariantResponse[]>([]);
+    const [selectedVariantIds, setSelectedVariantIds] = useState<number[]>([]);
 
     const priceNumber = Number(form.price) || 0;
     const discountInputNumber = Number(discountInput) || 0;
@@ -352,6 +372,27 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
         });
         setDiscountMode("percent");
         setDiscountInput("");
+        setVariantMoveOpen(false);
+        setVariantMoveLoading(false);
+        setVariantMoveSubmitting(false);
+        setVariantOptions([]);
+        setSelectedVariantIds([]);
+    };
+
+    const getVariantLabel = (variant: ProductVariantResponse) => {
+        const attr = (variant.attribute || {}) as Record<string, unknown>;
+        const values = Object.values(attr)
+            .map((value) => String(value ?? "").trim())
+            .filter(Boolean);
+        return values.join(" / ") || variant.sku || `Төрөл #${variant.id}`;
+    };
+
+    const getVariantPreview = (variant: ProductVariantResponse) => {
+        const raw = String(variant.images?.[0]?.image_url ?? "").trim();
+        if (!raw) return null;
+        if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+        if (raw.startsWith("/")) return raw;
+        return `/${raw}`;
     };
 
     const addTier = () => {
@@ -452,6 +493,93 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
         setShowImagePanel(true);
         onClose();
     };
+
+    const openVariantMoveSelector = async () => {
+        if (!editData?.id) return;
+        setVariantMoveLoading(true);
+        setVariantMoveOpen(true);
+        try {
+            const res = await axios.get<ProductVariantResponse[]>(
+                `${process.env.NEXT_PUBLIC_API_URL || ""}/api/productvar/${editData.id}`
+            );
+            const variants = Array.isArray(res.data) ? res.data : [];
+            if (variants.length === 0) {
+                setVariantMoveOpen(false);
+                setForceReadyEdit(true);
+                handleModeSelect("ready");
+                return;
+            }
+            setVariantOptions(variants);
+            setSelectedVariantIds(variants.map((variant) => variant.id));
+        } catch (err) {
+            console.error("Төрлүүд татахад алдаа:", err);
+            alert("⚠️ Төрлүүдийг уншиж чадсангүй!");
+            setVariantMoveOpen(false);
+        } finally {
+            setVariantMoveLoading(false);
+        }
+    };
+
+    const toggleVariantSelection = (variantId: number) => {
+        setSelectedVariantIds((prev) =>
+            prev.includes(variantId) ? prev.filter((id) => id !== variantId) : [...prev, variantId]
+        );
+    };
+
+    const handleMoveSelectedVariantsToReady = async () => {
+        if (!editData?.id) return;
+        if (selectedVariantIds.length === 0) {
+            alert("Шилжүүлэх төрлөө сонгоно уу.");
+            return;
+        }
+
+        setVariantMoveSubmitting(true);
+        try {
+            await axios.post(
+                `${process.env.NEXT_PUBLIC_API_URL || ""}/api/product/${editData.id}/move-ready-variants`,
+                {
+                    selected_variant_ids: selectedVariantIds,
+                    product_snapshot: {
+                        name: form.name,
+                        description: form.description,
+                        video_url: form.video_url,
+                        price: Number(form.price) || 0,
+                        discount_price:
+                            (productMode === "ready" || forceReadyEdit) && computedDiscountPrice !== null && computedDiscountPrice > 0
+                                ? Number(computedDiscountPrice.toFixed(2))
+                                : null,
+                        bulk_prices: normalizeBulkTiers(form.bulk_prices),
+                        material: form.material,
+                        category_id: form.category_id ? Number(form.category_id) : null,
+                        subcategory_id: form.subcategory_id ? Number(form.subcategory_id) : null,
+                        brand_id: form.brand_id ? Number(form.brand_id) : null,
+                        unit_id: form.unit_id ? Number(form.unit_id) : null,
+                        images: form.images
+                            .filter((img) => img.uploadedUrl)
+                            .map((img) => ({
+                                image_url: img.uploadedUrl,
+                                public_id: img.public_id || null,
+                            })),
+                    },
+                },
+                { headers: { ...getActorHeaders() } }
+            );
+
+            onRefresh();
+            handleClose();
+        } catch (err) {
+            const axiosError = err as AxiosError<{ message?: string; error?: string }>;
+            const message =
+                axiosError.response?.data?.message ||
+                axiosError.response?.data?.error ||
+                "⚠️ Сонгосон төрлүүдийг бэлэн бараа руу шилжүүлж чадсангүй!";
+            console.error("Variant move error:", err);
+            alert(message);
+        } finally {
+            setVariantMoveSubmitting(false);
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -867,13 +995,122 @@ export default function AddProductModal({ open, onClose, onRefresh, editData, in
                                     <button
                                         type="button"
                                         onClick={() => {
-                                            setForceReadyEdit(true);
-                                            handleModeSelect("ready");
+                                            void openVariantMoveSelector();
                                         }}
                                         className="rounded-xl border px-4 py-2 text-xs font-semibold hover:bg-[var(--sky-100)]"
                                     >
                                         Бэлэн барааруу бүртгэх
                                     </button>
+                                    {variantMoveOpen && (
+                                        <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div>
+                                                    <div className="text-sm font-semibold text-slate-900">Төрлүүдээс сонгож бэлэн бараа руу шилжүүлэх</div>
+                                                    <div className="text-xs text-slate-500">
+                                                        Сонгосон төрлүүдийг л шинэ бэлэн бараа руу бүртгэнэ.
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {variantMoveLoading ? (
+                                                <div className="mt-3 rounded-xl border bg-white px-4 py-6 text-sm text-slate-500">Төрлүүдийг уншиж байна...</div>
+                                            ) : variantOptions.length === 0 ? (
+                                                <div className="mt-3 rounded-xl border bg-white px-4 py-6 text-sm text-slate-500">
+                                                    Энэ бараанд тусдаа төрөл алга. Ийм тохиолдолд энгийн засвараар ready болгож болно.
+                                                </div>
+                                            ) : (
+                                                <div className="mt-3 space-y-3">
+                                                    <div className="flex flex-wrap gap-2">
+                                                        <button
+                                                            type="button"
+                                                            className="rounded-full border px-3 py-1 text-xs font-medium text-slate-600 hover:bg-white"
+                                                            onClick={() => setSelectedVariantIds(variantOptions.map((variant) => variant.id))}
+                                                        >
+                                                            Бүгдийг сонгох
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className="rounded-full border px-3 py-1 text-xs font-medium text-slate-600 hover:bg-white"
+                                                            onClick={() =>
+                                                                setSelectedVariantIds(
+                                                                    variantOptions
+                                                                        .filter((variant) => Number(variant.stock || 0) > 0)
+                                                                        .map((variant) => variant.id)
+                                                                )
+                                                            }
+                                                        >
+                                                            Зөвхөн stock&gt;0
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className="rounded-full border px-3 py-1 text-xs font-medium text-slate-600 hover:bg-white"
+                                                            onClick={() => setSelectedVariantIds([])}
+                                                        >
+                                                            Бүгдийг цуцлах
+                                                        </button>
+                                                    </div>
+                                                    {variantOptions.map((variant) => (
+                                                        <label
+                                                            key={variant.id}
+                                                            className="flex items-start gap-3 rounded-xl border bg-white px-3 py-3 hover:border-slate-300"
+                                                        >
+                                                            <input
+                                                                type="checkbox"
+                                                                className="mt-1 h-4 w-4 rounded border-slate-300"
+                                                                checked={selectedVariantIds.includes(variant.id)}
+                                                                onChange={() => toggleVariantSelection(variant.id)}
+                                                            />
+                                                            {getVariantPreview(variant) ? (
+                                                                <div className="relative h-14 w-14 overflow-hidden rounded-lg border bg-slate-50">
+                                                                    <Image
+                                                                        src={getVariantPreview(variant) as string}
+                                                                        alt={getVariantLabel(variant)}
+                                                                        fill
+                                                                        sizes="56px"
+                                                                        className="object-cover"
+                                                                        unoptimized
+                                                                    />
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex h-14 w-14 items-center justify-center rounded-lg border bg-slate-50 text-[10px] text-slate-400">
+                                                                    Зураггүй
+                                                                </div>
+                                                            )}
+                                                            <div className="min-w-0 flex-1">
+                                                                <div className="text-sm font-medium text-slate-900">{getVariantLabel(variant)}</div>
+                                                                <div className="mt-1 text-xs text-slate-500">
+                                                                    Үнэ: {Number(variant.price || 0).toLocaleString()}₮
+                                                                    {" • "}
+                                                                    Үлдэгдэл: {Number(variant.stock || 0)}
+                                                                </div>
+                                                            </div>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    onClick={() => {
+                                                        setVariantMoveOpen(false);
+                                                        setVariantOptions([]);
+                                                        setSelectedVariantIds([]);
+                                                    }}
+                                                >
+                                                    Болих
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    onClick={handleMoveSelectedVariantsToReady}
+                                                    disabled={variantMoveLoading || variantMoveSubmitting || selectedVariantIds.length === 0}
+                                                >
+                                                    {variantMoveSubmitting ? "Шилжүүлж байна..." : "Сонгосон төрлүүдийг ready болгох"}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>

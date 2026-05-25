@@ -100,10 +100,8 @@ export default function AdminOrdersTable() {
   }, [qParam]);
 
   useEffect(() => {
-    if (isPending || openOnly) {
-      setViewMode("product");
-    }
-  }, [isPending, openOnly]);
+    setViewMode(isProductOnly ? "product" : "order");
+  }, [isProductOnly]);
 
   const fetchOrders = async (p = page, query = qDebounced) => {
     setLoading(true);

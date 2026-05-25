@@ -50,9 +50,30 @@ model User {
   address     String?
   avatarUrl   String?
   orders      Order[]
+  notifications UserNotification[]
   resetTokens PasswordResetToken[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+model UserNotification {
+  id          Int      @id @default(autoincrement())
+  user_id     String
+  type        String   @default("order_arrived")
+  title       String
+  body        String
+  order_id    Int?
+  order_item_id Int?
+  is_read     Boolean  @default(false)
+  read_at     DateTime?
+  metadata    Json?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, is_read, created_at])
+  @@index([order_id])
+  @@index([order_item_id])
 }
 
 model PasswordResetToken {
@@ -252,6 +273,7 @@ model AdminProduct {
   cargo_fee      Int?
   cargo_note     String?
   ordered_qty    Int                 @default(0)
+  is_hidden      Boolean             @default(false)
   order_accept_status String?        @default("OPEN")
   category_id    Int?
   subcategory_id Int?
