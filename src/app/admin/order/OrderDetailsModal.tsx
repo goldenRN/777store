@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { getActorHeaders } from "@/lib/actorHeaders";
 import { getVariantLabel } from "@/lib/variantLabel";
-import { X } from "lucide-react";
+import { Check, Copy, MapPin, X } from "lucide-react";
 
 export default function OrderDetailsModal({
   id,
@@ -24,6 +24,7 @@ export default function OrderDetailsModal({
   const [variantOptionsByProduct, setVariantOptionsByProduct] = useState<Record<number, any[]>>({});
   const [selectedVariantByItem, setSelectedVariantByItem] = useState<Record<number, number | "">>({});
   const [showBankApps, setShowBankApps] = useState(false);
+  const [addressCopied, setAddressCopied] = useState(false);
 
   const fetchDetail = async () => {
     setLoading(true);
@@ -171,6 +172,18 @@ export default function OrderDetailsModal({
   const variantLabel = (variant: any) =>
     getVariantLabel(variant?.attribute, variant?.sku, variant?.id) || "";
 
+  const handleCopyAddress = async () => {
+    const text = String(order?.delivery_address || "").trim();
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setAddressCopied(true);
+      window.setTimeout(() => setAddressCopied(false), 1800);
+    } catch (err) {
+      console.error("Хаяг copy хийхэд алдаа:", err);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="min-h-full flex items-start md:items-center justify-center p-2 md:p-4">
@@ -204,6 +217,28 @@ export default function OrderDetailsModal({
                     <div className="text-gray-600">Захиалагч</div>
                     <div className="mt-1 font-medium">{order.name}</div>
                     <div className="mt-0.5 text-xs text-gray-500">{order.email}</div>
+                    {deliveryMode && order.delivery_address ? (
+                      <div className="mt-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 text-gray-600">
+                            <MapPin className="h-4 w-4" />
+                            <span>Хүргүүлэх хаяг</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleCopyAddress}
+                            className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                            title="Хаяг хуулах"
+                          >
+                            {addressCopied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                            <span>{addressCopied ? "Хуулсан" : "Copy"}</span>
+                          </button>
+                        </div>
+                        <div className="mt-1 text-sm text-gray-800 break-words whitespace-pre-wrap">
+                          {order.delivery_address}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                   <div className="rounded-lg border p-3">
                     <div className="text-gray-600">Утас</div>

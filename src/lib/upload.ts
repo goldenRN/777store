@@ -1,11 +1,19 @@
 import { mkdir, writeFile, access } from "fs/promises";
 import { createHash } from "crypto";
 import path from "path";
+import sharp from "sharp";
 
 export type SavedFile = {
   url: string;
   publicId: string;
 };
+
+const PRODUCT_IMAGE_MAX_WIDTH = 1440;
+const PRODUCT_IMAGE_JPEG_QUALITY = 74;
+const PRODUCT_THUMB_MAX_WIDTH = 420;
+const PRODUCT_THUMB_JPEG_QUALITY = 68;
+const BANNER_IMAGE_MAX_WIDTH = 1800;
+const BANNER_IMAGE_JPEG_QUALITY = 80;
 
 const uploadDir =
   process.env.UPLOAD_DIR && process.env.UPLOAD_DIR.trim()
@@ -17,8 +25,17 @@ const publicBase =
     ? process.env.UPLOAD_PUBLIC_URL.trim().replace(/\/+$/, "")
     : "/uploads";
 
+const resolveTarget = (folder = "uploads") => {
+  const cleanFolder = folder.trim().replace(/^\/+|\/+$/g, "");
+  const isRootUploads = !cleanFolder || cleanFolder === "uploads";
+  const targetDir = isRootUploads ? uploadDir : path.join(uploadDir, cleanFolder);
+  const targetBase = isRootUploads ? publicBase : `${publicBase}/${cleanFolder}`;
+  return { targetDir, targetBase };
+};
+
 export async function saveFile(file: File, folder = "uploads"): Promise<SavedFile> {
-  await mkdir(uploadDir, { recursive: true });
+  const { targetDir, targetBase } = resolveTarget(folder);
+  await mkdir(targetDir, { recursive: true });
 
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
@@ -29,7 +46,7 @@ export async function saveFile(file: File, folder = "uploads"): Promise<SavedFil
   const optimizableImageExts = [".jpg", ".jpeg", ".png", ".webp", ...heicLikeExts];
   const outputExt = heicLikeExts.includes(extLower) ? ".jpg" : extLower;
   const safeName = `${hash}${outputExt}`;
-  const filePath = path.join(uploadDir, safeName);
+  const filePath = path.join(targetDir, safeName);
 
   try {
     await access(filePath);
@@ -38,30 +55,38 @@ export async function saveFile(file: File, folder = "uploads"): Promise<SavedFil
     const isImage = optimizableImageExts.includes(extLower);
     if (isImage) {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const sharp = require("sharp") as any;
-        if (sharp) {
-          // Force sRGB to avoid color shifts on some devices (e.g. CMYK/P3 uploads).
-          let pipeline = sharp(buffer, { failOnError: false }).rotate();
-          if (typeof pipeline.toColourspace === "function") {
-            pipeline = pipeline.toColourspace("srgb");
-          }
-          // Do NOT embed ICC metadata: some iOS decoders behave poorly with profiles.
-          const resized = pipeline.resize({ width: 1600, withoutEnlargement: true });
-          if (extLower === ".jpg" || extLower === ".jpeg" || heicLikeExts.includes(extLower)) {
-            await writeFile(
-              filePath,
-              await resized.jpeg({ quality: 78, progressive: false, mozjpeg: false }).toBuffer()
-            );
-          } else if (extLower === ".png") {
-            await writeFile(filePath, await resized.png({ compressionLevel: 9 }).toBuffer());
-          } else if (extLower === ".webp") {
-            await writeFile(filePath, await resized.webp({ quality: 78 }).toBuffer());
-          } else {
-            await writeFile(filePath, buffer);
-          }
-          wroteOptimized = true;
+        // Force sRGB to avoid color shifts on some devices (e.g. CMYK/P3 uploads).
+        let pipeline = sharp(buffer, { failOnError: false }).rotate();
+        if (typeof pipeline.toColourspace === "function") {
+          pipeline = pipeline.toColourspace("srgb");
         }
+        // Do NOT embed ICC metadata: some iOS decoders behave poorly with profiles.
+        const resized = pipeline.resize({
+          width: PRODUCT_IMAGE_MAX_WIDTH,
+          withoutEnlargement: true,
+        });
+        if (extLower === ".jpg" || extLower === ".jpeg" || heicLikeExts.includes(extLower)) {
+          await writeFile(
+            filePath,
+            await resized
+              .jpeg({
+                quality: PRODUCT_IMAGE_JPEG_QUALITY,
+                progressive: false,
+                mozjpeg: false,
+              })
+              .toBuffer()
+          );
+        } else if (extLower === ".png") {
+          await writeFile(filePath, await resized.png({ compressionLevel: 9 }).toBuffer());
+        } else if (extLower === ".webp") {
+          await writeFile(
+            filePath,
+            await resized.webp({ quality: PRODUCT_IMAGE_JPEG_QUALITY }).toBuffer()
+          );
+        } else {
+          await writeFile(filePath, buffer);
+        }
+        wroteOptimized = true;
       } catch {
         // ignore
       }
@@ -74,24 +99,27 @@ export async function saveFile(file: File, folder = "uploads"): Promise<SavedFil
   const isImage = optimizableImageExts.includes(extLower);
   if (isImage) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const sharp = require("sharp") as any;
-      if (sharp) {
-        const thumbName = `${hash}_sm.jpg`;
-        const thumbPath = path.join(uploadDir, thumbName);
-        try {
-          await access(thumbPath);
-        } catch {
-          let pipeline = sharp(buffer, { failOnError: false }).rotate();
-          if (typeof pipeline.toColourspace === "function") {
-            pipeline = pipeline.toColourspace("srgb");
-          }
-          const outputBuffer = await pipeline
-            .resize({ width: 600, withoutEnlargement: true })
-            .jpeg({ quality: 72, progressive: false, mozjpeg: false })
-            .toBuffer();
-          await writeFile(thumbPath, outputBuffer);
+      const thumbName = `${hash}_sm.jpg`;
+      const thumbPath = path.join(targetDir, thumbName);
+      try {
+        await access(thumbPath);
+      } catch {
+        let pipeline = sharp(buffer, { failOnError: false }).rotate();
+        if (typeof pipeline.toColourspace === "function") {
+          pipeline = pipeline.toColourspace("srgb");
         }
+        const outputBuffer = await pipeline
+          .resize({
+            width: PRODUCT_THUMB_MAX_WIDTH,
+            withoutEnlargement: true,
+          })
+          .jpeg({
+            quality: PRODUCT_THUMB_JPEG_QUALITY,
+            progressive: false,
+            mozjpeg: false,
+          })
+          .toBuffer();
+        await writeFile(thumbPath, outputBuffer);
       }
     } catch {
       // ignore thumb failures
@@ -99,7 +127,7 @@ export async function saveFile(file: File, folder = "uploads"): Promise<SavedFil
   }
 
   return {
-    url: `${publicBase}/${safeName}`,
+    url: `${targetBase}/${safeName}`,
     publicId: safeName,
   };
 }
@@ -114,42 +142,43 @@ export async function saveFiles(files: File[], folder = "uploads"): Promise<Save
 
 // Banner зураг шахаж хадгалах (sharp байвал ашиглана)
 export async function saveBannerFile(file: File, folder = "uploads"): Promise<SavedFile> {
-  await mkdir(uploadDir, { recursive: true });
+  const { targetDir, targetBase } = resolveTarget(folder);
+  await mkdir(targetDir, { recursive: true });
 
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
   const baseName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-banner`;
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const sharp = require("sharp") as any;
-    if (sharp) {
-      let pipeline = sharp(buffer, { failOnError: false }).rotate();
-      if (typeof pipeline.toColourspace === "function") {
-        pipeline = pipeline.toColourspace("srgb");
-      }
-      const outputBuffer = await pipeline
-        .resize({ width: 2000, withoutEnlargement: true })
-        .jpeg({ quality: 82, progressive: false, mozjpeg: false })
-        .toBuffer();
-      const safeName = `${baseName}.jpg`;
-      const filePath = path.join(uploadDir, safeName);
-      await writeFile(filePath, outputBuffer);
-      return {
-        url: `${publicBase}/${safeName}`,
-        publicId: safeName,
-      };
+    let pipeline = sharp(buffer, { failOnError: false }).rotate();
+    if (typeof pipeline.toColourspace === "function") {
+      pipeline = pipeline.toColourspace("srgb");
     }
+    const outputBuffer = await pipeline
+      .resize({ width: BANNER_IMAGE_MAX_WIDTH, withoutEnlargement: true })
+      .jpeg({
+        quality: BANNER_IMAGE_JPEG_QUALITY,
+        progressive: false,
+        mozjpeg: false,
+      })
+      .toBuffer();
+    const safeName = `${baseName}.jpg`;
+    const filePath = path.join(targetDir, safeName);
+    await writeFile(filePath, outputBuffer);
+    return {
+      url: `${targetBase}/${safeName}`,
+      publicId: safeName,
+    };
   } catch {
     // fall back to original file
   }
 
   const originalExt = path.extname(file.name || "") || ".jpg";
   const safeName = `${baseName}${originalExt}`;
-  const filePath = path.join(uploadDir, safeName);
+  const filePath = path.join(targetDir, safeName);
   await writeFile(filePath, buffer);
   return {
-    url: `${publicBase}/${safeName}`,
+    url: `${targetBase}/${safeName}`,
     publicId: safeName,
   };
 }

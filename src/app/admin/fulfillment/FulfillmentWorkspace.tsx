@@ -194,16 +194,31 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
   const effectiveStatus = (item: FulfillmentItem) => String(item.item_status || item.order_status || "").trim();
 
   const statusBadgeClass = (status: string) => {
-    if (status.includes("олгосон")) {
+    const normalized = status.trim().toLowerCase();
+    if (normalized.includes("хүргэгд") || normalized.includes("delivered") || normalized.includes("completed")) {
+      return "bg-slate-200 text-slate-700";
+    }
+    if (normalized.includes("олгосон") || normalized.includes("handed")) {
       return "bg-emerald-100 text-emerald-700";
     }
-    if (status.includes("Хүргэлт")) {
+    if (normalized.includes("хүргэлт") || normalized.includes("shipping")) {
       return "bg-blue-100 text-blue-700";
     }
-    if (status.includes("Буца")) {
+    if (normalized.includes("буца") || normalized.includes("return")) {
       return "bg-red-100 text-red-700";
     }
+    if (normalized.includes("ирсэн") || normalized.includes("arrived")) {
+      return "bg-emerald-100 text-emerald-700";
+    }
     return "bg-gray-100 text-gray-700";
+  };
+
+  const deliveredRowClass = (status: string) => {
+    const normalized = status.trim().toLowerCase();
+    if (normalized.includes("хүргэгд") || normalized.includes("delivered") || normalized.includes("completed")) {
+      return "bg-slate-50 text-slate-500";
+    }
+    return "";
   };
 
   const recentFilterPillClass = (selected: boolean) =>
@@ -848,7 +863,7 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
                   filteredItems.map((item) => {
                     const statusText = effectiveStatus(item) || "-";
                     return (
-                      <tr key={item.item_id} className="border-t">
+                      <tr key={item.item_id} className={`border-t ${deliveredRowClass(statusText)}`}>
                         <td className="p-3 align-top">
                           <input
                             type="checkbox"

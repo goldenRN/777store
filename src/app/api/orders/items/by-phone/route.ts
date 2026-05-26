@@ -13,6 +13,9 @@ const isFinalOrderFlowStatus = (value?: string | null) => {
     status.includes("arrived") ||
     status.includes("хүргэлт") ||
     status.includes("shipping") ||
+    status.includes("хүргэгд") ||
+    status.includes("delivered") ||
+    status.includes("completed") ||
     status.includes("олгосон") ||
     status.includes("handed") ||
     status.includes("буца") ||
