@@ -742,7 +742,6 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
                   <th className="p-3 text-left">Зураг</th>
                   <th className="p-3 text-left">Худалдан авагч</th>
                   <th className="p-3 text-left">Хүлээн авагч</th>
-                  <th className="p-3 text-left">Хүлээн авагчийн утас</th>
                   <th className="p-3 text-left">Бараанууд</th>
                   <th className="p-3 text-left">Төлөв</th>
                   <th className="p-3 text-left">Хаяг</th>
@@ -754,11 +753,11 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
               <tbody>
                 {recentLoading ? (
                   <tr>
-                    <td colSpan={10} className="p-4 text-center">Уншиж байна...</td>
+                    <td colSpan={9} className="p-4 text-center">Уншиж байна...</td>
                   </tr>
                 ) : groupedRecentActions.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="p-4 text-center text-gray-500">
+                    <td colSpan={9} className="p-4 text-center text-gray-500">
                       Сүүлийн олголтын түүх олдсонгүй.
                     </td>
                   </tr>
@@ -796,11 +795,11 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
                           {group.items.length} бараа • {group.totalQty}ш
                         </div>
                       </td>
-                      <td className="p-3 align-top text-sm text-gray-700">
-                        {group.recipient_name || "-"}
-                      </td>
-                      <td className="p-3 align-top text-sm text-gray-700">
-                        {group.recipient_phone || "-"}
+                      <td className="p-3 align-top">
+                        <div className="font-medium">{group.recipient_name || "-"}</div>
+                        <div className="mt-1 text-xs text-gray-500">
+                          {group.recipient_phone || "-"}
+                        </div>
                       </td>
                       <td className="p-3 align-top">
                         <div className="space-y-2">
