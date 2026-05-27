@@ -138,7 +138,14 @@ export async function GET(request: NextRequest) {
   const itemIds = Array.from(new Set(deduped.map((entry) => entry.itemId)));
 
   const itemRows = await prisma.adminOrderItem.findMany({
-    where: { id: { in: itemIds } },
+    where: {
+      id: { in: itemIds },
+      order: {
+        is: {
+          deleted_at: null,
+        },
+      },
+    },
     select: {
       id: true,
       order_id: true,
@@ -211,8 +218,10 @@ export async function GET(request: NextRequest) {
         product_name: item.product_name,
         image_url: item.image_url ?? null,
         qty: item.quantity,
-        buyer_name: isDeliveryRegistered ? delivery?.name || item.order?.name || "" : item.order?.name || "",
-        buyer_phone: isDeliveryRegistered ? delivery?.phone || item.order?.phone1 || "" : item.order?.phone1 || "",
+        buyer_name: item.order?.name || "",
+        buyer_phone: item.order?.phone1 || "",
+        recipient_name: isDeliveryRegistered ? delivery?.name || null : null,
+        recipient_phone: isDeliveryRegistered ? delivery?.phone || null : null,
         variant_label: getVariantLabel(item.variant),
         status: entry.status,
         note: entry.note ?? item.return_note ?? null,

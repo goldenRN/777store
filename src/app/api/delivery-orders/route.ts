@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 const formatDeliveryAddress = (
@@ -29,30 +30,44 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const where: Record<string, unknown> = {};
-  if (status && status !== "ALL") where.status = status;
+  const andClauses: Prisma.AdminDeliveryOrderWhereInput[] = [
+    {
+      OR: [
+        { source_order_id: null },
+        { order: { is: { deleted_at: null } } },
+      ],
+    },
+  ];
+
   if (q) {
     const maybeId = Number(q);
-    where.OR = [
-      { name: { contains: q, mode: "insensitive" } },
-      { phone: { contains: q } },
-      { address: { contains: q, mode: "insensitive" } },
-      { district_name: { contains: q, mode: "insensitive" } },
-      { khoroo_name: { contains: q, mode: "insensitive" } },
-      ...(Number.isFinite(maybeId) ? [{ id: maybeId }, { source_order_id: maybeId }] : []),
-      {
-        items: {
-          some: {
-            OR: [
-              ...(Number.isFinite(maybeId) ? [{ order_id: maybeId }] : []),
-              { product_name: { contains: q, mode: "insensitive" } },
-              { variant_label: { contains: q, mode: "insensitive" } },
-            ],
+    andClauses.push({
+      OR: [
+        { name: { contains: q, mode: "insensitive" } },
+        { phone: { contains: q } },
+        { address: { contains: q, mode: "insensitive" } },
+        { district_name: { contains: q, mode: "insensitive" } },
+        { khoroo_name: { contains: q, mode: "insensitive" } },
+        ...(Number.isFinite(maybeId) ? [{ id: maybeId }, { source_order_id: maybeId }] : []),
+        {
+          items: {
+            some: {
+              OR: [
+                ...(Number.isFinite(maybeId) ? [{ order_id: maybeId }] : []),
+                { product_name: { contains: q, mode: "insensitive" } },
+                { variant_label: { contains: q, mode: "insensitive" } },
+              ],
+            },
           },
         },
-      },
-    ];
+      ],
+    });
   }
+
+  const where: Prisma.AdminDeliveryOrderWhereInput = {
+    AND: andClauses,
+    ...(status && status !== "ALL" ? { status } : {}),
+  };
 
   const total = await prisma.adminDeliveryOrder.count({ where });
   const pages = Math.max(Math.ceil(total / limit), 1);

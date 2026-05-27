@@ -1,5 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+
+type OrderWithItems = Prisma.AdminOrderGetPayload<{
+  include: { items: true };
+}>;
+
+type OrderItemWithOrder = OrderWithItems["items"][number] & {
+  order: OrderWithItems;
+};
+
+type ProductWithVariants = Prisma.AdminProductGetPayload<{
+  include: {
+    images: true;
+    variants: { include: { images: true } };
+  };
+}>;
+
+type VariantWithImages = ProductWithVariants["variants"][number];
 
 const isArrivedStatus = (value?: string | null) => {
   const status = String(value || "").trim().toLowerCase();
@@ -35,19 +53,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ items: [] });
   }
 
-  const matchedUsers = await prisma.user.findMany({
-    where: { phone },
-    select: { id: true },
-  });
-  const matchedUserIds = matchedUsers.map((user) => user.id).filter(Boolean);
-
   const whereOrder: Record<string, unknown> = {
-    OR: [
-      { phone1: phone },
-      { phone2: phone },
-      { delivery_phone: phone },
-      ...(matchedUserIds.length > 0 ? [{ user_id: { in: matchedUserIds } }] : []),
-    ],
+    phone1: phone,
   };
   if (payment === "PAID") {
     whereOrder.payment_status = "PAID";
@@ -62,7 +69,7 @@ export async function GET(request: NextRequest) {
     orderBy: { id: "desc" },
   });
 
-  const items = orders.flatMap((order) =>
+  const items: OrderItemWithOrder[] = orders.flatMap((order) =>
     order.items.map((item) => ({
       ...item,
       order,
@@ -82,7 +89,7 @@ export async function GET(request: NextRequest) {
   const normalizeImage = (url?: string | null) => {
     const raw = String(url || "").trim();
     if (!raw) return "";
-    let cleaned = raw.split("#")[0].split("?")[0];
+    const cleaned = raw.split("#")[0].split("?")[0];
     if (cleaned.startsWith("http://") || cleaned.startsWith("https://")) {
       try {
         const parsed = new URL(cleaned);
@@ -100,8 +107,11 @@ export async function GET(request: NextRequest) {
     return `/uploads/${cleaned}`;
   };
 
-  const getVariantLabel = (variant: { sku: string | null; attribute: Record<string, unknown> | null; id: number }) => {
-    const attr = (variant.attribute || {}) as Record<string, unknown>;
+  const getVariantLabel = (variant: { sku: string | null; attribute: Prisma.JsonValue | null; id: number }) => {
+    const attr =
+      variant.attribute && typeof variant.attribute === "object"
+        ? (variant.attribute as Record<string, unknown>)
+        : {};
     const type = typeof attr.type === "string" ? attr.type : "";
     const color = typeof attr.color === "string" ? attr.color : "";
     const size = typeof attr.size === "string" ? attr.size : "";
@@ -123,12 +133,12 @@ export async function GET(request: NextRequest) {
     ])
   );
 
-  const variantByProduct = new Map<number, Map<number, any>>();
+  const variantByProduct = new Map<number, Map<number, VariantWithImages>>();
   const variantImageIndex = new Map<number, Map<string, number[]>>();
   const variantPriceIndex = new Map<number, Map<number, number[]>>();
 
   for (const p of products) {
-    const byId = new Map<number, any>();
+    const byId = new Map<number, VariantWithImages>();
     const byImage = new Map<string, number[]>();
     const byPrice = new Map<number, number[]>();
     for (const v of p.variants || []) {
@@ -138,12 +148,12 @@ export async function GET(request: NextRequest) {
         if (!byPrice.has(price)) byPrice.set(price, []);
         byPrice.get(price)!.push(v.id);
       }
-      (v.images || []).forEach((img: any) => {
+      for (const img of v.images || []) {
         const norm = normalizeImage(img.image_url);
-        if (!norm) return;
+        if (!norm) continue;
         if (!byImage.has(norm)) byImage.set(norm, []);
         byImage.get(norm)!.push(v.id);
-      });
+      }
     }
     variantByProduct.set(p.id, byId);
     variantImageIndex.set(p.id, byImage);
@@ -218,7 +228,7 @@ export async function GET(request: NextRequest) {
     if (it.product_id) {
       const productId = it.product_id;
       const qty = it.quantity;
-      const confirmedVariantId = (it as any)?.variant_id ? Number((it as any).variant_id) : null;
+      const confirmedVariantId = it.variant_id ? Number(it.variant_id) : null;
       if (confirmedVariantId) {
         const k = `${productId}|${confirmedVariantId}`;
         confirmedMap.set(k, (confirmedMap.get(k) ?? 0) + qty);
@@ -258,7 +268,7 @@ export async function GET(request: NextRequest) {
     const variants = productMap.get(productId)?.variants ?? [];
     const byId = variantByProduct.get(productId) ?? new Map();
 
-    const confirmedList = variants.map((v: any) => {
+    const confirmedList = variants.map((v) => {
       const ordered = confirmedMap.get(`${productId}|${v.id}`) ?? 0;
       const stock = v.stock != null ? Number(v.stock) : null;
       const remaining = stock != null ? Math.max(0, stock - ordered) : null;
@@ -305,33 +315,41 @@ export async function GET(request: NextRequest) {
   const rawItems = items.map((it) => {
     const productMeta = it.product_id ? productMap.get(it.product_id) : null;
     const productId = it.product_id ?? null;
-    const byId = productId ? variantByProduct.get(productId) ?? new Map() : new Map();
-    const confirmedVariantId = (it as any)?.variant_id ? Number((it as any).variant_id) : null;
+    const byId = productId
+      ? variantByProduct.get(productId) ?? new Map<number, VariantWithImages>()
+      : new Map<number, VariantWithImages>();
+    const confirmedVariantId = it.variant_id ? Number(it.variant_id) : null;
 
     let variantLabel: string | null = null;
     let variantConfirmed = false;
     let inferredBy: "image" | "price" | null = null;
-    let matchedVariant: any | null = null;
+    let matchedVariant: VariantWithImages | null = null;
 
     if (confirmedVariantId && byId.has(confirmedVariantId)) {
-      matchedVariant = byId.get(confirmedVariantId);
-      variantLabel = getVariantLabel(matchedVariant);
+      matchedVariant = byId.get(confirmedVariantId) ?? null;
+      if (matchedVariant) {
+        variantLabel = getVariantLabel(matchedVariant);
+      }
       variantConfirmed = true;
     } else if (productId) {
       const normImage = normalizeImage(it.image_url ?? null);
       if (normImage) {
         const candidates = variantImageIndex.get(productId)?.get(normImage) ?? [];
         if (candidates.length === 1 && byId.has(candidates[0])) {
-          matchedVariant = byId.get(candidates[0]);
-          variantLabel = getVariantLabel(matchedVariant);
+          matchedVariant = byId.get(candidates[0]) ?? null;
+          if (matchedVariant) {
+            variantLabel = getVariantLabel(matchedVariant);
+          }
           inferredBy = "image";
         }
       }
       if (!variantLabel && it.price != null) {
         const candidates = variantPriceIndex.get(productId)?.get(Number(it.price)) ?? [];
         if (candidates.length === 1 && byId.has(candidates[0])) {
-          matchedVariant = byId.get(candidates[0]);
-          variantLabel = getVariantLabel(matchedVariant);
+          matchedVariant = byId.get(candidates[0]) ?? null;
+          if (matchedVariant) {
+            variantLabel = getVariantLabel(matchedVariant);
+          }
           inferredBy = "price";
         }
       }
