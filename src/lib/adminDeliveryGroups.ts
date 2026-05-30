@@ -19,6 +19,7 @@ export type DeliveryGroupSummary = {
   invoiceId: string | null;
   senderInvoiceNo: string | null;
   paymentId: string | null;
+  paymentStatus: "PAID" | "UNPAID";
   label: string;
   itemCount: number;
   totalQuantity: number;
@@ -97,6 +98,7 @@ export function buildDeliveryGroups(items: SourceItem[]): DeliveryGroupSummary[]
         invoiceId: item.qpay_invoice_id ?? null,
         senderInvoiceNo: item.qpay_sender_invoice_no ?? null,
         paymentId: item.qpay_payment_id ?? null,
+        paymentStatus: item.qpay_payment_id || item.delivery_paid_at ? "PAID" : "UNPAID",
         label: getGroupLabel(item),
         itemCount: 0,
         totalQuantity: 0,
@@ -118,6 +120,10 @@ export function buildDeliveryGroups(items: SourceItem[]): DeliveryGroupSummary[]
     if (item.delivery_paid_at) {
       const iso = new Date(item.delivery_paid_at).toISOString();
       if (!group.paidAt || iso > group.paidAt) group.paidAt = iso;
+    }
+    if (item.qpay_payment_id || item.delivery_paid_at) {
+      group.paymentId = item.qpay_payment_id ?? group.paymentId ?? null;
+      group.paymentStatus = "PAID";
     }
     group.items.push({
       itemId: item.id,

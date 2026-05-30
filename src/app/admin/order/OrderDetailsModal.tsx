@@ -8,10 +8,12 @@ export default function OrderDetailsModal({
   id,
   onClose,
   deliveryMode = false,
+  onRefresh,
 }: {
   id: number;
   onClose: () => void;
   deliveryMode?: boolean;
+  onRefresh?: () => void;
 }) {
   const [order, setOrder] = useState<any>(null);
   const [items, setItems] = useState<any[]>([]);
@@ -74,6 +76,7 @@ export default function OrderDetailsModal({
       body: JSON.stringify({ status }),
     });
     await fetchDetail();
+    onRefresh?.();
   };
 
   const updateItemStatus = async (itemId: number, status: string) => {
@@ -83,6 +86,7 @@ export default function OrderDetailsModal({
       body: JSON.stringify({ status }),
     });
     await fetchDetail();
+    onRefresh?.();
   };
 
   const orderStatusLabels: Record<string, string> = {
@@ -163,6 +167,7 @@ export default function OrderDetailsModal({
         body: JSON.stringify({ variant_id }),
       });
       await fetchDetail();
+      onRefresh?.();
       setEditingItemId(null);
     } finally {
       setSavingItemId(null);

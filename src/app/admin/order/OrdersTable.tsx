@@ -58,6 +58,17 @@ export default function OrdersTable({
     return normalized === "хүргэлтэнд бүртгэгдсэн" || normalized === "shipping" || normalized === "shipped";
   };
 
+  const getDeliveryPaymentBadge = (status: "PAID" | "UNPAID") =>
+    status === "PAID"
+      ? {
+          label: "Төлөгдсөн",
+          className: "bg-emerald-100 text-emerald-700",
+        }
+      : {
+          label: "Төлөгдөөгүй",
+          className: "bg-amber-100 text-amber-700",
+        };
+
   const sortedOrders = [...orders].sort((a, b) => {
     const aVal = a[sortField];
     const bVal = b[sortField];
@@ -272,7 +283,14 @@ export default function OrdersTable({
                                   <div className="text-xs font-semibold uppercase tracking-wide text-sky-700">
                                     {group.invoiceId ? "Grouped Delivery QPay" : "Хүргэлтийн бүртгэл"}
                                   </div>
-                                  <div className="text-sm font-medium text-gray-900">{group.label}</div>
+                                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                                    <div className="text-sm font-medium text-gray-900">{group.label}</div>
+                                    <span
+                                      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${getDeliveryPaymentBadge(group.paymentStatus).className}`}
+                                    >
+                                      {getDeliveryPaymentBadge(group.paymentStatus).label}
+                                    </span>
+                                  </div>
                                   <div className="text-xs text-gray-500">
                                     {group.orderCount > 1
                                       ? `${group.orderCount} захиалгын ${group.itemCount} мөр багтсан`

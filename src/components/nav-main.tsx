@@ -63,17 +63,8 @@ export function NavMain({
   const [openMap, setOpenMap] = useState<Record<string, boolean>>(initialOpen)
 
   useEffect(() => {
-    setOpenMap((prev) => {
-      const next = { ...prev }
-      items.forEach((item) => {
-        const match =
-          item.items?.some((sub) => matchesUrl(sub.url, pathname, searchParams)) ||
-          matchesUrl(item.url, pathname, searchParams)
-        if (match) next[item.title] = true
-      })
-      return next
-    })
-  }, [items, pathname, searchParams])
+    setOpenMap(initialOpen)
+  }, [initialOpen])
 
   return (
     <SidebarGroup>

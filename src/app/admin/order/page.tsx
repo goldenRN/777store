@@ -956,10 +956,8 @@ export default function AdminOrdersTable() {
         <OrderDetailsModal
           id={selected.id}
           deliveryMode={Boolean(selected.is_delivery_order)}
-          onClose={() => {
-            setSelected(null);
-            fetchOrders(page);
-          }}
+          onClose={() => setSelected(null)}
+          onRefresh={() => fetchOrders(page, qDebounced)}
         />
       ) : null}
 
