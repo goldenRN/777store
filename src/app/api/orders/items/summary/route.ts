@@ -78,6 +78,7 @@ type SummaryVariant = {
   label: string;
   stock: number | null;
   ordered_qty: number;
+  pending_qty: number;
   handed_qty: number;
   delivery_qty: number;
   arrived_qty: number | null;
@@ -103,6 +104,7 @@ type SummaryGroup = {
   cargo_note: string | null;
   order_accept_status: string | null;
   total_qty: number;
+  pending_qty: number;
   order_count: number;
   item_ids: number[];
   buyers: { order_id: number; name: string; phone: string; qty: number; unit_price: number; total_price: number; status: string | null; received: boolean }[];
@@ -192,14 +194,16 @@ export async function GET(request: NextRequest) {
   } else if (payment === "UNPAID") {
     whereOrder.payment_status = "UNPAID";
   }
-  if (status && !itemStatus) {
+  if (status && !itemStatus && !arrivedOnly) {
     whereOrder.status = status;
   }
 
   const items = await prisma.adminOrderItem.findMany({
     where: {
       order: whereOrder,
-      ...(itemStatus
+      ...(arrivedOnly
+        ? {}
+        : itemStatus
         ? { status: itemStatus }
         : excludeArrived
           ? { status: { not: "Бараа ирсэн" } }
@@ -392,6 +396,7 @@ export async function GET(request: NextRequest) {
       cargo_note: productMeta?.cargo_note ?? null,
       order_accept_status: productMeta?.order_accept_status ?? null,
       total_qty: 0,
+      pending_qty: 0,
       order_count: 0,
       item_ids: [],
       buyers: [],
@@ -399,6 +404,7 @@ export async function GET(request: NextRequest) {
     };
 
     current.total_qty += item.quantity;
+    current.pending_qty += item.quantity;
     current.item_ids.push(item.id);
     current.buyers.push({
       order_id: item.order_id,
@@ -463,6 +469,7 @@ export async function GET(request: NextRequest) {
         cargo_note: productMeta?.cargo_note ?? product.cargo_note ?? null,
         order_accept_status: productMeta?.order_accept_status ?? product.order_accept_status ?? null,
         total_qty: 0,
+        pending_qty: 0,
         order_count: 0,
         item_ids: [],
         buyers: [],
@@ -493,7 +500,8 @@ export async function GET(request: NextRequest) {
       const computedAll: SummaryVariant[] = variants.map((variant) => {
         const confirmed = confirmedMap.get(`${productId}|${variant.id}`) ?? 0;
         const inferred = inferredMap.get(`${productId}|${variant.id}`) ?? 0;
-        const ordered = confirmed + inferred;
+        const pendingOrdered = confirmed + inferred;
+        const ordered = variant.ordered_qty != null ? Number(variant.ordered_qty) : pendingOrdered;
         const stock = variant.stock != null ? Number(variant.stock) : null;
         const remaining = stock != null ? Math.max(0, stock - ordered) : null;
         const variantClosed = variant.order_accept_status === "CLOSED";
@@ -503,6 +511,7 @@ export async function GET(request: NextRequest) {
           label: getVariantLabel(variant),
           stock,
           ordered_qty: ordered,
+          pending_qty: pendingOrdered,
           handed_qty: handedByVariant.get(`${productId}|${variant.id}`) ?? 0,
           delivery_qty: deliveryByVariant.get(`${productId}|${variant.id}`) ?? 0,
           arrived_qty: arrivedQty,
@@ -529,8 +538,8 @@ export async function GET(request: NextRequest) {
         : closedOnly
           ? computedAll.filter((variant) => variant.closed && !variant.arrived)
           : arrivedOnly
-            ? computedAll.filter((variant) => variant.arrived || variant.ordered_qty > 0)
-            : computedAll.filter((variant) => variant.ordered_qty > 0);
+            ? computedAll.filter((variant) => variant.arrived || variant.pending_qty > 0)
+            : computedAll.filter((variant) => variant.pending_qty > 0);
 
       const variantStockSum = computedAll.reduce((sum, variant) => sum + Math.max(0, Number(variant.stock || 0)), 0);
       const productStockRaw = productMeta?.stock != null ? Number(productMeta.stock) : null;
@@ -568,6 +577,7 @@ export async function GET(request: NextRequest) {
 
       return {
         ...group,
+        total_qty: productMeta?.ordered_qty != null ? Number(productMeta.ordered_qty) : group.total_qty,
         handed_qty: handedByProduct.get(productId) ?? group.handed_qty ?? 0,
         delivery_qty: deliveryByProduct.get(productId) ?? group.delivery_qty ?? 0,
         cargo_fee:

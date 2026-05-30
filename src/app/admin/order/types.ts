@@ -48,6 +48,7 @@ export type ProductVariantSummary = {
   label: string;
   stock: number | null;
   ordered_qty: number;
+  pending_qty: number;
   handed_qty: number;
   delivery_qty: number;
   arrived_qty: number | null;
@@ -73,6 +74,7 @@ export type ProductSummary = {
   cargo_note: string | null;
   order_accept_status: string | null;
   total_qty: number;
+  pending_qty: number;
   order_count: number;
   item_ids: number[];
   buyers: ProductBuyer[];

@@ -430,7 +430,7 @@ export default function AdminOrdersTable() {
       variantLabel: null,
       applyToAllVariants: Array.isArray(p.variants) && p.variants.length > 0,
     });
-    setArrivedQty(String(p.total_qty ?? 0));
+    setArrivedQty(String(p.pending_qty ?? p.total_qty ?? 0));
     setArrivedCargoFee("");
     setArrivedCargoNote("");
     setArrivedOpen(true);
@@ -446,7 +446,7 @@ export default function AdminOrdersTable() {
       variantLabel: v.label,
       applyToAllVariants: false,
     });
-    setArrivedQty(String(v.ordered_qty ?? 0));
+    setArrivedQty(String(v.pending_qty ?? v.ordered_qty ?? 0));
     setArrivedCargoFee("");
     setArrivedCargoNote("");
     setArrivedOpen(true);

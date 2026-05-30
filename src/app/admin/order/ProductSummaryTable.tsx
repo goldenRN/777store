@@ -81,7 +81,7 @@ export default function ProductSummaryTable({
             </th>
             <th className="p-3 text-left">
               <button type="button" onClick={() => onProductSort("total_qty")} className="inline-flex items-center gap-1 font-semibold" title="Sort">
-                Захиалсан
+                Нийт захиалсан
                 {sortIcon("total_qty")}
               </button>
             </th>
@@ -220,7 +220,7 @@ export default function ProductSummaryTable({
                               <thead className="bg-gray-100">
                                 <tr>
                                   <th className="px-3 py-2 text-left">Төрөл</th>
-                                  <th className="px-3 py-2 text-left">Захиалсан</th>
+                                  <th className="px-3 py-2 text-left">Нийт захиалсан</th>
                                   <th className="px-3 py-2 text-left">Захиалга авах тоо</th>
                                   <th className="px-3 py-2 text-left">Үлдэгдэл</th>
                                   {isArrivedTab ? <th className="px-3 py-2 text-left">Ирж авсан</th> : null}
