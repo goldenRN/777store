@@ -67,6 +67,7 @@ export async function GET(request: NextRequest) {
   const where: Prisma.AdminDeliveryOrderWhereInput = {
     AND: andClauses,
     ...(status && status !== "ALL" ? { status } : {}),
+    ...(status === "Хүргэгдсэн" ? { payment_status: "PAID" } : {}),
   };
 
   const total = await prisma.adminDeliveryOrder.count({ where });

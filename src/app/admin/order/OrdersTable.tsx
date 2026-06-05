@@ -58,6 +58,11 @@ export default function OrdersTable({
     return normalized === "хүргэлтэнд бүртгэгдсэн" || normalized === "shipping" || normalized === "shipped";
   };
 
+  const canMarkDeliveryComplete = (order: Order) =>
+    order.is_delivery_order &&
+    isShippingOrder(order) &&
+    String(order.payment_status || "").toUpperCase() === "PAID";
+
   const getDeliveryPaymentBadge = (status: "PAID" | "UNPAID") =>
     status === "PAID"
       ? {
@@ -219,7 +224,7 @@ export default function OrdersTable({
                           <Truck className="h-4 w-4" />
                         </button>
                       ) : null}
-                      {!deletedOnly && order.is_delivery_order && isShippingOrder(order) ? (
+                      {!deletedOnly && canMarkDeliveryComplete(order) ? (
                         <button
                           onClick={() => onMarkDeliveryComplete(order)}
                           className="flex h-9 items-center justify-center rounded border bg-white px-3 text-emerald-700 hover:bg-emerald-50"

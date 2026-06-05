@@ -18,15 +18,40 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ message: "Буцаалтын тайлбар шаардлагатай" }, { status: 400 });
   }
 
-  const numericIds = itemIds.map((id: any) => Number(id)).filter((id: number) => Number.isFinite(id));
+  const numericIds = itemIds
+    .map((id: unknown) => Number(id))
+    .filter((id: number) => Number.isFinite(id));
   if (numericIds.length === 0) {
     return NextResponse.json({ message: "Invalid itemIds" }, { status: 400 });
   }
 
   const affectedItems = await prisma.adminOrderItem.findMany({
     where: { id: { in: numericIds } },
-    select: { id: true, order_id: true },
+    select: {
+      id: true,
+      order_id: true,
+      product_name: true,
+      status: true,
+      delivery_method: true,
+      qpay_payment_id: true,
+      delivery_paid_at: true,
+    },
   });
+
+  const isHandedStatus =
+    statusNorm.includes("олгосон") || statusNorm.includes("handed") || statusNorm.includes("pickup");
+  if (
+    isHandedStatus &&
+    affectedItems.some((item) => String(item.delivery_method || "").trim().toLowerCase() === "delivery")
+  ) {
+    return NextResponse.json(
+      {
+        message:
+          "Хүргэлтийн барааг “Ирж авсан” болгож болохгүй. Эхлээд хүргэлтийн төлбөр баталгаажиж, дараа нь “Хүргэлтэнд бүртгэгдсэн” цэснээс “Хүргэгдсэн” болгоно.",
+      },
+      { status: 400 }
+    );
+  }
 
   await prisma.adminOrderItem.updateMany({
     where: { id: { in: numericIds } },

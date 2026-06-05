@@ -169,6 +169,13 @@ export async function PATCH(
     return NextResponse.json({ message: "Not found" }, { status: 404 });
   }
 
+  if (String(deliveryOrder.payment_status || "").toUpperCase() !== "PAID") {
+    return NextResponse.json(
+      { message: "Хүргэлтийн төлбөр төлөгдөөгүй тул “Хүргэгдсэн” болгож болохгүй." },
+      { status: 400 }
+    );
+  }
+
   const orderItemIds = deliveryOrder.items
     .map((item) => Number(item.order_item_id))
     .filter((value) => Number.isFinite(value) && value > 0);

@@ -19,6 +19,13 @@ type ProductWithVariants = Prisma.AdminProductGetPayload<{
 
 type VariantWithImages = ProductWithVariants["variants"][number];
 
+type ItemAuditMeta = {
+  status: string;
+  actor_name: string | null;
+  actor_phone: string | null;
+  created_at: string | null;
+};
+
 const isArrivedStatus = (value?: string | null) => {
   const status = String(value || "").trim().toLowerCase();
   return status.includes("ирсэн") || status.includes("arrived");
@@ -75,6 +82,51 @@ export async function GET(request: NextRequest) {
       order,
     }))
   );
+
+  const itemAuditMap = new Map<number, ItemAuditMeta>();
+  if (items.length > 0) {
+    const targetItemIds = new Set(items.map((item) => item.id));
+    const auditLogs = await prisma.adminAuditLog.findMany({
+      where: {
+        action: {
+          in: ["ORDER_ITEMS_BULK_STATUS", "ORDER_ITEM_DELIVERY_REGISTERED"],
+        },
+      },
+      orderBy: { created_at: "desc" },
+      take: 1000,
+    });
+
+    for (const log of auditLogs) {
+      const details = (log.details ?? {}) as Record<string, unknown>;
+      if (log.action === "ORDER_ITEM_DELIVERY_REGISTERED") {
+        const itemId = Number(details.item_id ?? log.entity_id ?? "");
+        if (!Number.isFinite(itemId) || !targetItemIds.has(itemId) || itemAuditMap.has(itemId)) continue;
+        itemAuditMap.set(itemId, {
+          status: "Хүргэлтэнд бүртгэгдсэн",
+          actor_name: log.actor_name ?? null,
+          actor_phone: log.actor_phone ?? null,
+          created_at: log.created_at?.toISOString?.() ?? null,
+        });
+        continue;
+      }
+
+      const status = String(details.status ?? "").trim();
+      const itemIds = Array.isArray(details.itemIds)
+        ? details.itemIds
+            .map((value) => Number(value))
+            .filter((value) => Number.isFinite(value) && targetItemIds.has(value))
+        : [];
+      for (const itemId of itemIds) {
+        if (itemAuditMap.has(itemId)) continue;
+        itemAuditMap.set(itemId, {
+          status,
+          actor_name: log.actor_name ?? null,
+          actor_phone: log.actor_phone ?? null,
+          created_at: log.created_at?.toISOString?.() ?? null,
+        });
+      }
+    }
+  }
 
   const productIds = Array.from(
     new Set(items.map((it) => it.product_id).filter((id) => id != null))
@@ -368,6 +420,7 @@ export async function GET(request: NextRequest) {
     }
 
     const cargoFee = Number(matchedVariant?.cargo_fee ?? productMeta?.cargo_fee ?? 0);
+    const auditMeta = itemAuditMap.get(it.id);
 
     return {
       item_id: it.id,
@@ -384,6 +437,12 @@ export async function GET(request: NextRequest) {
       buyer_phone: it.order?.phone1 ?? "",
       created_at: it.order?.created_at ?? null,
       cargo_fee: cargoFee,
+      delivery_method: it.delivery_method ?? null,
+      delivery_paid: Boolean(it.qpay_payment_id || it.delivery_paid_at),
+      last_action_status: auditMeta?.status ?? null,
+      last_actor_name: auditMeta?.actor_name ?? null,
+      last_actor_phone: auditMeta?.actor_phone ?? null,
+      last_action_at: auditMeta?.created_at ?? null,
       variant_label: variantLabel,
       variant_confirmed: variantConfirmed,
       inferred_by: inferredBy,

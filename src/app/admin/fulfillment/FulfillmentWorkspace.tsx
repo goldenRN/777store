@@ -23,6 +23,12 @@ type FulfillmentItem = {
   buyer_phone: string;
   created_at: string | null;
   cargo_fee: number;
+  delivery_method: string | null;
+  delivery_paid: boolean;
+  last_action_status: string | null;
+  last_actor_name: string | null;
+  last_actor_phone: string | null;
+  last_action_at: string | null;
   variant_label: string | null;
   variant_confirmed: boolean;
   inferred_by: "image" | "price" | null;
@@ -223,6 +229,17 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
     return "";
   };
 
+  const shouldShowActionMeta = (item: FulfillmentItem, status: string) => {
+    const normalized = status.trim().toLowerCase();
+    if (!item.last_action_at) return false;
+    return (
+      normalized.includes("олгосон") ||
+      normalized.includes("хүргэгд") ||
+      normalized.includes("delivered") ||
+      normalized.includes("completed")
+    );
+  };
+
   const recentFilterPillClass = (selected: boolean) =>
     selected
       ? "bg-black text-white border-black"
@@ -365,6 +382,14 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
     [selectedRows]
   );
 
+  const hasSelectedDeliveryItems = useMemo(
+    () =>
+      selectedRows.some(
+        (item) => String(item.delivery_method || "").trim().toLowerCase() === "delivery"
+      ),
+    [selectedRows]
+  );
+
   const toggleItem = (itemId: number) => {
     setSelectedItemIds((prev) =>
       prev.includes(itemId) ? prev.filter((id) => id !== itemId) : [...prev, itemId]
@@ -381,6 +406,10 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
 
   const handleMarkDelivered = async () => {
     if (!selectedItemIds.length) return;
+    if (hasSelectedDeliveryItems) {
+      alert("Хүргэлтийн барааг “Ирж авсан” болгож болохгүй. “Хүргэлтэнд бүртгэгдсэн” цэснээс хүргэж дуусгана.");
+      return;
+    }
     const message =
       selectedCargoTotal > 0
         ? `Сонгосон ${selectedItemIds.length} барааг "Ирж авсан" болгох уу?\nНийт карго: ${selectedCargoTotal.toLocaleString()}₮`
@@ -922,6 +951,17 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
                           <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">
                             {statusText}
                           </span>
+                          {shouldShowActionMeta(item, statusText) ? (
+                            <div className="mt-2 text-[11px] leading-5 text-gray-500">
+                              <div>
+                                {item.last_actor_name || item.last_actor_phone || "Тодорхойгүй"}
+                                {item.last_actor_phone && item.last_actor_phone !== item.last_actor_name
+                                  ? ` • ${item.last_actor_phone}`
+                                  : ""}
+                              </div>
+                              <div>{new Date(item.last_action_at as string).toLocaleString()}</div>
+                            </div>
+                          ) : null}
                         </td>
                         <td className="p-3 align-top font-medium">
                           {Number(item.cargo_fee || 0) > 0 ? (
@@ -973,8 +1013,9 @@ export default function FulfillmentWorkspace({ mode }: { mode: FulfillmentViewMo
                 </button>
                 <button
                   onClick={handleMarkDelivered}
-                  disabled={selectedItemIds.length === 0}
+                  disabled={selectedItemIds.length === 0 || hasSelectedDeliveryItems}
                   className="rounded-full bg-green-600 px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  title={hasSelectedDeliveryItems ? "Хүргэлтийн барааг эндээс олгож болохгүй" : undefined}
                 >
                   Ирж авсан
                 </button>
