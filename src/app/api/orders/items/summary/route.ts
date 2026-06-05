@@ -137,10 +137,7 @@ function isHandedStatus(value?: string | null) {
 function isDeliveryTakenStatus(value?: string | null) {
   const normalized = normalizeStatus(value);
   return (
-    normalized.includes("хүргэлт") ||
     normalized.includes("хүргэгд") ||
-    normalized.includes("shipping") ||
-    normalized.includes("shipped") ||
     normalized.includes("delivered") ||
     normalized.includes("completed")
   );
