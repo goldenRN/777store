@@ -23,6 +23,7 @@ import type {
   Order,
   OrderColumn,
   PaymentMethod,
+  ProductDetail,
   ProductSortField,
   ProductSummary,
   VariantOption,
@@ -45,7 +46,7 @@ export default function AdminOrdersTable() {
   const [viewMode, setViewMode] = useState<"order" | "product">("order");
   const [productItems, setProductItems] = useState<ProductSummary[]>([]);
   const [productLoading, setProductLoading] = useState(false);
-  const [productDetail, setProductDetail] = useState<ProductSummary | null>(null);
+  const [productDetail, setProductDetail] = useState<ProductDetail | null>(null);
   const [sortField, setSortField] = useState<keyof Order>("created_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [createOpen, setCreateOpen] = useState(false);
@@ -488,6 +489,27 @@ export default function AdminOrdersTable() {
     setArrivedOpen(true);
   };
 
+  const openProductDetail = (product: ProductSummary) => {
+    setProductDetail({
+      key: `product-${product.product_id ?? product.product_name}`,
+      title: product.product_name,
+      total_qty: product.total_qty ?? 0,
+      buyers: product.buyers ?? [],
+    });
+  };
+
+  const openVariantDetail = (
+    product: ProductSummary,
+    variant: ProductSummary["variants"][number]
+  ) => {
+    setProductDetail({
+      key: `variant-${variant.variant_id}`,
+      title: `${product.product_name} / ${variant.label}`,
+      total_qty: variant.ordered_qty ?? 0,
+      buyers: variant.buyers ?? [],
+    });
+  };
+
   const saveArrived = async () => {
     if (!arrivedTarget) return;
     const qtyRaw = arrivedQty.trim();
@@ -912,7 +934,8 @@ export default function AdminOrdersTable() {
           onOpenArrivedModalForVariant={openArrivedModalForVariant}
           onOpenEditArrivedForProduct={openEditArrivedForProduct}
           onOpenEditArrivedForVariant={openEditArrivedForVariant}
-          onOpenProductDetail={setProductDetail}
+          onOpenProductDetail={openProductDetail}
+          onOpenVariantDetail={openVariantDetail}
         />
       ) : (
         <OrdersTable
@@ -961,7 +984,11 @@ export default function AdminOrdersTable() {
         />
       ) : null}
 
-      <ProductDetailModal productDetail={productDetail} onClose={() => setProductDetail(null)} />
+      <ProductDetailModal
+        key={productDetail?.key ?? "product-detail"}
+        productDetail={productDetail}
+        onClose={() => setProductDetail(null)}
+      />
 
       <CreateOrderModal
         open={createOpen}

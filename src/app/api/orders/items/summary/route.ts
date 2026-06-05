@@ -87,6 +87,18 @@ type SummaryVariant = {
   cargo_note: string | null;
   arrived: boolean;
   closed: boolean;
+  buyers: SummaryBuyer[];
+};
+
+type SummaryBuyer = {
+  order_id: number;
+  name: string;
+  phone: string;
+  qty: number;
+  unit_price: number;
+  total_price: number;
+  status: string | null;
+  received: boolean;
 };
 
 type SummaryGroup = {
@@ -107,7 +119,7 @@ type SummaryGroup = {
   pending_qty: number;
   order_count: number;
   item_ids: number[];
-  buyers: { order_id: number; name: string; phone: string; qty: number; unit_price: number; total_price: number; status: string | null; received: boolean }[];
+  buyers: SummaryBuyer[];
   variants: SummaryVariant[];
   all_variants_arrived?: boolean;
   uniform_variant_cargo?: boolean;
@@ -119,12 +131,19 @@ function normalizeStatus(value?: string | null) {
 
 function isHandedStatus(value?: string | null) {
   const normalized = normalizeStatus(value);
-  return normalized.includes("олгосон") || normalized.includes("delivered") || normalized.includes("completed");
+  return normalized.includes("олгосон") || normalized.includes("pickup") || normalized.includes("picked");
 }
 
 function isDeliveryTakenStatus(value?: string | null) {
   const normalized = normalizeStatus(value);
-  return normalized.includes("хүргэлт") || normalized.includes("shipping") || normalized.includes("shipped");
+  return (
+    normalized.includes("хүргэлт") ||
+    normalized.includes("хүргэгд") ||
+    normalized.includes("shipping") ||
+    normalized.includes("shipped") ||
+    normalized.includes("delivered") ||
+    normalized.includes("completed")
+  );
 }
 
 function normalizeImage(url?: string | null) {
@@ -158,6 +177,30 @@ function getVariantLabel(variant: { sku: string | null; attribute: Prisma.JsonVa
   const size = typeof attr.size === "string" ? attr.size : "";
   const merged = [type, color, size].filter(Boolean).join(" / ");
   return merged || variant.sku || `Төрөл-${variant.id}`;
+}
+
+function resolveVariantId(params: {
+  productId: number;
+  variantId?: number | null;
+  imageUrl?: string | null;
+  price?: number | null;
+  variantImageIndex: Map<number, Map<string, number[]>>;
+  variantPriceIndex: Map<number, Map<number, number[]>>;
+}) {
+  if (params.variantId) return Number(params.variantId);
+
+  const normalizedImage = normalizeImage(params.imageUrl ?? null);
+  if (normalizedImage) {
+    const candidates = params.variantImageIndex.get(params.productId)?.get(normalizedImage) ?? [];
+    if (candidates.length === 1) return candidates[0];
+  }
+
+  if (params.price != null) {
+    const candidates = params.variantPriceIndex.get(params.productId)?.get(Number(params.price)) ?? [];
+    if (candidates.length === 1) return candidates[0];
+  }
+
+  return null;
 }
 
 export async function GET(request: NextRequest) {
@@ -286,12 +329,11 @@ export async function GET(request: NextRequest) {
   const variantPriceIndex = new Map<number, Map<number, number[]>>();
   const handedByProduct = new Map<number, number>();
   const deliveryByProduct = new Map<number, number>();
+  const totalOrderedByVariant = new Map<string, number>();
   const handedByVariant = new Map<string, number>();
   const deliveryByVariant = new Map<string, number>();
-  const buyersByProduct = new Map<
-    number,
-    { order_id: number; name: string; phone: string; qty: number; unit_price: number; total_price: number; status: string | null; received: boolean }[]
-  >();
+  const buyersByProduct = new Map<number, SummaryBuyer[]>();
+  const buyersByVariant = new Map<string, SummaryBuyer[]>();
   for (const product of products) {
     const byImage = new Map<string, number[]>();
     const byPrice = new Map<number, number[]>();
@@ -327,6 +369,7 @@ export async function GET(request: NextRequest) {
         variant_id: true,
         price: true,
         quantity: true,
+        image_url: true,
         status: true,
         order: {
           select: {
@@ -341,7 +384,29 @@ export async function GET(request: NextRequest) {
       if (!item.product_id) continue;
       const qty = Math.max(0, Number(item.quantity || 0));
       if (qty <= 0) continue;
-      const variantKey = item.variant_id ? `${item.product_id}|${Number(item.variant_id)}` : null;
+      const resolvedVariantId = resolveVariantId({
+        productId: item.product_id,
+        variantId: item.variant_id,
+        imageUrl: item.image_url,
+        price: item.price,
+        variantImageIndex,
+        variantPriceIndex,
+      });
+      const variantKey = resolvedVariantId ? `${item.product_id}|${resolvedVariantId}` : null;
+      const buyer: SummaryBuyer = {
+        order_id: item.order_id,
+        name: item.order?.name ?? "",
+        phone: item.order?.phone1 ?? "",
+        qty: item.quantity,
+        unit_price: item.price,
+        total_price: item.price * item.quantity,
+        status: item.status ?? null,
+        received: isHandedStatus(item.status) || isDeliveryTakenStatus(item.status),
+      };
+
+      if (variantKey) {
+        totalOrderedByVariant.set(variantKey, (totalOrderedByVariant.get(variantKey) ?? 0) + qty);
+      }
 
       if (isHandedStatus(item.status)) {
         handedByProduct.set(item.product_id, (handedByProduct.get(item.product_id) ?? 0) + qty);
@@ -352,17 +417,14 @@ export async function GET(request: NextRequest) {
       }
 
       const list = buyersByProduct.get(item.product_id) ?? [];
-      list.push({
-        order_id: item.order_id,
-        name: item.order?.name ?? "",
-        phone: item.order?.phone1 ?? "",
-        qty: item.quantity,
-        unit_price: item.price,
-        total_price: item.price * item.quantity,
-        status: item.status ?? null,
-        received: isHandedStatus(item.status) || isDeliveryTakenStatus(item.status),
-      });
+      list.push(buyer);
       buyersByProduct.set(item.product_id, list);
+
+      if (variantKey) {
+        const variantBuyers = buyersByVariant.get(variantKey) ?? [];
+        variantBuyers.push(buyer);
+        buyersByVariant.set(variantKey, variantBuyers);
+      }
     }
   }
 
@@ -422,30 +484,18 @@ export async function GET(request: NextRequest) {
     if (!productId) continue;
 
     const qty = item.quantity;
-    const confirmedVariantId = item.variant_id ? Number(item.variant_id) : null;
+    const confirmedVariantId = resolveVariantId({
+      productId,
+      variantId: item.variant_id,
+      imageUrl: item.image_url,
+      price: item.price,
+      variantImageIndex,
+      variantPriceIndex,
+    });
     if (confirmedVariantId) {
       const mapKey = `${productId}|${confirmedVariantId}`;
       confirmedMap.set(mapKey, (confirmedMap.get(mapKey) ?? 0) + qty);
       continue;
-    }
-
-    let inferredVariantId: number | null = null;
-    const normalizedImage = normalizeImage(item.image_url ?? null);
-    if (normalizedImage) {
-      const candidates = variantImageIndex.get(productId)?.get(normalizedImage) ?? [];
-      if (candidates.length === 1) {
-        inferredVariantId = candidates[0];
-      }
-    }
-    if (!inferredVariantId && item.price != null) {
-      const candidates = variantPriceIndex.get(productId)?.get(Number(item.price)) ?? [];
-      if (candidates.length === 1) {
-        inferredVariantId = candidates[0];
-      }
-    }
-    if (inferredVariantId) {
-      const mapKey = `${productId}|${inferredVariantId}`;
-      inferredMap.set(mapKey, (inferredMap.get(mapKey) ?? 0) + qty);
     }
   }
 
@@ -498,10 +548,12 @@ export async function GET(request: NextRequest) {
       const variants = productMeta?.variants ?? [];
 
       const computedAll: SummaryVariant[] = variants.map((variant) => {
-        const confirmed = confirmedMap.get(`${productId}|${variant.id}`) ?? 0;
-        const inferred = inferredMap.get(`${productId}|${variant.id}`) ?? 0;
+        const variantKey = `${productId}|${variant.id}`;
+        const confirmed = confirmedMap.get(variantKey) ?? 0;
+        const inferred = inferredMap.get(variantKey) ?? 0;
         const pendingOrdered = confirmed + inferred;
-        const ordered = variant.ordered_qty != null ? Number(variant.ordered_qty) : pendingOrdered;
+        const totalOrdered = totalOrderedByVariant.get(variantKey) ?? 0;
+        const ordered = Math.max(totalOrdered, pendingOrdered, Number(variant.ordered_qty ?? 0));
         const stock = variant.stock != null ? Number(variant.stock) : null;
         const remaining = stock != null ? Math.max(0, stock - ordered) : null;
         const variantClosed = variant.order_accept_status === "CLOSED";
@@ -512,14 +564,15 @@ export async function GET(request: NextRequest) {
           stock,
           ordered_qty: ordered,
           pending_qty: pendingOrdered,
-          handed_qty: handedByVariant.get(`${productId}|${variant.id}`) ?? 0,
-          delivery_qty: deliveryByVariant.get(`${productId}|${variant.id}`) ?? 0,
+          handed_qty: handedByVariant.get(variantKey) ?? 0,
+          delivery_qty: deliveryByVariant.get(variantKey) ?? 0,
           arrived_qty: arrivedQty,
           remaining_qty: remaining,
           cargo_fee: variant.cargo_fee != null ? Number(variant.cargo_fee) : productMeta?.cargo_fee ?? null,
           cargo_note: variant.cargo_note ?? productMeta?.cargo_note ?? null,
           arrived: arrivedQty != null,
           closed: productClosed || variantClosed || (stock != null && remaining != null ? remaining <= 0 : false),
+          buyers: buyersByVariant.get(variantKey) ?? [],
         };
       });
 

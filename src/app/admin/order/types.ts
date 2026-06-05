@@ -43,6 +43,13 @@ export type ProductBuyer = {
   received: boolean;
 };
 
+export type ProductDetail = {
+  key: string;
+  title: string;
+  total_qty: number;
+  buyers: ProductBuyer[];
+};
+
 export type ProductVariantSummary = {
   variant_id: number;
   label: string;
@@ -57,6 +64,7 @@ export type ProductVariantSummary = {
   cargo_note: string | null;
   arrived: boolean;
   closed: boolean;
+  buyers: ProductBuyer[];
 };
 
 export type ProductSummary = {

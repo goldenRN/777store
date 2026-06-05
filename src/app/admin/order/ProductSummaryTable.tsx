@@ -33,6 +33,10 @@ type ProductSummaryTableProps = {
     variant: ProductSummary["variants"][number]
   ) => void;
   onOpenProductDetail: (product: ProductSummary) => void;
+  onOpenVariantDetail: (
+    product: ProductSummary,
+    variant: ProductSummary["variants"][number]
+  ) => void;
 };
 
 export default function ProductSummaryTable({
@@ -57,6 +61,7 @@ export default function ProductSummaryTable({
   onOpenEditArrivedForProduct,
   onOpenEditArrivedForVariant,
   onOpenProductDetail,
+  onOpenVariantDetail,
 }: ProductSummaryTableProps) {
   const colSpan = isArrivedTab ? 10 : 7;
 
@@ -261,35 +266,65 @@ export default function ProductSummaryTable({
                                     {isPending || isArrivedTab ? (
                                       <td className="px-3 py-2">
                                         {isPending && openOnly ? (
-                                          <button
-                                            type="button"
-                                            onClick={() => onCloseVariantOrders(variant.variant_id, variant.label)}
-                                            className="inline-flex h-7 w-7 items-center justify-center rounded border bg-white text-red-600 hover:bg-red-50 disabled:opacity-50"
-                                            title="Захиалга хаах"
-                                            disabled={variant.closed || closingVariantId === variant.variant_id}
-                                          >
-                                            <Lock size={14} />
-                                          </button>
+                                          <div className="flex items-center gap-2">
+                                            <button
+                                              type="button"
+                                              onClick={() => onCloseVariantOrders(variant.variant_id, variant.label)}
+                                              className="inline-flex h-7 w-7 items-center justify-center rounded border bg-white text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                              title="Захиалга хаах"
+                                              disabled={variant.closed || closingVariantId === variant.variant_id}
+                                            >
+                                              <Lock size={14} />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => onOpenVariantDetail(product, variant)}
+                                              className="inline-flex h-7 w-7 items-center justify-center rounded border bg-white hover:bg-gray-50"
+                                              title="Дэлгэрэнгүй"
+                                            >
+                                              <MoreVertical size={14} />
+                                            </button>
+                                          </div>
                                         ) : isPending ? (
-                                          <button
-                                            type="button"
-                                            onClick={() => onOpenArrivedModalForVariant(product, variant)}
-                                            className="inline-flex h-7 w-7 items-center justify-center rounded border bg-white hover:bg-gray-50 disabled:opacity-50"
-                                            title="Бараа ирсэн"
-                                            disabled={arrivedSaving}
-                                          >
-                                            <Package size={14} />
-                                          </button>
+                                          <div className="flex items-center gap-2">
+                                            <button
+                                              type="button"
+                                              onClick={() => onOpenArrivedModalForVariant(product, variant)}
+                                              className="inline-flex h-7 w-7 items-center justify-center rounded border bg-white hover:bg-gray-50 disabled:opacity-50"
+                                              title="Бараа ирсэн"
+                                              disabled={arrivedSaving}
+                                            >
+                                              <Package size={14} />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => onOpenVariantDetail(product, variant)}
+                                              className="inline-flex h-7 w-7 items-center justify-center rounded border bg-white hover:bg-gray-50"
+                                              title="Дэлгэрэнгүй"
+                                            >
+                                              <MoreVertical size={14} />
+                                            </button>
+                                          </div>
                                         ) : (
-                                          <button
-                                            type="button"
-                                            onClick={() => onOpenEditArrivedForVariant(product, variant)}
-                                            className="inline-flex h-7 w-7 items-center justify-center rounded border bg-white hover:bg-gray-50 disabled:opacity-50"
-                                            title="Карго засах"
-                                            disabled={arrivedSaving}
-                                          >
-                                            <Pencil size={14} />
-                                          </button>
+                                          <div className="flex items-center gap-2">
+                                            <button
+                                              type="button"
+                                              onClick={() => onOpenEditArrivedForVariant(product, variant)}
+                                              className="inline-flex h-7 w-7 items-center justify-center rounded border bg-white hover:bg-gray-50 disabled:opacity-50"
+                                              title="Карго засах"
+                                              disabled={arrivedSaving}
+                                            >
+                                              <Pencil size={14} />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => onOpenVariantDetail(product, variant)}
+                                              className="inline-flex h-7 w-7 items-center justify-center rounded border bg-white hover:bg-gray-50"
+                                              title="Дэлгэрэнгүй"
+                                            >
+                                              <MoreVertical size={14} />
+                                            </button>
+                                          </div>
                                         )}
                                       </td>
                                     ) : null}

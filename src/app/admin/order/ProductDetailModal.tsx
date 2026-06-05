@@ -2,11 +2,11 @@
 
 import { Modal } from "@/components/ui/modal";
 import { X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import type { ProductSummary } from "./types";
+import { useMemo, useState } from "react";
+import type { ProductDetail } from "./types";
 
 type ProductDetailModalProps = {
-  productDetail: ProductSummary | null;
+  productDetail: ProductDetail | null;
   onClose: () => void;
 };
 
@@ -17,11 +17,7 @@ export default function ProductDetailModal({
   onClose,
 }: ProductDetailModalProps) {
   const [filter, setFilter] = useState<BuyerFilter>("all");
-  const buyers = productDetail?.buyers ?? [];
-
-  useEffect(() => {
-    setFilter("all");
-  }, [productDetail?.product_id, productDetail?.product_name]);
+  const buyers = useMemo(() => productDetail?.buyers ?? [], [productDetail?.buyers]);
 
   const receivedCount = useMemo(
     () => buyers.filter((buyer) => buyer.received).reduce((sum, buyer) => sum + Math.max(0, Number(buyer.qty || 0)), 0),
@@ -49,11 +45,11 @@ export default function ProductDetailModal({
     }`;
 
   return (
-    <Modal open={!!productDetail} onClose={onClose} title={productDetail.product_name}>
+    <Modal open={!!productDetail} onClose={onClose} title={productDetail.title}>
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-lg font-semibold">{productDetail.product_name}</h3>
+            <h3 className="text-lg font-semibold">{productDetail.title}</h3>
             <div className="text-sm text-gray-600">Нийт: {productDetail.total_qty}</div>
           </div>
           <button
