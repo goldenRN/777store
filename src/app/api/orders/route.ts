@@ -32,6 +32,15 @@ export async function GET(request: NextRequest) {
     },
   });
 
+  const matchingUserIds =
+    q.length > 0
+      ? (await prisma.user.findMany({
+          where: { phone: { contains: q } },
+          select: { id: true },
+          take: 50,
+        })).map((user) => user.id)
+      : [];
+
   const where: Record<string, unknown> =
     q.length > 0
       ? {
@@ -39,6 +48,7 @@ export async function GET(request: NextRequest) {
             { name: { contains: q, mode: "insensitive" } },
             { email: { contains: q, mode: "insensitive" } },
             { phone1: { contains: q } },
+            ...(matchingUserIds.length > 0 ? [{ user_id: { in: matchingUserIds } }] : []),
             ...(Number.isFinite(Number(q)) ? [{ id: Number(q) }] : []),
           ],
         }

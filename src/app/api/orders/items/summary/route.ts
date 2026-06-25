@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-
-const preorderTypeWhere: Prisma.AdminTypeWhereInput = {
-  OR: [
-    { has_duration: true },
-    { name: { contains: "захиал", mode: "insensitive" } },
-    { name: { contains: "урьдчил", mode: "insensitive" } },
-    { name: { contains: "preorder", mode: "insensitive" } },
-    { name: { contains: "live", mode: "insensitive" } },
-    { name: { contains: "лайв", mode: "insensitive" } },
-  ],
-};
+import {
+  getVisibleVariantsForSummaryTab,
+  isDeliveredSummaryStatus,
+  isHandedSummaryStatus,
+  isOpenPreorderSummaryType,
+  preorderTypeWhere,
+  shouldIncludeArrivedSummaryGroup,
+  shouldIncludeClosedSummaryGroup,
+  shouldIncludeOpenOnlySummaryGroup,
+} from "@/lib/orderSummaryFilters";
 
 const itemSelect = Prisma.validator<Prisma.AdminOrderItemSelect>()({
   id: true,
@@ -34,6 +33,12 @@ const itemSelect = Prisma.validator<Prisma.AdminOrderItemSelect>()({
 const productSelect = Prisma.validator<Prisma.AdminProductSelect>()({
   id: true,
   name: true,
+  type: {
+    select: {
+      name: true,
+      has_duration: true,
+    },
+  },
   description: true,
   stock: true,
   ordered_qty: true,
@@ -124,24 +129,6 @@ type SummaryGroup = {
   all_variants_arrived?: boolean;
   uniform_variant_cargo?: boolean;
 };
-
-function normalizeStatus(value?: string | null) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function isHandedStatus(value?: string | null) {
-  const normalized = normalizeStatus(value);
-  return normalized.includes("олгосон") || normalized.includes("pickup") || normalized.includes("picked");
-}
-
-function isDeliveryTakenStatus(value?: string | null) {
-  const normalized = normalizeStatus(value);
-  return (
-    normalized.includes("хүргэгд") ||
-    normalized.includes("delivered") ||
-    normalized.includes("completed")
-  );
-}
 
 function normalizeImage(url?: string | null) {
   const raw = String(url || "").trim();
@@ -304,6 +291,7 @@ export async function GET(request: NextRequest) {
       {
         description: product.description ?? "",
         image_url: product.images[0]?.image_url ?? null,
+        type: product.type ?? null,
         stock: product.stock ?? null,
         ordered_qty: product.ordered_qty ?? null,
         arrived_qty: product.arrived_qty ?? null,
@@ -398,17 +386,17 @@ export async function GET(request: NextRequest) {
         unit_price: item.price,
         total_price: item.price * item.quantity,
         status: item.status ?? null,
-        received: isHandedStatus(item.status) || isDeliveryTakenStatus(item.status),
+        received: isHandedSummaryStatus(item.status) || isDeliveredSummaryStatus(item.status),
       };
 
       if (variantKey) {
         totalOrderedByVariant.set(variantKey, (totalOrderedByVariant.get(variantKey) ?? 0) + qty);
       }
 
-      if (isHandedStatus(item.status)) {
+      if (isHandedSummaryStatus(item.status)) {
         handedByProduct.set(item.product_id, (handedByProduct.get(item.product_id) ?? 0) + qty);
         if (variantKey) handedByVariant.set(variantKey, (handedByVariant.get(variantKey) ?? 0) + qty);
-      } else if (isDeliveryTakenStatus(item.status)) {
+      } else if (isDeliveredSummaryStatus(item.status)) {
         deliveryByProduct.set(item.product_id, (deliveryByProduct.get(item.product_id) ?? 0) + qty);
         if (variantKey) deliveryByVariant.set(variantKey, (deliveryByVariant.get(variantKey) ?? 0) + qty);
       }
@@ -473,7 +461,7 @@ export async function GET(request: NextRequest) {
       unit_price: item.price,
       total_price: item.price * item.quantity,
       status: item.status ?? null,
-      received: isHandedStatus(item.status) || isDeliveryTakenStatus(item.status),
+      received: isHandedSummaryStatus(item.status) || isDeliveredSummaryStatus(item.status),
     });
     grouped.set(key, current);
 
@@ -530,10 +518,12 @@ export async function GET(request: NextRequest) {
       const productId =
         group.product_id ?? productByName.get(String(group.product_name || "").trim().toLowerCase())?.id ?? null;
       if (!productId) {
+        if (openOnly) return null;
         return { ...group, order_count: group.buyers.length, variants: [] as SummaryVariant[] };
       }
 
       const productMeta = productMetaMap.get(productId) ?? null;
+      const isPreorderSource = isOpenPreorderSummaryType(productMeta?.type);
       const hasDuration = Number(productMeta?.duration_hours || 0) > 0;
       const durationHours = Number(productMeta?.duration_hours || 0);
       const endMs =
@@ -574,22 +564,22 @@ export async function GET(request: NextRequest) {
       });
 
       const allVariantsArrived = computedAll.length > 0 ? computedAll.every((variant) => variant.arrived) : false;
-      const uniformVariantCargo =
-        allVariantsArrived && computedAll.length > 0
+      const uniformVariantCargoAny =
+        computedAll.length > 0
           ? computedAll.every(
               (variant) =>
                 Number(variant.cargo_fee ?? 0) === Number(computedAll[0]?.cargo_fee ?? 0) &&
                 String(variant.cargo_note ?? "") === String(computedAll[0]?.cargo_note ?? "")
             )
           : false;
+      const uniformVariantCargo = allVariantsArrived && uniformVariantCargoAny;
 
-      const visibleVariants = openOnly
-        ? computedAll
-        : closedOnly
-          ? computedAll.filter((variant) => variant.closed && !variant.arrived)
-          : arrivedOnly
-            ? computedAll.filter((variant) => variant.arrived || variant.pending_qty > 0)
-            : computedAll.filter((variant) => variant.pending_qty > 0);
+      const visibleVariants = getVisibleVariantsForSummaryTab({
+        openOnly,
+        closedOnly,
+        arrivedOnly,
+        variants: computedAll,
+      });
 
       const variantStockSum = computedAll.reduce((sum, variant) => sum + Math.max(0, Number(variant.stock || 0)), 0);
       const productStockRaw = productMeta?.stock != null ? Number(productMeta.stock) : null;
@@ -607,37 +597,67 @@ export async function GET(request: NextRequest) {
       const closedItem = productClosed || closedByStock || allVariantsClosed;
 
       if (openOnly) {
-        if (closedItem) return null;
-        if (computedAll.length > 0 && !computedAll.some((variant) => !variant.closed)) return null;
+        if (
+          !shouldIncludeOpenOnlySummaryGroup({
+            hasProductMeta: Boolean(productMeta),
+            isPreorderSource,
+            closedItem,
+            variants: computedAll,
+            effectiveStock,
+          })
+        ) {
+          return null;
+        }
       }
 
       if (closedOnly) {
-        if (!closedItem && !computedAll.some((variant) => variant.closed)) return null;
-        if (group.arrival_status === "Бараа ирсэн" || allVariantsArrived) return null;
+        if (
+          !shouldIncludeClosedSummaryGroup({
+            closedItem,
+            variants: computedAll,
+            group,
+            allVariantsArrived,
+          })
+        ) {
+          return null;
+        }
       }
 
       if (arrivedOnly) {
-        const productArrived = group.arrival_status === "Бараа ирсэн" || group.arrived_qty != null;
-        const variantArrived = computedAll.some((variant) => variant.arrived);
-        const orderArrived = group.total_qty > 0 || group.order_count > 0;
-        if (!productArrived && !variantArrived && !orderArrived) return null;
+        if (!shouldIncludeArrivedSummaryGroup({ group, variants: computedAll })) return null;
       }
 
       const resolvedBuyers = productId ? buyersByProduct.get(productId) ?? group.buyers : group.buyers;
+
+      const productArrived =
+        group.arrival_status === "Бараа ирсэн" ||
+        productMeta?.arrival_status === "Бараа ирсэн" ||
+        group.arrived_qty != null ||
+        productMeta?.arrived_qty != null;
+      const resolvedCargoFee =
+        group.cargo_fee != null
+          ? group.cargo_fee
+          : uniformVariantCargo
+            ? computedAll[0]?.cargo_fee ?? null
+            : productArrived && uniformVariantCargoAny
+              ? computedAll[0]?.cargo_fee ?? null
+              : null;
+      const resolvedCargoNote =
+        group.cargo_note != null
+          ? group.cargo_note
+          : uniformVariantCargo
+            ? computedAll[0]?.cargo_note ?? null
+            : productArrived && uniformVariantCargoAny
+              ? computedAll[0]?.cargo_note ?? null
+              : null;
 
       return {
         ...group,
         total_qty: productMeta?.ordered_qty != null ? Number(productMeta.ordered_qty) : group.total_qty,
         handed_qty: handedByProduct.get(productId) ?? group.handed_qty ?? 0,
         delivery_qty: deliveryByProduct.get(productId) ?? group.delivery_qty ?? 0,
-        cargo_fee:
-          allVariantsArrived && uniformVariantCargo
-            ? computedAll[0]?.cargo_fee ?? group.cargo_fee ?? null
-            : group.cargo_fee ?? null,
-        cargo_note:
-          allVariantsArrived && uniformVariantCargo
-            ? computedAll[0]?.cargo_note ?? group.cargo_note ?? null
-            : group.cargo_note ?? null,
+        cargo_fee: resolvedCargoFee,
+        cargo_note: resolvedCargoNote,
         arrival_status:
           group.arrival_status === "Бараа ирсэн" || (allVariantsArrived && uniformVariantCargo)
             ? "Бараа ирсэн"

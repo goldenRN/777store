@@ -27,6 +27,7 @@ export default function OrderDetailsModal({
   const [selectedVariantByItem, setSelectedVariantByItem] = useState<Record<number, number | "">>({});
   const [showBankApps, setShowBankApps] = useState(false);
   const [addressCopied, setAddressCopied] = useState(false);
+  const [copiedPhoneKey, setCopiedPhoneKey] = useState<"phone1" | "phone2" | null>(null);
 
   const fetchDetail = async () => {
     setLoading(true);
@@ -189,6 +190,18 @@ export default function OrderDetailsModal({
     }
   };
 
+  const handleCopyPhone = async (key: "phone1" | "phone2", value?: string | null) => {
+    const text = String(value || "").trim();
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedPhoneKey(key);
+      window.setTimeout(() => setCopiedPhoneKey(null), 1800);
+    } catch (err) {
+      console.error("Утас copy хийхэд алдаа:", err);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="min-h-full flex items-start md:items-center justify-center p-2 md:p-4">
@@ -247,7 +260,42 @@ export default function OrderDetailsModal({
                   </div>
                   <div className="rounded-lg border p-3">
                     <div className="text-gray-600">Утас</div>
-                    <div className="mt-1 font-medium">{order.phone1} {order.phone2 ? ` / ${order.phone2}` : ''}</div>
+                    <div className="mt-1 space-y-2 text-sm text-gray-800">
+                      <div>
+                        <div className="text-xs text-gray-500">Бүртгэлтэй</div>
+                        <div className="mt-1 flex items-center justify-between gap-2">
+                          <div className="font-medium">{order.phone1 || "-"}</div>
+                          {order.phone1 ? (
+                            <button
+                              type="button"
+                              onClick={() => handleCopyPhone("phone1", order.phone1)}
+                              className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                              title="Бүртгэлтэй утас хуулах"
+                            >
+                              {copiedPhoneKey === "phone1" ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                              <span>{copiedPhoneKey === "phone1" ? "Хуулсан" : "Copy"}</span>
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                      {order.phone2 ? (
+                        <div>
+                          <div className="text-xs text-gray-500">Нэмэлт утас</div>
+                          <div className="mt-1 flex items-center justify-between gap-2">
+                            <div className="font-medium">{order.phone2}</div>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyPhone("phone2", order.phone2)}
+                              className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                              title="Нэмэлт утас хуулах"
+                            >
+                              {copiedPhoneKey === "phone2" ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                              <span>{copiedPhoneKey === "phone2" ? "Хуулсан" : "Copy"}</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
                     <div className="mt-3 text-gray-600">Төлөв</div>
                     <div className="mt-1 text-sm text-gray-800">
                       {orderStatusLabels[order.status] || order.status}

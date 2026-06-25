@@ -304,7 +304,13 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const userId = String(body?.userId ?? "").trim();
   const name = String(body?.name ?? "").trim();
-  const phone = String(body?.phone ?? "").trim();
+  const requestedPhone = String(body?.phone ?? "").trim();
+  const normalizePhone = (value: string | null | undefined) =>
+    String(value ?? "")
+      .replace(/\s+/g, "")
+      .replace(/-/g, "")
+      .trim();
+  const phone = normalizePhone(requestedPhone);
   const items = Array.isArray(body?.items) ? body.items : [];
   const orderKindInput = String(body?.orderKind ?? "").trim();
   const deliveryMethod = body?.deliveryMethod ? String(body.deliveryMethod) : null;
@@ -403,6 +409,13 @@ export async function POST(request: NextRequest) {
     try {
       return await prisma.$transaction(async (tx) => {
         await deleteExpiredUnpaidOrders(tx, now, reserveWindowStart);
+
+        const accountUser = await tx.user.findUnique({
+          where: { id: userId },
+          select: { phone: true },
+        });
+        const ownerPhone = normalizePhone(accountUser?.phone) || phone;
+        const recipientOrderPhone = phone && phone !== ownerPhone ? phone : null;
 
         type CartLine = {
           productId: number;
@@ -708,6 +721,8 @@ export async function POST(request: NextRequest) {
 
         const reusableOrder = reusableCandidates.find((candidate) => {
           if (candidate.order_kind !== safeOrderKind) return false;
+          if (String(candidate.phone1 || "").trim() !== ownerPhone) return false;
+          if ((candidate.phone2 || null) !== recipientOrderPhone) return false;
           if ((candidate.delivery_method || null) !== (hasReadyDb ? deliveryMethod : null)) return false;
           if (Number(candidate.delivery_fee ?? 0) !== Number(hasReadyDb && deliveryMethod === "delivery" ? delivery_fee : 0)) return false;
           if (Number(candidate.total ?? 0) !== Number(total)) return false;
@@ -837,7 +852,8 @@ export async function POST(request: NextRequest) {
             where: { id: reusableOrder.id },
             data: {
               name,
-              phone1: phone,
+              phone1: ownerPhone,
+              phone2: recipientOrderPhone,
               order_kind: safeOrderKind,
               delivery_method: hasReadyDb ? deliveryMethod : null,
               delivery_name: hasReadyDb && deliveryMethod === "delivery" ? deliveryName : null,
@@ -865,7 +881,8 @@ export async function POST(request: NextRequest) {
           data: {
             user_id: userId,
             name,
-            phone1: phone,
+            phone1: ownerPhone,
+            phone2: recipientOrderPhone,
             status: defaultStatus,
             payment_status: "UNPAID",
             order_kind: safeOrderKind,
