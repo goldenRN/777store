@@ -23,7 +23,15 @@ export async function GET(
 
   const order = await prisma.adminDeliveryOrder.findFirst({
     where: { id: deliveryOrderId, user_id: userId },
-    include: { items: { orderBy: { id: "asc" } } },
+    include: {
+      order: {
+        select: {
+          deleted_at: true,
+          deleted_reason: true,
+        },
+      },
+      items: { orderBy: { id: "asc" } },
+    },
   });
 
   if (!order) {
@@ -33,7 +41,10 @@ export async function GET(
   return NextResponse.json({
     id: order.id,
     sourceOrderId: order.source_order_id,
-    status: order.status,
+    status: order.order?.deleted_at ? "Захиалга устгагдсан" : order.status,
+    sourceOrderDeleted: Boolean(order.order?.deleted_at),
+    sourceOrderDeletedAt: order.order?.deleted_at?.toISOString() ?? null,
+    sourceOrderDeletedReason: order.order?.deleted_reason ?? null,
     payment_status: order.payment_status,
     name: order.name,
     phone: order.phone,
@@ -65,7 +76,7 @@ export async function GET(
       unitPrice: item.price,
       productImage: normalizeImage(item.image_url),
       cargoFee: item.cargo_fee,
-      status: item.status,
+      status: order.order?.deleted_at ? "Захиалга устгагдсан" : item.status,
       return_note: item.return_note,
     })),
   });

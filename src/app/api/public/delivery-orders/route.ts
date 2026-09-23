@@ -24,6 +24,12 @@ export async function GET(request: NextRequest) {
     where,
     orderBy: { created_at: "desc" },
     include: {
+      order: {
+        select: {
+          deleted_at: true,
+          deleted_reason: true,
+        },
+      },
       items: {
         orderBy: { id: "asc" },
       },
@@ -34,7 +40,10 @@ export async function GET(request: NextRequest) {
     items: orders.map((order) => ({
       id: order.id,
       sourceOrderId: order.source_order_id,
-      status: order.status,
+      status: order.order?.deleted_at ? "Захиалга устгагдсан" : order.status,
+      sourceOrderDeleted: Boolean(order.order?.deleted_at),
+      sourceOrderDeletedAt: order.order?.deleted_at?.toISOString() ?? null,
+      sourceOrderDeletedReason: order.order?.deleted_reason ?? null,
       payment_status: order.payment_status,
       name: order.name,
       phone: order.phone,
@@ -66,7 +75,7 @@ export async function GET(request: NextRequest) {
         unitPrice: item.price,
         productImage: normalizeImage(item.image_url),
         cargoFee: item.cargo_fee,
-        status: item.status,
+        status: order.order?.deleted_at ? "Захиалга устгагдсан" : item.status,
         return_note: item.return_note,
       })),
     })),

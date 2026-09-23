@@ -47,6 +47,9 @@ type Order = {
   status: string;
   total: number;
   createdAt: string;
+  isDeleted?: boolean;
+  deletedAt?: string | null;
+  deletedReason?: string | null;
   order_kind?: string | null;
   delivery_method?: string | null;
   delivery_name?: string | null;
@@ -81,6 +84,9 @@ type DeliveryOrder = {
   id: number;
   sourceOrderId?: number | null;
   status: string;
+  sourceOrderDeleted?: boolean;
+  sourceOrderDeletedAt?: string | null;
+  sourceOrderDeletedReason?: string | null;
   payment_status?: string | null;
   name: string;
   phone: string;
@@ -110,6 +116,7 @@ type FlatOrderItem = OrderItem & {
   createdAt: string;
   total: number;
   effectiveStatus: string;
+  deletedNote?: string | null;
 };
 
 const getStatusLabel = (status: string, statuses: { name: string }[]) => {
@@ -120,6 +127,62 @@ const getStatusLabel = (status: string, statuses: { name: string }[]) => {
 const getStatusTabLabel = (status: string) => {
   if (status === "Буцаагдсан") return "Буцаасан";
   return status;
+};
+
+const normalizeOrderStatus = (status?: string | null) =>
+  String(status || "").trim().toLowerCase();
+
+const isArrivedStatus = (status?: string | null) => {
+  const s = normalizeOrderStatus(status);
+  return s.includes("ирсэн") || s.includes("arrived");
+};
+
+const isPendingStatus = (status?: string | null) => {
+  const s = normalizeOrderStatus(status);
+  return s.includes("хүлээгд") || s.includes("pending");
+};
+
+const isDeliveredStatus = (status?: string | null) => {
+  const s = normalizeOrderStatus(status);
+  return (
+    s.includes("олгосон") ||
+    s.includes("хүргэгд") ||
+    s.includes("delivered") ||
+    s.includes("handed")
+  );
+};
+
+const isShippingStatus = (status?: string | null) => {
+  const s = normalizeOrderStatus(status);
+  return s.includes("хүргэлт") || s.includes("shipping");
+};
+
+const isReturnedStatus = (status?: string | null) => {
+  const s = normalizeOrderStatus(status);
+  return (
+    s.includes("буца") ||
+    s.includes("return") ||
+    s.includes("цуц") ||
+    s.includes("cancel") ||
+    s.includes("устг") ||
+    s.includes("delete")
+  );
+};
+
+const canonicalStatus = (status?: string | null) => {
+  const raw = String(status || "").trim();
+  if (!raw) return "";
+  if (isReturnedStatus(raw)) return "Буцаагдсан";
+  if (isShippingStatus(raw)) return "Хүргэлтэнд бүртгэгдсэн";
+  if (isDeliveredStatus(raw)) return "Бараа олгосон";
+  if (isArrivedStatus(raw)) return "Бараа ирсэн";
+  if (isPendingStatus(raw)) return "Хүлээгдэж байгаа";
+  return raw;
+};
+
+const matchesSelectedStatus = (selectedStatus: string, actualStatus?: string | null) => {
+  if (selectedStatus === "ALL") return true;
+  return canonicalStatus(actualStatus) === selectedStatus;
 };
 
 function OrdersPageContent() {
@@ -270,10 +333,22 @@ function OrdersPageContent() {
     }
   };
 
-  const isArrivedStatus = (status?: string | null) => {
-    const s = String(status || "").trim().toLowerCase();
-    return s.includes("ирсэн") || s.includes("arrived");
-  };
+  const isDeletedOrder = useCallback((order?: Order | null) => Boolean(order?.isDeleted), []);
+
+  const isDeletedDeliveryOrder = useCallback(
+    (order?: DeliveryOrder | null) => Boolean(order?.sourceOrderDeleted),
+    [],
+  );
+
+  const deletedOrderNote = useCallback((order?: Order | null) => {
+    const reason = String(order?.deletedReason || "").trim();
+    return reason ? `Захиалга устгагдсан: ${reason}` : "Захиалга устгагдсан";
+  }, []);
+
+  const deletedDeliveryOrderNote = useCallback((order?: DeliveryOrder | null) => {
+    const reason = String(order?.sourceOrderDeletedReason || "").trim();
+    return reason ? `Захиалга устгагдсан: ${reason}` : "Захиалга устгагдсан";
+  }, []);
 
   const getEffectiveItemStatus = useCallback((orderStatus?: string | null, itemStatus?: string | null) => {
     const item = String(itemStatus || "").trim();
@@ -293,6 +368,22 @@ function OrdersPageContent() {
     if (isArrivedStatus(order)) return "Бараа ирсэн";
     return item || order;
   }, []);
+
+  const effectiveItemStatus = useCallback(
+    (order: Order, item: OrderItem) => {
+      if (isDeletedOrder(order)) return "Захиалга устгагдсан";
+      return getEffectiveItemStatus(order.status, item.status);
+    },
+    [getEffectiveItemStatus, isDeletedOrder],
+  );
+
+  const effectiveDeliveryStatus = useCallback(
+    (order: DeliveryOrder) => {
+      if (isDeletedDeliveryOrder(order)) return "Захиалга устгагдсан";
+      return String(order.status || "").trim();
+    },
+    [isDeletedDeliveryOrder],
+  );
 
   const canRequestDeliveryForStatus = (order: Order | null, statusOverride?: string | null) => {
     if (!order) return false;
@@ -509,19 +600,20 @@ function OrdersPageContent() {
     return orders.flatMap((order) =>
       order.items
         .map((item) => {
-          const effectiveStatus = getEffectiveItemStatus(order.status, item.status);
+          const itemStatus = effectiveItemStatus(order, item);
           return {
             ...item,
             orderId: order.id,
             orderStatus: order.status,
             createdAt: order.createdAt,
             total: order.total,
-            effectiveStatus,
+            effectiveStatus: itemStatus,
+            deletedNote: isDeletedOrder(order) ? deletedOrderNote(order) : null,
           };
         })
-        .filter((item) => item.effectiveStatus === active)
+        .filter((item) => matchesSelectedStatus(active, item.effectiveStatus))
     );
-  }, [orders, active, getEffectiveItemStatus]);
+  }, [orders, active, effectiveItemStatus, isDeletedOrder, deletedOrderNote]);
 
   const footerDeliveryEntries = useMemo<FlatOrderItem[]>(() => {
     if (active !== arrivedTabKey) return [];
@@ -731,12 +823,67 @@ function OrdersPageContent() {
     ];
   }, [statusOptions]);
 
+  const visibleGroupedOrders = useMemo(
+    () => orders.filter((order) => !isDeletedOrder(order)),
+    [orders, isDeletedOrder],
+  );
+
   const shippingDeliveryOrders = useMemo(() => {
     if (active !== "Хүргэлтэнд бүртгэгдсэн") return [];
     return deliveryOrders.filter(
-      (order) => String(order.status || "").trim() === "Хүргэлтэнд бүртгэгдсэн",
+      (order) =>
+        !isDeletedDeliveryOrder(order) &&
+        matchesSelectedStatus(active, effectiveDeliveryStatus(order)),
     );
-  }, [active, deliveryOrders]);
+  }, [active, deliveryOrders, effectiveDeliveryStatus, isDeletedDeliveryOrder]);
+
+  const returnedDeliveryOrders = useMemo(() => {
+    if (active !== "Буцаагдсан") return [];
+    return deliveryOrders.filter(
+      (order) =>
+        !isDeletedDeliveryOrder(order) &&
+        matchesSelectedStatus(active, effectiveDeliveryStatus(order)),
+    );
+  }, [active, deliveryOrders, effectiveDeliveryStatus, isDeletedDeliveryOrder]);
+
+  const returnedEntries = useMemo(
+    () => filteredItems.filter((item) => !item.deletedNote),
+    [filteredItems],
+  );
+
+  const deletedEntries = useMemo(
+    () => filteredItems.filter((item) => Boolean(item.deletedNote)),
+    [filteredItems],
+  );
+
+  const returnedQty = useMemo(
+    () =>
+      returnedDeliveryOrders.reduce(
+        (sum, order) => sum + order.items.reduce((itemSum, item) => itemSum + Math.max(1, Number(item.qty || 0)), 0),
+        0,
+      ) +
+      returnedEntries.reduce((sum, item) => sum + Math.max(1, Number(item.qty || 0)), 0),
+    [returnedDeliveryOrders, returnedEntries],
+  );
+
+  const deletedQty = useMemo(
+    () => deletedEntries.reduce((sum, item) => sum + Math.max(1, Number(item.qty || 0)), 0),
+    [deletedEntries],
+  );
+
+  const returnedListCount = returnedDeliveryOrders.length + filteredItems.length;
+
+  const noteCard = (note: string, type: "return" | "deleted" = "return") => (
+    <div
+      className={`mt-2 rounded-lg border px-3 py-2 text-[11px] ${
+        type === "deleted"
+          ? "border-orange-200 bg-orange-50 text-orange-800"
+          : "border-red-100 bg-red-50 text-red-700"
+      }`}
+    >
+      {type === "deleted" ? note : `Буцаалтын тайлбар: ${note}`}
+    </div>
+  );
 
   return (
     <main className="container mx-auto flex-1 px-6 py-10">
@@ -763,11 +910,11 @@ function OrdersPageContent() {
           {loading ? (
             <div className="mt-6 text-sm text-[var(--gray-500)]">Уншиж байна...</div>
           ) : active === "ALL" ? (
-            orders.length === 0 ? (
+            visibleGroupedOrders.length === 0 ? (
               <div className="mt-6 text-sm text-[var(--gray-500)]">Одоогоор захиалга байхгүй.</div>
             ) : (
               <div className="mt-6 space-y-4">
-                {orders.map((o) => (
+                {visibleGroupedOrders.map((o) => (
                   <div key={o.id} className="rounded-xl border p-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="text-sm font-semibold">Захиалга #{o.id}</div>
@@ -915,6 +1062,154 @@ function OrdersPageContent() {
                 })}
               </div>
             )
+          ) : active === "Буцаагдсан" ? (
+            returnedListCount === 0 ? (
+              <div className="mt-6 text-sm text-[var(--gray-500)]">Одоогоор захиалга байхгүй.</div>
+            ) : (
+              <div className="mt-6 space-y-4">
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4">
+                  <div className="text-sm font-semibold">Буцаагдсан</div>
+                  <div className="mt-2 text-xs font-medium text-amber-700">
+                    Буцаагдсан: {returnedEntries.length + returnedDeliveryOrders.length} мөр • {returnedQty}ш
+                  </div>
+                  <div className="mt-1 text-xs font-medium text-orange-800">
+                    Устгагдсан: {deletedEntries.length} мөр • {deletedQty}ш
+                  </div>
+                </div>
+                {returnedDeliveryOrders.map((deliveryOrder) => {
+                  const firstItem = deliveryOrder.items[0];
+                  const itemCount = deliveryOrder.items.length;
+                  const quantityTotal = deliveryOrder.items.reduce(
+                    (sum, item) => sum + Math.max(1, Number(item.qty || 0)),
+                    0,
+                  );
+                  return (
+                    <div key={`returned-delivery-${deliveryOrder.id}`} className="rounded-xl border p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="flex flex-1 items-start gap-3">
+                          <div className="relative h-14 w-14 overflow-hidden rounded-lg bg-[var(--sky-100)]">
+                            {firstItem?.productImage ? (
+                              <Image
+                                src={resolveImageUrl(firstItem.productImage)}
+                                alt={firstItem.productName}
+                                fill
+                                className="object-cover"
+                                unoptimized
+                              />
+                            ) : null}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-semibold">Хүргэлтийн захиалга #{deliveryOrder.id}</div>
+                            <div className="mt-1 text-xs text-[var(--gray-500)]">
+                              {itemCount} мөр • Нийт {quantityTotal}ш бараа
+                            </div>
+                            {firstItem && (
+                              <div className="mt-1 text-xs text-[var(--gray-500)]">
+                                Эхний бараа: {firstItem.productName}
+                                {firstItem.variantLabel ? ` / ${firstItem.variantLabel}` : ""}
+                              </div>
+                            )}
+                            <div className="mt-2 flex flex-wrap gap-3 text-[11px]">
+                              <span className="font-medium text-amber-700">
+                                Карго: {Number(deliveryOrder.cargo_fee || 0).toLocaleString()}₮
+                              </span>
+                              <span className="font-medium text-red-600">
+                                Хүргэлт: {Number(deliveryOrder.delivery_fee || 0).toLocaleString()}₮
+                              </span>
+                            </div>
+                            <div className="mt-1 text-[11px] text-[var(--gray-500)]">
+                              {deliveryOrder.district_name || ""} {deliveryOrder.khoroo_name ? `• ${deliveryOrder.khoroo_name}` : ""}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-semibold">
+                            {Number(deliveryOrder.total || 0).toLocaleString()}₮
+                          </div>
+                          <div className="mt-1 text-[11px] text-[var(--gray-500)]">
+                            {new Date(deliveryOrder.createdAt).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <span className="rounded-full bg-red-100 px-2 py-1 text-[11px] font-semibold text-red-700">
+                          {getStatusLabel(canonicalStatus(effectiveDeliveryStatus(deliveryOrder)), statusOptions)}
+                        </span>
+                        <button
+                          onClick={() => loadDeliveryDetail(deliveryOrder.id)}
+                          className="rounded-full border px-4 py-2 text-xs font-semibold"
+                        >
+                          Дэлгэрэнгүй
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {filteredItems.map((it) => (
+                  <div key={`${it.orderId}-${it.id}`} className="rounded-xl border p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="flex flex-1 items-start gap-3">
+                        <div className="relative h-14 w-14 overflow-hidden rounded-lg bg-[var(--sky-100)]">
+                          {it.productImage ? (
+                            <Image
+                              src={resolveImageUrl(it.productImage)}
+                              alt={it.productName}
+                              fill
+                              className="object-cover"
+                              unoptimized
+                            />
+                          ) : null}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-semibold">{it.productName}</div>
+                          <div className="mt-1 text-xs text-[var(--gray-500)]">
+                            {it.qty}ш × {Number(it.unitPrice).toLocaleString()}₮
+                          </div>
+                          {it.variantLabel && (
+                            <div className="mt-1 text-[11px] text-[var(--gray-500)]">
+                              Төрөл: {it.variantLabel.label}
+                            </div>
+                          )}
+                          {Number(it.cargoFee || 0) > 0 && (
+                            <div className="mt-1 text-[11px] font-medium text-amber-700">
+                              Карго: {Number(it.cargoFee || 0).toLocaleString()}₮
+                            </div>
+                          )}
+                          {it.deletedNote
+                            ? noteCard(it.deletedNote, "deleted")
+                            : it.return_note
+                              ? noteCard(it.return_note, "return")
+                              : null}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-semibold">
+                          {(it.qty * it.unitPrice).toLocaleString()}₮
+                        </div>
+                        <div className="mt-1 text-[11px] text-[var(--gray-500)]">
+                          {new Date(it.createdAt).toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <span className="rounded-full bg-red-100 px-2 py-1 text-[11px] font-semibold text-red-700">
+                        {getStatusLabel(canonicalStatus(it.effectiveStatus), statusOptions)}
+                      </span>
+                      <button
+                        onClick={() =>
+                          loadDetail(String(it.orderId), {
+                            deliveryItemId: it.id,
+                          })
+                        }
+                        className="rounded-full border px-4 py-2 text-xs font-semibold"
+                      >
+                        Дэлгэрэнгүй
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
           ) : filteredItems.length === 0 ? (
             <div className="mt-6 text-sm text-[var(--gray-500)]">Одоогоор захиалга байхгүй.</div>
           ) : (
@@ -949,11 +1244,11 @@ function OrdersPageContent() {
                             Карго: {Number(it.cargoFee || 0).toLocaleString()}₮
                           </div>
                         )}
-                        {it.return_note && (
-                          <div className="mt-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-700">
-                            Буцаалтын тайлбар: {it.return_note}
-                          </div>
-                        )}
+                        {it.deletedNote
+                          ? noteCard(it.deletedNote, "deleted")
+                          : it.return_note
+                            ? noteCard(it.return_note, "return")
+                            : null}
                       </div>
                     </div>
                     <div className="text-right">
@@ -1259,6 +1554,7 @@ function OrdersPageContent() {
                 <div className="text-xs text-[var(--gray-500)]">
                   {new Date(selected.createdAt).toLocaleString()}
                 </div>
+                {selected.isDeleted ? noteCard(deletedOrderNote(selected), "deleted") : null}
                 <div className="mt-4 space-y-3">
                   {selected.items.map((it) => (
                     <div key={it.id} className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -1298,11 +1594,11 @@ function OrdersPageContent() {
                             Карго: {Number(it.cargoFee || 0).toLocaleString()}₮
                           </div>
                         )}
-                        {it.return_note && (
-                          <div className="mt-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-700">
-                            Буцаалтын тайлбар: {it.return_note}
-                          </div>
-                        )}
+                        {selected.isDeleted
+                          ? noteCard(deletedOrderNote(selected), "deleted")
+                          : it.return_note
+                            ? noteCard(it.return_note, "return")
+                            : null}
                       </div>
                       <div className="text-sm font-semibold">
                         {(it.qty * it.unitPrice).toLocaleString()}₮
@@ -1529,6 +1825,9 @@ function OrdersPageContent() {
                 <div className="text-xs text-[var(--gray-500)]">
                   {new Date(selectedDeliveryOrder.createdAt).toLocaleString()}
                 </div>
+                {selectedDeliveryOrder.sourceOrderDeleted
+                  ? noteCard(deletedDeliveryOrderNote(selectedDeliveryOrder), "deleted")
+                  : null}
                 <div className="mt-4 rounded-xl border bg-[var(--sky-50)] p-4 text-sm">
                   <div className="grid gap-2 sm:grid-cols-2">
                     <div>
@@ -1588,11 +1887,11 @@ function OrdersPageContent() {
                             Карго: {Number(it.cargoFee || 0).toLocaleString()}₮
                           </div>
                         )}
-                        {it.return_note && (
-                          <div className="mt-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-700">
-                            Буцаалтын тайлбар: {it.return_note}
-                          </div>
-                        )}
+                        {selectedDeliveryOrder.sourceOrderDeleted
+                          ? noteCard(deletedDeliveryOrderNote(selectedDeliveryOrder), "deleted")
+                          : it.return_note
+                            ? noteCard(it.return_note, "return")
+                            : null}
                       </div>
                       <div className="text-right">
                         <div className="text-sm font-semibold">

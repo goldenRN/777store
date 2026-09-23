@@ -16,21 +16,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Бараа олдсонгүй" }, { status: 404 });
   }
 
-  const baseUnitPrice =
-    baseProduct.discount_price != null && baseProduct.discount_price > 0
-      ? baseProduct.discount_price
-      : baseProduct.price;
   const rawPrice = body?.price;
   const parsedPrice = rawPrice === "" || rawPrice == null ? null : Math.round(Number(rawPrice));
-  const nextPrice = parsedPrice != null && Number.isFinite(parsedPrice) && parsedPrice > 0 ? parsedPrice : baseUnitPrice;
+  if (parsedPrice == null || !Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+    return NextResponse.json({ message: "Үнийн дүн оруулна уу" }, { status: 400 });
+  }
 
   const created = await prisma.adminProductVariant.create({
     data: {
       product_id,
       sku: body?.sku ?? null,
       attribute: body?.attribute ?? null,
-      // If variant price is missing/0, fall back to the product's base unit price.
-      price: nextPrice,
+      price: parsedPrice,
       stock: body?.stock != null ? Math.round(Number(body.stock)) : null,
       order_accept_status: baseProduct.order_accept_status === "CLOSED" ? "CLOSED" : "OPEN",
       images: body?.images?.length

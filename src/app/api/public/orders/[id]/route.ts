@@ -141,9 +141,12 @@ export async function GET(
 
   return NextResponse.json({
     id: order.id,
-    status: order.status,
+    status: order.deleted_at ? "Захиалга устгагдсан" : order.status,
     total: order.total,
     createdAt: order.created_at,
+    deletedAt: order.deleted_at?.toISOString() ?? null,
+    deletedReason: order.deleted_reason ?? null,
+    isDeleted: Boolean(order.deleted_at),
     order_kind: order.order_kind ?? null,
     delivery_method: order.delivery_method ?? null,
     delivery_name: order.delivery_name ?? null,
@@ -219,7 +222,9 @@ export async function GET(
         return Number(productCargoFeeById.get(productId) ?? 0);
       })(),
       return_note: it.return_note ?? null,
-      status: getEffectiveItemStatus(it) || null,
+      status:
+        (order.deleted_at ? "Захиалга устгагдсан" : getEffectiveItemStatus(it)) ||
+        null,
     })),
   });
 }

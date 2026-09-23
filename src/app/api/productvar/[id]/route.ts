@@ -37,7 +37,7 @@ export async function GET(
   const normalizeImage = (url?: string | null) => {
     const raw = String(url || "").trim();
     if (!raw) return "";
-    let cleaned = raw.split("#")[0].split("?")[0];
+    const cleaned = raw.split("#")[0].split("?")[0];
     if (cleaned.startsWith("http://") || cleaned.startsWith("https://")) {
       try {
         const parsed = new URL(cleaned);
@@ -143,28 +143,19 @@ export async function PUT(
   if (nextOrderAcceptStatus && !["OPEN", "CLOSED"].includes(nextOrderAcceptStatus)) {
     return NextResponse.json({ message: "Invalid order_accept_status" }, { status: 400 });
   }
+  const shouldUpdatePrice = Object.prototype.hasOwnProperty.call(body ?? {}, "price");
+  const rawPrice = shouldUpdatePrice ? body?.price : undefined;
+  const parsedPrice = rawPrice === "" || rawPrice == null ? null : Math.round(Number(rawPrice));
+  if (shouldUpdatePrice && (parsedPrice == null || !Number.isFinite(parsedPrice) || parsedPrice <= 0)) {
+    return NextResponse.json({ message: "Үнийн дүн оруулна уу" }, { status: 400 });
+  }
 
   const updated = await prisma.$transaction(async (tx) => {
     const exists = await tx.adminProductVariant.findUnique({ where: { id } });
     if (!exists) {
       return null;
     }
-    const baseProduct = await tx.adminProduct.findUnique({
-      where: { id: exists.product_id },
-      select: { price: true, discount_price: true },
-    });
-    const baseUnitPrice =
-      baseProduct && baseProduct.discount_price != null && baseProduct.discount_price > 0
-        ? baseProduct.discount_price
-        : baseProduct?.price;
-    const shouldUpdatePrice = Object.prototype.hasOwnProperty.call(body ?? {}, "price");
-    const rawPrice = shouldUpdatePrice ? body?.price : undefined;
-    const parsedPrice = rawPrice === "" || rawPrice == null ? null : Math.round(Number(rawPrice));
-    const nextPrice = shouldUpdatePrice
-      ? parsedPrice != null && Number.isFinite(parsedPrice) && parsedPrice > 0
-        ? parsedPrice
-        : baseUnitPrice ?? null
-      : exists.price ?? null;
+    const nextPrice = shouldUpdatePrice ? parsedPrice : exists.price ?? null;
 
     const nextSku = Object.prototype.hasOwnProperty.call(body ?? {}, "sku") ? (body?.sku ?? null) : exists.sku ?? null;
     const nextAttribute = Object.prototype.hasOwnProperty.call(body ?? {}, "attribute")
@@ -176,14 +167,13 @@ export async function PUT(
         : null
       : exists.stock ?? null;
     const nextOrderAcceptStatusFinal =
-      nextOrderAcceptStatusRaw !== undefined ? nextOrderAcceptStatus : (exists as any).order_accept_status ?? null;
+      nextOrderAcceptStatusRaw !== undefined ? nextOrderAcceptStatus : exists.order_accept_status ?? null;
 
     const next = await tx.adminProductVariant.update({
       where: { id },
       data: {
         sku: nextSku,
         attribute: nextAttribute,
-        // If variant price is missing/0, fall back to the product's base unit price.
         price: nextPrice,
         stock: nextStock,
         ...(nextOrderAcceptStatusRaw !== undefined ? { order_accept_status: nextOrderAcceptStatusFinal } : {}),

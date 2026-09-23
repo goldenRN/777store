@@ -212,9 +212,12 @@ export async function GET(request: NextRequest) {
 
   const mapped = orders.map((o) => ({
     id: o.id,
-    status: o.status,
+    status: o.deleted_at ? "Захиалга устгагдсан" : o.status,
     total: o.total,
     createdAt: o.created_at,
+    deletedAt: o.deleted_at?.toISOString() ?? null,
+    deletedReason: o.deleted_reason ?? null,
+    isDeleted: Boolean(o.deleted_at),
     delivery_method: o.delivery_method ?? null,
     delivery_name: o.delivery_name ?? null,
     delivery_phone: o.delivery_phone ?? null,
@@ -293,7 +296,8 @@ export async function GET(request: NextRequest) {
         return Number(productCargoFeeById.get(productId) ?? 0);
       })(),
       return_note: it.return_note ?? null,
-      status: getEffectiveItemStatus(o.status, it) || null,
+      status:
+        (o.deleted_at ? "Захиалга устгагдсан" : getEffectiveItemStatus(o.status, it)) || null,
     })),
   }));
 

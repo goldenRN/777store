@@ -52,7 +52,13 @@ export async function PATCH(request: Request) {
     const shippingName = shippingStatus?.name ?? pendingName ?? "Хүргэлтэнд бүртгэгдсэн";
 
     const result = await prisma.$transaction(async (tx) => {
-      const finalItemStatuses = ["Бараа ирсэн", "Хүргэлтэнд бүртгэгдсэн", "Бараа олгосон", "Буцаагдсан"];
+      const finalItemStatuses = [
+        "Бараа ирсэн",
+        "Хүргэлтэнд бүртгэгдсэн",
+        "Бараа олгосон",
+        "Буцаагдсан",
+        "Хүргэгдсэн",
+      ];
       const lockedItemStatuses = ["Хүргэлтэнд бүртгэгдсэн", "Бараа олгосон", "Буцаагдсан", "Хүргэгдсэн"];
       const getMatchingOrderItemIds = async (where: Prisma.AdminOrderItemWhereInput) => {
         const rows = await tx.adminOrderItem.findMany({

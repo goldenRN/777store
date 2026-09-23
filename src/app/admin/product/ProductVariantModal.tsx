@@ -4,7 +4,6 @@ import React, { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Pencil, Trash2 } from "lucide-react";
 import { Label } from "@/components/ui/label";
@@ -40,8 +39,13 @@ type Props = {
     open: boolean;
     onClose: () => void;
     productId: number | null;
-    productName: String | null;
+    productName: string | null;
     onRefresh?: () => void;
+};
+
+type UploadedImageResponse = {
+    imageUrl: string;
+    public_id: string;
 };
 
 const getVariantLabel = (variant: Variant) => {
@@ -141,6 +145,12 @@ export default function ProductVariantModal({ open, onClose, productId, productN
         e.preventDefault();
         if (!productId) return;
 
+        const priceValue = Number(form.price);
+        if (!form.price.trim() || !Number.isFinite(priceValue) || priceValue <= 0) {
+            setError("Үнийн дүн оруулна уу");
+            return;
+        }
+
         if (!form.typeName.trim()) {
             setError(null);
         }
@@ -202,7 +212,7 @@ export default function ProductVariantModal({ open, onClose, productId, productN
                         },
                     }
                 );
-                const uploadedBatch = uploadRes.data.images.map((imgObj: any) => ({
+                const uploadedBatch = (uploadRes.data.images as UploadedImageResponse[]).map((imgObj) => ({
                     image_url: imgObj.imageUrl,
                     public_id: imgObj.public_id,
                 }));
@@ -215,7 +225,7 @@ export default function ProductVariantModal({ open, onClose, productId, productN
                 const res = await axios.put(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/productvar/${editingId}`, {
                     sku: form.typeName || null,
                     attribute: finalAttr,
-                    price: form.price ? Number(form.price) : null,
+                    price: priceValue,
                     stock: form.stock ? Number(form.stock) : null,
                     images: allImages,
                 });
@@ -231,7 +241,7 @@ export default function ProductVariantModal({ open, onClose, productId, productN
                     prev.map((v) => (v.id === editingId ? { ...v, ...updated, images: updatedImages } : v))
                 );
                 resetForm();
-                onRefresh && onRefresh();
+                onRefresh?.();
                 return;
             }
 
@@ -240,7 +250,7 @@ export default function ProductVariantModal({ open, onClose, productId, productN
                 product_id: productId,
                 sku: form.typeName || null,
                 attribute: finalAttr,
-                price: form.price ? Number(form.price) : null,
+                price: priceValue,
                 stock: form.stock ? Number(form.stock) : null,
                 images: allImages, // түр хадгалалт, дараа upload хийнэ
             });
@@ -257,10 +267,16 @@ export default function ProductVariantModal({ open, onClose, productId, productN
             };
             setVariants(prev => [variant, ...prev]);
             resetForm();
-            onRefresh && onRefresh();
+            onRefresh?.();
 
-        } catch (err: any) {
-            setError(err?.response?.data?.message || (editingId ? "Төрөл засахад алдаа гарлаа" : "Төрөл нэмэхэд алдаа гарлаа"));
+        } catch (err: unknown) {
+            const message =
+                axios.isAxiosError(err) && typeof err.response?.data?.message === "string"
+                    ? err.response.data.message
+                    : editingId
+                        ? "Төрөл засахад алдаа гарлаа"
+                        : "Төрөл нэмэхэд алдаа гарлаа";
+            setError(message);
         } finally { setSaving(false); }
     };
 
@@ -271,7 +287,7 @@ export default function ProductVariantModal({ open, onClose, productId, productN
         try {
             await axios.delete(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/productvar/${id}`);
             setVariants(prev => prev.filter((v) => v.id !== id));
-            onRefresh && onRefresh();
+            onRefresh?.();
         } catch {
             alert("Төрөл устгаж чадсангүй");
         }
@@ -396,6 +412,11 @@ export default function ProductVariantModal({ open, onClose, productId, productN
                         <h4 className="font-semibold mb-2">
                             {editingId ? "Төрөл засах" : "Шинэ төрөл нэмэх"}
                         </h4>
+                        {error ? (
+                            <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                {error}
+                            </div>
+                        ) : null}
                         <form onSubmit={handleAddVariant} className="space-y-3">
                             <div>
                                 <label className="text-xs mb-1 block">Төрөл (ж: 13 inch, Улаан, XL, SKU123)</label>
@@ -425,8 +446,16 @@ export default function ProductVariantModal({ open, onClose, productId, productN
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 <div>
-                                    <label className="text-xs mb-1 block">Үнэ</label>
-                                    <Input value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+                                    <label className="text-xs mb-1 block">Үнэ *</label>
+                                    <Input
+                                        type="number"
+                                        min="1"
+                                        step="1"
+                                        required
+                                        value={form.price}
+                                        onChange={(e) => setForm({ ...form, price: e.target.value })}
+                                        placeholder="Үнийн дүн оруулна уу"
+                                    />
                                 </div>
                                 <div>
                                     <label className="text-xs mb-1 block">Үлдэгдэл</label>
