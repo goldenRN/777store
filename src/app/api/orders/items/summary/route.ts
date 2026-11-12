@@ -315,6 +315,7 @@ export async function GET(request: NextRequest) {
   const handedByProduct = new Map<number, number>();
   const deliveryByProduct = new Map<number, number>();
   const totalOrderedByVariant = new Map<string, number>();
+  const totalOrderedByProduct = new Map<number, number>();
   const handedByVariant = new Map<string, number>();
   const deliveryByVariant = new Map<string, number>();
   const buyersByProduct = new Map<number, SummaryBuyer[]>();
@@ -339,10 +340,12 @@ export async function GET(request: NextRequest) {
     variantPriceIndex.set(product.id, byPrice);
   }
 
-  if (productIds.length > 0) {
+  // Every displayed total is derived from the same active, paid item history as its buyer rows.
+  const historyProductIds = Array.from(new Set([...productIds, ...products.map((product) => product.id)]));
+  if (historyProductIds.length > 0) {
     const fulfilledItems = await prisma.adminOrderItem.findMany({
       where: {
-        product_id: { in: productIds },
+        product_id: { in: historyProductIds },
         order: {
           deleted_at: null,
           payment_status: "PAID",
@@ -369,6 +372,10 @@ export async function GET(request: NextRequest) {
       if (!item.product_id) continue;
       const qty = Math.max(0, Number(item.quantity || 0));
       if (qty <= 0) continue;
+      totalOrderedByProduct.set(
+        item.product_id,
+        (totalOrderedByProduct.get(item.product_id) ?? 0) + qty
+      );
       const resolvedVariantId = resolveVariantId({
         productId: item.product_id,
         variantId: item.variant_id,
@@ -540,7 +547,7 @@ export async function GET(request: NextRequest) {
         const inferred = inferredMap.get(variantKey) ?? 0;
         const pendingOrdered = confirmed + inferred;
         const totalOrdered = totalOrderedByVariant.get(variantKey) ?? 0;
-        const ordered = Math.max(totalOrdered, pendingOrdered, Number(variant.ordered_qty ?? 0));
+        const ordered = totalOrdered;
         const stock = variant.stock != null ? Number(variant.stock) : null;
         const remaining = stock != null ? Math.max(0, stock - ordered) : null;
         const variantClosed = variant.order_accept_status === "CLOSED";
@@ -589,7 +596,7 @@ export async function GET(request: NextRequest) {
           : variantStockSum > 0
             ? variantStockSum
             : null;
-      const orderedForClose = Number(productMeta?.ordered_qty ?? group.total_qty ?? 0);
+      const orderedForClose = totalOrderedByProduct.get(productId) ?? group.total_qty;
       const remainingForClose =
         effectiveStock != null && effectiveStock > 0 ? Math.max(0, effectiveStock - orderedForClose) : null;
       const allVariantsClosed = computedAll.length > 0 ? computedAll.every((variant) => variant.closed) : false;
@@ -653,7 +660,8 @@ export async function GET(request: NextRequest) {
 
       return {
         ...group,
-        total_qty: productMeta?.ordered_qty != null ? Number(productMeta.ordered_qty) : group.total_qty,
+        product_ordered_qty: totalOrderedByProduct.get(productId) ?? group.total_qty,
+        total_qty: totalOrderedByProduct.get(productId) ?? group.total_qty,
         handed_qty: handedByProduct.get(productId) ?? group.handed_qty ?? 0,
         delivery_qty: deliveryByProduct.get(productId) ?? group.delivery_qty ?? 0,
         cargo_fee: resolvedCargoFee,

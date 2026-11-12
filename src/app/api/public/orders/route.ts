@@ -305,6 +305,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  try {
   const body = await request.json();
   const userId = String(body?.userId ?? "").trim();
   const name = String(body?.name ?? "").trim();
@@ -456,7 +457,7 @@ export async function POST(request: NextRequest) {
             ...productIds.map((id) => 1_000_000_000 + id),
             ...variantIds.map((id) => 2_000_000_000 + id),
           ])
-        );
+        ).sort((a, b) => a - b);
         for (const k of lockKeys) {
           await tx.$executeRaw`SELECT pg_advisory_xact_lock(${k});`;
         }
@@ -1129,6 +1130,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       id: created.id,
       message: "QPay нэхэмжлэл үүсгэх үед алдаа гарлаа",
-    });
+    }, { status: 502 });
+  }
+  } catch (error) {
+    // Always return JSON so the cart can show a recoverable error instead of crashing on response.json().
+    console.error("Public order creation failed:", error);
+    return NextResponse.json(
+      { message: "Захиалга үүсгэх үед серверийн алдаа гарлаа. Дахин оролдоно уу." },
+      { status: 500 },
+    );
   }
 }

@@ -428,7 +428,8 @@ export async function GET(request: NextRequest) {
       product_id: it.product_id ?? null,
       product_name: it.product_name,
       product_description: productMeta?.description ?? "",
-      image_url: productMeta?.image_url ?? it.image_url ?? null,
+      // The variant image is the most precise match for fulfillment; fall back for legacy items.
+      image_url: matchedVariant?.images?.[0]?.image_url ?? it.image_url ?? productMeta?.image_url ?? null,
       qty: it.quantity,
       unit_price: it.price,
       order_status: it.order?.status ?? "",

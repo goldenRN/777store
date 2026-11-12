@@ -40,6 +40,19 @@ type InvoicePreviewItem = {
 
 type DeliveryAreaType = "city" | "rural";
 
+type CheckoutResponse = {
+  id?: number;
+  message?: string;
+  error?: string;
+  qpay?: {
+    qr_image?: string | null;
+    qr_text?: string | null;
+    short_url?: string | null;
+    deeplinks?: { name: string; description: string; logo: string; link: string }[] | null;
+    expires_at?: string | null;
+  };
+};
+
 export default function CartPageClient() {
   const { items, total, updateQty, removeItem, clear } = useCart();
   const router = useRouter();
@@ -456,23 +469,32 @@ export default function CartPageClient() {
           })),
         }),
       });
-      const json = await res.json();
-      if (!res.ok) {
-        setOrderError(json?.message || json?.error || "Захиалга үүсгэхэд алдаа гарлаа");
-        setLoading(false);
+      const responseText = await res.text();
+      let json: CheckoutResponse | null = null;
+      try {
+        json = responseText ? (JSON.parse(responseText) as CheckoutResponse) : null;
+      } catch {
+        // A proxy/server failure can return an empty or HTML response instead of JSON.
+      }
+
+      const orderId = Number(json?.id);
+      if (!res.ok || !json?.qpay || !Number.isFinite(orderId) || orderId <= 0) {
+        setOrderError(
+          json?.message ||
+            json?.error ||
+            "Захиалга үүсгэхэд алдаа гарлаа. Түр хүлээгээд дахин оролдоно уу."
+        );
         return;
       }
-      if (json?.qpay) {
-        setIncludeArrivedChoice(includeArrived);
-        setQpay({
-          orderId: json.id,
-          qr_image: json.qpay.qr_image,
-          qr_text: json.qpay.qr_text,
-          short_url: json.qpay.short_url,
-          deeplinks: json.qpay.deeplinks || [],
-          expires_at: json.qpay.expires_at,
-        });
-      }
+      setIncludeArrivedChoice(includeArrived);
+      setQpay({
+        orderId,
+        qr_image: json.qpay.qr_image,
+        qr_text: json.qpay.qr_text,
+        short_url: json.qpay.short_url,
+        deeplinks: json.qpay.deeplinks || [],
+        expires_at: json.qpay.expires_at,
+      });
     } finally {
       setLoading(false);
     }
