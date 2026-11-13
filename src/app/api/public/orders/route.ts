@@ -69,8 +69,14 @@ async function deleteExpiredUnpaidOrders(
     },
   });
 
-  await db.adminOrder.deleteMany({
+  // Keep an audit trail and avoid foreign-key failures from delivery records linked to an expired order.
+  await db.adminOrder.updateMany({
     where: { id: { in: expiredOrders.map((order) => order.id) } },
+    data: {
+      status: "Цуцлагдсан",
+      deleted_at: now,
+      deleted_reason: "QPay төлбөрийн хугацаа дууссан",
+    },
   });
 }
 
@@ -113,7 +119,7 @@ export async function GET(request: NextRequest) {
   const normalizeImage = (url?: string | null) => {
     const raw = String(url || "").trim();
     if (!raw) return "";
-    let cleaned = raw.split("#")[0].split("?")[0];
+    const cleaned = raw.split("#")[0].split("?")[0];
     if (cleaned.startsWith("http://") || cleaned.startsWith("https://")) {
       try {
         const parsed = new URL(cleaned);
@@ -317,7 +323,6 @@ export async function POST(request: NextRequest) {
       .trim();
   const phone = normalizePhone(requestedPhone);
   const items = Array.isArray(body?.items) ? body.items : [];
-  const orderKindInput = String(body?.orderKind ?? "").trim();
   const deliveryMethod = body?.deliveryMethod ? String(body.deliveryMethod) : null;
   const deliveryAreaType = String(body?.deliveryAreaType ?? "city").trim().toLowerCase() === "rural"
     ? "rural"
@@ -365,12 +370,6 @@ export async function POST(request: NextRequest) {
     if (t.includes("бэлэн") || t.includes("ready")) return "ready";
     return "";
   };
-  const hasPreorder = items.some((it: any) => normalizeType(it.type_name) === "preorder");
-  const computedOrderKind = hasPreorder ? "preorder" : "ready";
-  // We will re-check orderKind based on DB product types inside the transaction,
-  // but keep this initial value as a fallback for early validation.
-  const orderKind = orderKindInput || computedOrderKind;
-
   // Allow delivery if there is at least one READY item in the cart.
   // (We'll validate again inside transaction using DB product types.)
   const hasReadyInput = items.some((it: any) => normalizeType(it.type_name) !== "preorder");
@@ -413,7 +412,6 @@ export async function POST(request: NextRequest) {
   const created = await (async () => {
     try {
       return await prisma.$transaction(async (tx) => {
-        await deleteExpiredUnpaidOrders(tx, now, reserveWindowStart);
 
         const accountUser = await tx.user.findUnique({
           where: { id: userId },
@@ -912,7 +910,7 @@ export async function POST(request: NextRequest) {
           },
           include: { items: true },
         });
-      });
+      }, { maxWait: 10_000, timeout: 30_000 });
     } catch (err: any) {
       if (err instanceof CheckoutError) {
         return NextResponse.json({ message: err.message }, { status: err.status });

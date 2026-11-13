@@ -105,7 +105,14 @@ export async function GET(request: NextRequest) {
           },
         });
       }
-      await prisma.adminOrder.delete({ where: { id: order.id } });
+      await prisma.adminOrder.update({
+        where: { id: order.id },
+        data: {
+          status: "Цуцлагдсан",
+          deleted_at: new Date(),
+          deleted_reason: "QPay төлбөрийн хугацаа дууссан",
+        },
+      });
     }
     return NextResponse.json({
       status: "EXPIRED",

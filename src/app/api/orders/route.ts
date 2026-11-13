@@ -11,27 +11,6 @@ export async function GET(request: NextRequest) {
   const payment = (searchParams.get("payment") ?? "").trim().toUpperCase();
   const deletedOnly = searchParams.get("deleted") === "true";
 
-  // auto cleanup: unpaid + expired -> permanently delete
-  const now = new Date();
-  const reserveMinutesRaw = Number(process.env.QPAY_INVOICE_EXPIRE_MINUTES ?? 60);
-  const reserveMinutes = Number.isFinite(reserveMinutesRaw) ? Math.max(1, reserveMinutesRaw) : 60;
-  const reserveWindowStart = new Date(now.getTime() - reserveMinutes * 60 * 1000);
-  await prisma.adminOrder.deleteMany({
-    where: {
-      deleted_at: null,
-      payment_status: "UNPAID",
-      OR: [
-        { payment_expires_at: { not: null, lte: now } },
-        {
-          AND: [
-            { payment_expires_at: null },
-            { created_at: { lte: reserveWindowStart } },
-          ],
-        },
-      ],
-    },
-  });
-
   const matchingUserIds =
     q.length > 0
       ? (await prisma.user.findMany({
